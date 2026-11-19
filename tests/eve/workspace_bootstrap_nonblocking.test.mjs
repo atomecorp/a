@@ -11,11 +11,13 @@ test('startup always presents home without waiting for work-project restoration'
         const stopRestore = vi.fn();
         const followRestore = vi.fn(() => stopRestore);
         const waitForHomePreferences = vi.fn(async () => ({ ok: true }));
-        const open = createWorkspaceBootstrapOpen({ openWorkspaceDashboardAndMainMenu: home, showPreparedProject: show, publishNativeBootMilestone() {}, waitForHomePreferences, followRestore });
+        const settleDashboardDomain = vi.fn(async () => ({ ok: true, domain: 'pro' }));
+        const open = createWorkspaceBootstrapOpen({ openWorkspaceDashboardAndMainMenu: home, showPreparedProject: show, publishNativeBootMilestone() {}, waitForHomePreferences, settleDashboardDomain, followRestore });
         expect(await open({ ensureProjectReady: work, readBootstrapPresentation: () => ({ startupView: 'project', restoredSavedProject: true }) })).toMatchObject({ ok: true, route: 'dashboard', resumed: false });
         expect(work).not.toHaveBeenCalled(); expect(show).not.toHaveBeenCalled(); expect(home).toHaveBeenCalledTimes(1);
         expect(env.__eveWorkspaceDashboardReady).toBe(true);
-        // Only the home style is awaited; the restore under way is followed then released.
-        expect(waitForHomePreferences).toHaveBeenCalledTimes(1); expect(followRestore).toHaveBeenCalledTimes(1); expect(stopRestore).toHaveBeenCalledTimes(1);
+        // Only the home style and its domain are awaited; the restore under way is followed then released.
+        expect(waitForHomePreferences).toHaveBeenCalledTimes(1); expect(settleDashboardDomain).toHaveBeenCalledTimes(1);
+        expect(settleDashboardDomain.mock.invocationCallOrder[0]).toBeGreaterThan(waitForHomePreferences.mock.invocationCallOrder[0]); expect(followRestore).toHaveBeenCalledTimes(1); expect(stopRestore).toHaveBeenCalledTimes(1);
     } finally { vi.unstubAllGlobals(); }
 });

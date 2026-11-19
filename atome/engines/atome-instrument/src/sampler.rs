@@ -242,14 +242,25 @@ impl Sampler {
         }
     }
 
-    fn shape(&self) -> Shape {
+    // The shape of `zone`'s voices: its own envelope, else the instrument's.
+    fn shape(&self, zone: usize) -> Shape {
         let value = |id: u32| self.values[id as usize];
-        Shape {
-            attack_ms: value(ATTACK_MS),
-            decay_ms: value(DECAY_MS),
-            sustain: value(SUSTAIN),
-            release_ms: value(RELEASE_MS),
-            glide_ms: value(GLIDE_MS),
+        let glide_ms = value(GLIDE_MS);
+        match self.keymap.zone(zone).envelope {
+            Some(own) => Shape {
+                attack_ms: own.attack_ms,
+                decay_ms: own.decay_ms,
+                sustain: own.sustain,
+                release_ms: own.release_ms,
+                glide_ms,
+            },
+            None => Shape {
+                attack_ms: value(ATTACK_MS),
+                decay_ms: value(DECAY_MS),
+                sustain: value(SUSTAIN),
+                release_ms: value(RELEASE_MS),
+                glide_ms,
+            },
         }
     }
 
@@ -299,6 +310,9 @@ impl Sampler {
                 {
                     voice.release();
                 }
+            }
+            // A sampler's voice has no pressure, tempo or bricks: these are a synth's.
+            EventKind::Pressure { .. } | EventKind::Tempo { .. } | EventKind::BrickParam { .. } => {
             }
         }
     }
@@ -457,8 +471,17 @@ impl Processor for Sampler {
         &PARAMS
     }
 
+    // The longest release a voice may play: the instrument's or a zone's own.
     fn tail_frames(&self) -> u32 {
-        (self.values[RELEASE_MS as usize] * 0.001 * self.sample_rate) as u32
+        let release_ms = self
+            .keymap
+            .zones()
+            .iter()
+            .filter_map(|zone| zone.envelope)
+            .fold(self.values[RELEASE_MS as usize], |longest, own| {
+                longest.max(own.release_ms)
+            });
+        (release_ms * 0.001 * self.sample_rate) as u32
     }
 
     fn reset(&mut self) {

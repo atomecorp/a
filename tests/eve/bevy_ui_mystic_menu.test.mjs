@@ -674,8 +674,8 @@ test('Mystic plates carry common glass with no second family tint', () => {
     const layout=place(8,600,400);
     const uniforms=buildMysticSurfaceUniforms({tiles:layout.tiles,width:RECT.width,height:RECT.height});
     assert.deepEqual(uniforms.assistant_background_tint,[...MYSTIC_GLASS_TINT]);
-    // The tools' glass (V6.1, validated 2 Nov. 2026): 33 %, blurred 9 px.
-    assert.equal(uniforms.assistant_background_tint[3],.33);
+    // The tools' glass: 69 % (user, 16 Nov. 2026, over V6.1's 33 % of 2 Nov.), blurred 9 px (system_ui_tokens.js).
+    assert.equal(uniforms.assistant_background_tint[3],.69);
     assert.equal(uniforms.background_blur_px,9);
     for(const family of ['cross','orange','blue']) assert.deepEqual(resolveMysticFamilyColor(family),[0,0,0,0]);
 });

@@ -47,7 +47,9 @@ const projectId = await ensureProjectBootstrapReady();
 const presentation = readProjectBootstrapPresentation();
 
 assert.equal(projectId, 'saved_offline_project');
-assert.equal(presentation.startupView, 'project');
+// A cold start always shows the home, even with a profile carrying an old `project` preference
+// (workspace_surface_preference.js#readStartupView); the saved project is still restored offline underneath.
+assert.equal(presentation.startupView, 'dashboard');
 assert.equal(presentation.restoredSavedProject, true);
 assert.equal(presentation.projectId, 'saved_offline_project');
 assert.equal(setCurrent.length, 1, 'offline resume keeps the canonical projects.setCurrent owner');
@@ -57,3 +59,5 @@ assert.deepEqual(loads, [{
 }], 'offline resume must project canonical local state before background synchronization');
 
 console.log('project_bootstrap_offline_resume_contract.test: PASS');
+// The imported runtime keeps its app-lifetime timers alive.
+process.exit(0);

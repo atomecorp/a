@@ -31,7 +31,7 @@ fn element(bytes: &[u8]) -> Option<(u8, &[u8], &[u8], &[u8])> {
 }
 
 // UTCTime (years 1950–2049) or GeneralizedTime, in UTC, as ms.
-fn time(tag: u8, content: &[u8]) -> Option<i64> {
+pub(crate) fn time(tag: u8, content: &[u8]) -> Option<i64> {
     let text = std::str::from_utf8(content).ok()?.strip_suffix('Z')?;
     let full = match tag {
         0x17 => {
@@ -45,9 +45,8 @@ fn time(tag: u8, content: &[u8]) -> Option<i64> {
         0x18 => text.to_string(),
         _ => return None,
     };
-    chrono::NaiveDateTime::parse_from_str(&full, "%Y%m%d%H%M%S")
-        .ok()
-        .map(|time| time.and_utc().timestamp_millis())
+    atome_js_values::dates::naive(&full, "%Y%m%d%H%M%S")
+        .map(atome_js_values::dates::Instant::millis)
 }
 
 impl Certificate {

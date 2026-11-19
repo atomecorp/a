@@ -193,7 +193,7 @@ pub(super) fn project_patch(
         .and_then(JsonValue::as_str)
         .unwrap_or("");
     let timestamp = if timestamp.is_empty() {
-        Utc::now().to_rfc3339()
+        atome_js_values::dates::now_rfc3339()
     } else {
         timestamp.to_string()
     };

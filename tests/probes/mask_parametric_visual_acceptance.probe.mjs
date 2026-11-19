@@ -39,6 +39,12 @@ const browser = await chromium.launch({
     ]
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+// The app reaches Fastify on the port server_config.json names: the page announces the test server it was served by
+// (an isolated one, tests/parcours/serveur_isole.mjs, never the developer's 3001), as tests/probes/r108_web_session.mjs.
+const appUrl = new globalThis.URL(URL);
+await page.route('**/server_config.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ fastify: {
+    host: appUrl.hostname, port: Number(appUrl.port || 80), serverInfoPath: '/api/server-info', syncWsPath: '/ws/sync', apiWsPath: '/ws/api' } }) }));
+await page.addInitScript(() => { window.__SQUIRREL_FORCE_FASTIFY__ = true; });
 const failures = [];
 page.on('console', message => {
     if (message.type() === 'error') failures.push(`console:${message.text()}`);
@@ -190,10 +196,10 @@ try {
             id = String(found?.id || found?.atome_id || found?.project_id || '');
         }
         if (!id) throw new Error(`mask_visual_project_missing:${JSON.stringify(created)}`);
-        await window.AdoleAPI.projects.setCurrent(id, name, null, true);
-        window.eveToolBase.ensureProjectLayer?.(id);
-        const loaded = await window.eveToolBase.loadProjectAtomes(id, { force: true, staleFirst: false, forceProjectSurface: true });
-        if (loaded?.ok === false) throw new Error(`mask_visual_project_load_failed:${JSON.stringify(loaded)}`);
+        // The canonical opener, as the product's Projects matrix does (tests/probes/molecule_ui_workspace_support.mjs).
+        const projectRuntime = await import('/eVe/intuition/matrix/core/project_data.js');
+        const activation = await projectRuntime.activateProjectWorkspace({ id, name }, { force: true, staleFirst: false });
+        if (activation?.ok !== true) throw new Error(`mask_visual_project_load_failed:${JSON.stringify(activation)}`);
         workspace.markProjectWorkspaceMode(id);
         return { id, name };
     });
@@ -249,7 +255,7 @@ try {
             return { exists: !!video, paused: video?.paused, currentTime: video?.currentTime,
                 readyState: video?.readyState, error: video?.error?.message || null };
         }, videoFixture.videoId);
-        throw new Error(`mask_visual_video_did_not_start:${JSON.stringify({ playbackBefore, status })}`);
+        throw new Error(`mask_visual_video_did_not_start:${JSON.stringify({ playbackBefore, status })}`, { cause: error });
     }
     await sleep(900);
     const videoMaskedA = await screenshot('video-masked-playing-a');

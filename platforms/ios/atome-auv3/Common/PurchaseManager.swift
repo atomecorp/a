@@ -56,6 +56,20 @@ final class PurchaseManager {
         }
     }
 
+    // `billing_app_transaction` (R-193): this install's AppTransaction, signed by Apple. The server
+    // reads its environment: Production proves an App Store install; Sandbox (TestFlight) or Xcode
+    // keeps the account away from real spending unless an administrator allowed it.
+    func appTransaction(completion: @escaping ([String: Any]?, String?) -> Void) {
+        Task {
+            do {
+                let verification = try await AppTransaction.shared
+                completion(["ok": true, "jws": verification.jwsRepresentation], nil)
+            } catch {
+                completion(nil, "billing_app_transaction_unavailable")
+            }
+        }
+    }
+
     // The page names the store's own cause instead of a generic failure.
     private static func failureCode(_ error: Error) -> String {
         switch error {

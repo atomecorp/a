@@ -7,17 +7,21 @@
 // for the graph to route.
 
 use crate::dsp::AtomicParam;
+use crate::modulation::{ParamMod, Target};
 use crate::program::ModuleSpec;
 use atome_dsp::catalog::{ModuleAsset, ModuleKind};
 use atome_dsp::convolution::Impulse;
 use atome_dsp::delay::DelayLine;
-use atome_dsp::{KeyBlock, Processor as DspProcessor, StereoBlock};
+use atome_dsp::oversample::Oversampled;
+use atome_dsp::{KeyBlock, ParamBuffer, Processor as DspProcessor, StereoBlock};
 use kira::Frame;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub const MODULE_TYPE: &str = "dsp";
 pub const ASSET_PARAM: &str = "asset_id";
+// Audio-rate parameters one module may take at once (a filter's cutoff and resonance…).
+const MAX_RATED: usize = 8;
 
 // The decoded asset as loaded by its owner (a `.nam` capture, an impulse
 // response); each module built from it gets its own copy.
@@ -90,6 +94,14 @@ pub fn parameter_slots(kind: ModuleKind) -> Vec<AtomicParam> {
         .collect()
 }
 
+// One slot per live measurement of the kind, in its `readings` order.
+pub fn reading_slots(kind: ModuleKind) -> Vec<AtomicParam> {
+    kind.readings()
+        .iter()
+        .map(|_| AtomicParam::new(0.0))
+        .collect()
+}
+
 pub fn write_parameters(kind: ModuleKind, slots: &[AtomicParam], spec: &ModuleSpec) {
     for (slot, param) in slots.iter().zip(kind.params()) {
         slot.set(param.clamp(spec.number(param.key, param.default as f64) as f32));
@@ -108,7 +120,33 @@ pub struct DspRuntime {
     // While bypassed, a module with latency keeps the timing it promised.
     compensation: Option<[DelayLine; 2]>,
     pub has_tail: bool,
-    pub silent_frames: usize,
+}
+
+// The 2× or 4× a module asks for (R-191): any kind but a generator, a keyed
+// kind, a split or a modulator, whose extra signals would not cross the rates.
+fn oversampled(
+    kind: ModuleKind,
+    spec: &ModuleSpec,
+    processor: Box<dyn DspProcessor>,
+) -> Result<Box<dyn DspProcessor>, String> {
+    let factor = match spec.oversample {
+        None | Some(1) => return Ok(processor),
+        Some(factor @ (2 | 4)) => factor as usize,
+        Some(other) => {
+            return Err(format!(
+                "dsp module {}: oversampling is 2× or 4×, not {other}×",
+                spec.id
+            ));
+        }
+    };
+    if spec.key.is_some() || kind.outputs() > 1 || kind.control_outputs() > 0 {
+        return Err(format!(
+            "dsp module {}: a {} module is not oversampled (its key, ports or control stay at the device rate)",
+            spec.id,
+            kind.key()
+        ));
+    }
+    Ok(Box::new(Oversampled::new(processor, factor)?))
 }
 
 impl DspRuntime {
@@ -127,9 +165,10 @@ impl DspRuntime {
                 spec.id
             ));
         }
-        let mut processor = kind
+        let built = kind
             .build(asset_for(kind, spec, assets)?)
             .map_err(|error| error.to_string())?;
+        let mut processor = oversampled(kind, spec, built)?;
         processor.prepare(sample_rate as f32, block);
         let latency = processor.latency_frames() as usize;
         let compensation = (latency > 0).then(|| {
@@ -155,7 +194,6 @@ impl DspRuntime {
             right: vec![0.0; block],
             latency,
             compensation,
-            silent_frames: 0,
         };
         runtime.follow(slots);
         runtime.reset();
@@ -177,8 +215,43 @@ impl DspRuntime {
         }
     }
 
+    // Publishes the processor's measurements of the block just processed.
+    pub fn publish(&self, slots: &[AtomicParam]) {
+        for (slot, value) in slots.iter().zip(self.processor.readings()) {
+            slot.set(*value);
+        }
+    }
+
     pub fn ports(&self) -> usize {
         self.extra.len() + 1
+    }
+
+    pub fn control(&self, output: usize) -> &[f32] {
+        self.processor.control(output)
+    }
+
+    // The modulated parameters of this step: an audio-rate one is handed
+    // every frame (returned), any other its first value; both are re-read
+    // from their slot once the modulation is gone.
+    fn modulate<'a>(&mut self, mods: &'a [ParamMod], rated: &mut [ParamBuffer<'a>]) -> usize {
+        let mut count = 0;
+        for read in mods {
+            let Target::Parameter(index) = read.target else {
+                continue;
+            };
+            self.applied[index] = f32::NAN;
+            let id = index as u32;
+            if self.processor.audio_rate(id) && count < rated.len() {
+                rated[count] = ParamBuffer {
+                    id,
+                    values: &read.values,
+                };
+                count += 1;
+            } else if let Some(value) = read.values.first() {
+                self.processor.set_param(id, *value);
+            }
+        }
+        count
     }
 
     fn run(&mut self, frames: usize) {
@@ -194,9 +267,15 @@ impl DspRuntime {
         slots: &[AtomicParam],
         key: Option<&[Frame]>,
         split: bool,
+        mods: &[ParamMod],
     ) {
         self.follow(slots);
         let frames = buffer.len();
+        let mut rated = [ParamBuffer { id: 0, values: &[] }; MAX_RATED];
+        let count = self.modulate(mods, &mut rated);
+        for buffer in &mut rated[..count] {
+            buffer.values = &buffer.values[..frames];
+        }
         for (index, frame) in buffer.iter().enumerate() {
             self.left[index] = frame.left;
             self.right[index] = frame.right;
@@ -226,6 +305,9 @@ impl DspRuntime {
                 self.processor
                     .process_ports(&mut block, &mut ports[..count]);
             }
+            _ if count > 0 => self
+                .processor
+                .process_modulated(&mut block, &rated[..count]),
             _ => self.processor.process(&mut block),
         }
         for (index, frame) in buffer.iter_mut().enumerate() {

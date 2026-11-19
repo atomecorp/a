@@ -16,10 +16,12 @@ struct BackdropSurfaceUniform {
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var backdrop_texture: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(2) var backdrop_sampler: sampler;
 
-const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
+// The same value as procedural_sdf.wgsl (the Mystic plates read the same pyramid): change both together.
+const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.75;
 
-// Backdrop blur, read from the capture's mip pyramid. Each level is a 2x box
-// average of the one below; sampling one of them with a plain bilinear fetch
+// Backdrop blur, read from the capture's mip pyramid. Each level is the one below
+// reduced by the tent [1, 3, 3, 1] / 8 (backdrop_downsample.wgsl), which keeps
+// every content's centre in place; sampling one of them with a plain bilinear fetch
 // shows its texel grid, and spreading sparse taps over a finer level (the old
 // approach) left ghosts and blocks. Here every level is read through a cubic
 // B-spline — four bilinear fetches — and two adjacent levels are blended, so the
@@ -50,8 +52,10 @@ fn backdrop_bspline_level(uv: vec2<f32>, level: f32) -> vec3<f32> {
 }
 
 fn sample_aligned_mip(uv: vec2<f32>, lod: f32) -> vec3<f32> {
-    // A B-spline read of level k spreads about 0.65 x 2^k base texels, where
-    // `lod` targets 0.5 x 2^lod: hence the small shift down.
+    // The area-averaged snapshot (backdrop_snapshot.wgsl), the tent pyramid
+    // and the B-spline read spread more than `lod` targets (0.5 x 2^lod):
+    // shifted down by 0.75, the blur's spread is the asked radius within 3.5 %,
+    // measured at 9, 18 and 30 px (R-189, backdrop_blur_alignment.rs).
     let top = f32(textureNumLevels(backdrop_texture) - 1u);
     let level = clamp(lod - BACKDROP_BLUR_LEVEL_SHIFT, 0.0, top);
     let low = floor(level);

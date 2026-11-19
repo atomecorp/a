@@ -1,0 +1,30 @@
+[package]
+name = "atome-lpproj-import"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The Loopy Pro project reader (one way, Loopy Pro → atome): a .lpproj bundle's object store read into a normalized project (pages, clips, segments, shared audio resources), then laid as the native Molecule timeline (scenes, tracks, clips) through the one document writer of every importer"
+
+[dependencies]
+serde = { workspace = true }
+serde_json.workspace = true
+sha2.workspace = true
+# The one Molecule timeline document writer of every importer.
+atome-interchange = { path = "../interchange" }
+
+# SQLite itself only checks, in the tests, the crate's own store reader.
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[[test]]
+name = "lpproj_store_reader"
+path = "../../../tests/lpproj_import/store_reader.rs"
+
+[[test]]
+name = "lpproj_layout"
+path = "../../../tests/lpproj_import/layout.rs"

@@ -276,7 +276,9 @@ import {
             }
         }
 
-        if (context === 'tauri' || context === 'ios_app') {
+        // A take of a strip's REC point (R-183): every native engine (the AUv3's too) records it itself.
+        const stripId = String(params.strip_id || params.stripId || '').trim();
+        if (context === 'tauri' || context === 'ios_app' || (stripId && context === 'auv3')) {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
                 throw new Error(context === 'ios_app'
@@ -296,8 +298,8 @@ import {
             const requestedSampleRate = Number(sampleRate) || 0;
             const requestedChannels = Number(channels) || 0;
             const pendingEntry = {
-                provider: 'native_audio_recorder',
-                transport: context,
+                provider: stripId ? 'native_strip_recorder' : 'native_audio_recorder',
+                transport: stripId ? 'strip' : context,
                 fileName,
                 filePath,
                 sampleRate: requestedSampleRate,
@@ -306,14 +308,15 @@ import {
             };
             PENDING.set(sessionId, pendingEntry);
             try {
-                await invoke('audio_record_start', {
+                await invoke(stripId ? 'audio_record_strip_start' : 'audio_record_start', {
                     sessionId,
                     fileName,
                     filePath,
                     userId,
                     sampleRate: requestedSampleRate,
                     channels: requestedChannels,
-                    inputDeviceName: params.inputDeviceName || null
+                    inputDeviceName: params.inputDeviceName || null,
+                    ...(stripId ? { stripId, deviceId: params.device_id || params.deviceId || null } : {})
                 });
             } catch (error) {
                 clearRecordingScopeSession(sessionId);
@@ -350,10 +353,9 @@ import {
             return sessionId;
         }
 
-        let userId = params.userId || params.user_id || null;
-        if (!userId && (context === 'tauri' || context === 'ios_app')) {
-            userId = await resolveRecordingUserId(window);
-        }
+        // Every native recorder (the AUv3's too) writes under the person's own recordings, where the
+        // take's media URL looks for it (R-179: the AUv3 wrote under `anonymous`, its URL answered 404).
+        const userId = params.userId || params.user_id || await resolveRecordingUserId(window);
 
         const msg = {
             action: 'record_start',
@@ -401,7 +403,7 @@ import {
         if (!sid) throw new Error('Missing sessionId');
 
         const entry = PENDING.get(sid);
-        if (entry?.transport === 'tauri' || entry?.transport === 'ios_app') {
+        if (entry?.transport === 'tauri' || entry?.transport === 'ios_app' || entry?.transport === 'strip') {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
                 entry.disposeScope?.();
@@ -412,7 +414,7 @@ import {
                     : 'Tauri audio engine bridge is not available');
             }
             try {
-                const result = await invoke('audio_record_stop', {
+                const result = await invoke(entry.transport === 'strip' ? 'audio_record_strip_stop' : 'audio_record_stop', {
                     sessionId: sid
                 });
                 const frameCount = Number(result?.frame_count || result?.frameCount || 0);

@@ -8,9 +8,13 @@ enum FeatureFlags {
         ProcessInfo.processInfo.arguments.contains("-AtomePanelLab")
             || ProcessInfo.processInfo.environment["ATOME_IOS_PANEL_LAB"] == "1"
     }
+    // A host app launches the AUv3 with neither argument nor environment: there, a marker file
+    // `Documents/atome_web_inspector` in the app group (pushed with `devicectl device copy to`) turns it on.
     static var webInspectorEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("-AtomeWebInspector")
             || ProcessInfo.processInfo.environment["ATOME_IOS_WEB_INSPECTOR"] == "1"
+            || FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")
+                .map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("Documents/atome_web_inspector").path) } == true
     }
     static var textTraceEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains("-AtomeTextTrace")
@@ -23,7 +27,6 @@ enum FeatureFlags {
 #endif
     static let deferMainLoad: Bool = true
     static let mainThreadPrecondition: Bool = true
-    static let externalDisplayObservation: Bool = true // app-only
     static let registerCustomScheme: Bool = true // keep true to not break loads
     static let startLocalHTTPServer: Bool = true
     static let enableJSBridge: Bool = true

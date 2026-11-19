@@ -25,12 +25,15 @@ pub(super) struct TakeSink {
 }
 
 impl TakeSink {
-    // One period's interleaved samples, first captured at `host_ns` (never blocks).
-    fn push(&mut self, data: &[f32], host_ns: i64) {
+    // One period's interleaved samples, first captured at `host_ns` (never
+    // blocks); a take with no known capture instant notes no clock.
+    pub(super) fn push(&mut self, data: &[f32], host_ns: Option<i64>) {
         if self.stop.load(Ordering::Relaxed) {
             return;
         }
-        note_capture_start_at(&self.clock, host_ns);
+        if let Some(host_ns) = host_ns {
+            note_capture_start_at(&self.clock, host_ns);
+        }
         metering::push_samples(data);
         let channels = self.channels.max(1);
         if self.producer.vacant_len() >= data.len() {
@@ -51,13 +54,18 @@ pub(super) enum Capture {
     Stream { _stream: cpal::Stream },
     #[cfg(target_os = "windows")]
     Tap(Option<String>, u64),
+    // A strip's REC point, drained until dropped (recorder_strip.rs).
+    Strip {
+        _tap: super::recorder_strip::StripTap,
+    },
 }
 
 #[cfg(target_os = "windows")]
 impl Drop for Capture {
     fn drop(&mut self) {
-        let Capture::Tap(device, id) = self;
-        let _ = super::wasapi_duplex::untap(device.as_deref(), *id);
+        if let Capture::Tap(device, id) = self {
+            let _ = super::windows_driver::untap(device.as_deref(), *id);
+        }
     }
 }
 
@@ -72,7 +80,7 @@ pub(super) fn input_format(device: Option<&str>) -> Result<(u32, u16), String> {
 
 #[cfg(target_os = "windows")]
 pub(super) fn input_format(device: Option<&str>) -> Result<(u32, u16), String> {
-    super::wasapi_duplex::input_format(device)
+    super::windows_driver::input_format(device)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -85,7 +93,10 @@ where
     move |data: &[T], info: &cpal::InputCallbackInfo| {
         samples.clear();
         samples.extend(data.iter().map(|sample| f32::from_sample(*sample)));
-        sink.push(&samples, super::scheduled_backend::capture_host_ns(info));
+        sink.push(
+            &samples,
+            Some(super::scheduled_backend::capture_host_ns(info)),
+        );
     }
 }
 
@@ -147,11 +158,11 @@ pub(super) fn open(
         ));
     }
     let sink = Mutex::new(sink);
-    let id = super::wasapi_duplex::tap(
+    let id = super::windows_driver::tap(
         device,
         Arc::new(move |data: &[f32], host_ns: i64| {
             if let Ok(mut sink) = sink.try_lock() {
-                sink.push(data, host_ns);
+                sink.push(data, Some(host_ns));
             }
         }),
     )?;

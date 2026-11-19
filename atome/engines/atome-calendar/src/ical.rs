@@ -102,13 +102,11 @@ pub fn calendar_date(
         (time.map(number), !z.is_empty())
     });
     let target = date_utc(y, m - 1, d, hh, mm, ss);
-    let validated =
-        chrono::DateTime::from_timestamp_millis(target as i64).ok_or("ics_date_invalid")?;
+    let validated = js::dates::Instant::from_millis(target as i64)
+        .ok_or("ics_date_invalid")?
+        .fields();
     {
-        use chrono::Datelike;
-        let same = i64::from(validated.year()) == y
-            && i64::from(validated.month0()) == m - 1
-            && i64::from(validated.day()) == d;
+        let same = validated.year == y && validated.month == m && validated.day == d;
         if !same || hh > 23 || mm > 59 || ss > 59 {
             return Err("ics_date_invalid".into());
         }

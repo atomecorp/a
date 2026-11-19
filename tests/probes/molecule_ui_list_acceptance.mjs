@@ -81,7 +81,10 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             const state = await readAcceptanceState(page, project.id, fixture.ownerId);
             assert(state.canvas_count === 1, `canvas_count:${state.canvas_count}`);
             assert(state.authoritative_dom_count === 0, `authoritative_dom_count:${state.authoritative_dom_count}`);
-            assert(state.handedness === EXPECTED_HANDEDNESS, `handedness:${state.handedness}`);
+            // The ribbon's `handedness` is the assistant's anchor side, opposite the hand since V6.1
+            // (bevy_ui_main_menu_runtime.js#handednessResolver).
+            const anchorSide = EXPECTED_HANDEDNESS === 'left' ? 'right' : 'left';
+            assert(state.handedness === anchorSide, `handedness:${state.handedness}`);
             assert(state.menu?.active === true && state.menu?.treeMounted === true, `menu_not_ready:${JSON.stringify(state.menu)}`);
             assert(!state.overlay_error, `overlay_error:${state.overlay_error}`);
             return state;
@@ -173,16 +176,21 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             assert(String(moleculeHit.nodeId || '').includes(`project_view_list_entry_${row}_hierarchy_chevron`),
                 `molecule_chevron_hit_mismatch:${JSON.stringify({ moleculeChevron, moleculeHit })}`);
             await clickCanvasTarget(page, moleculeChevron);
-            const expandedMolecule = await waitFor(page, async () => {
+            const expandedMolecule = await waitFor(page, async (ownerId) => {
                 const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
                 const entries = readProjectViewSurfaceState().content?.entries || [];
+                const header = entries.findIndex((entry) => entry.id === ownerId);
                 const directMembers = entries.filter((entry) => Number(entry.depth) === 1
                     && !['section', 'track'].includes(String(entry.visualRecord?.properties?.molecule_entity || '')));
                 const internalRows = entries.filter((entry) => ['section', 'track']
                     .includes(String(entry.visualRecord?.properties?.molecule_entity || '')));
+                // An accordion opens upward by default (AGENTS.md rule 14) and the List's window stays on its
+                // header: the member laid against the header is the one in view, whatever the direction.
+                const nearest = [...directMembers].sort((a, b) => Math.abs(entries.indexOf(a) - header)
+                    - Math.abs(entries.indexOf(b) - header))[0];
                 return {
-                    ok: directMembers.length > 0 && internalRows.length === 0,
-                    memberIndex: entries.indexOf(directMembers[0]),
+                    ok: header >= 0 && directMembers.length > 0 && internalRows.length === 0,
+                    memberIndex: entries.indexOf(nearest),
                     directMembers: directMembers.map((entry) => ({ id: entry.id, depth: entry.depth })),
                     internalRows: internalRows.map((entry) => entry.id),
                     entries: entries.map((entry, index) => ({
@@ -191,7 +199,7 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
                         entity: entry.visualRecord?.properties?.molecule_entity || null
                     }))
                 };
-            });
+            }, fixture.ownerId);
             memberEntryIndex = expandedMolecule.memberIndex;
             assert(await awaitBevyUiNodeTarget(page, {
                 nodeId: `project_view_list_entry_${memberEntryIndex}_name`,

@@ -2,57 +2,53 @@
 //  AUv3TransportObserver.swift
 //  auv3
 //
+//  Reads the host transport inside the render block and keeps it, with the
+//  host instant of that quantum's first frame, for the host streams
+//  (`WebViewManager.startHostTimeStream` / `startHostStateStream`): the
+//  Timeline locks its playback onto that instant (auv3_host_bridge.js).
 
 import AVFoundation
 import Foundation
 
 extension auv3Utils {
-    func checkHostTransport() {
+    /// Real-time: `hostTime` is the render quantum's `AudioTimeStamp.mHostTime`.
+    func checkHostTransport(hostTime: UInt64) {
         guard let tsBlock = self.transportStateBlock else { return }
         var flags = AUHostTransportStateFlags(rawValue: 0)
         var currentSampleTime: Double = 0
         var cycleStartBeat: Double = 0
         var cycleEndBeat: Double = 0
-        if tsBlock(&flags, &currentSampleTime, &cycleStartBeat, &cycleEndBeat) {
-            let isPlaying = (flags.rawValue & AUHostTransportStateFlags.moving.rawValue) != 0
-            let sr = getSampleRate() ?? 44100.0
-            var playheadSeconds = currentSampleTime / sr
-            var displaySampleTime = currentSampleTime
-            if let musicalBlock = self.musicalContextBlock {
-                var tempo: Double = 0
-                var numerator: Double = 0
-                var denominator: Int = 0
-                var beatPosition: Double = 0
-                var sampleOffsetToNextBeat: Int = 0
-                var measureDownbeat: Double = 0
-                if musicalBlock(&tempo,
-                                &numerator,
-                                &denominator,
-                                &beatPosition,
-                                &sampleOffsetToNextBeat,
-                                &measureDownbeat),
-                   tempo > 0,
-                   beatPosition.isFinite {
-                    WebViewManager.updateCachedTempo(tempo)
-                    playheadSeconds = max(0, beatPosition * 60.0 / tempo)
-                    displaySampleTime = playheadSeconds * sr
-                }
-            }
-            WebViewManager.updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadSeconds)
-            DispatchQueue.main.async { [weak self] in
-                let js = "(function(){if(typeof displayTransportInfo==='function'){displayTransportInfo(\(isPlaying ? "true":"false"),\(displaySampleTime),\(sr));}else if(typeof updateTimecode==='function'){updateTimecode(\(playheadSeconds * 1000.0));}})();"
-                WebViewManager.evaluateJS(js,
-                                          label: "auv3.transportDirect",
-                                          priority: WebViewManager.IPCPriority.critical)
-                self?.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: displaySampleTime, sampleRate: sr)
+        guard tsBlock(&flags, &currentSampleTime, &cycleStartBeat, &cycleEndBeat) else { return }
+        let isPlaying = (flags.rawValue & AUHostTransportStateFlags.moving.rawValue) != 0
+        let sr = getSampleRate() ?? 44100.0
+        var playheadSeconds = currentSampleTime / sr
+        if let musicalBlock = self.musicalContextBlock {
+            var tempo: Double = 0
+            var numerator: Double = 0
+            var denominator: Int = 0
+            var beatPosition: Double = 0
+            var sampleOffsetToNextBeat: Int = 0
+            var measureDownbeat: Double = 0
+            if musicalBlock(&tempo,
+                            &numerator,
+                            &denominator,
+                            &beatPosition,
+                            &sampleOffsetToNextBeat,
+                            &measureDownbeat),
+               tempo > 0,
+               beatPosition.isFinite {
+                WebViewManager.updateCachedTempo(tempo)
+                playheadSeconds = max(0, beatPosition * 60.0 / tempo)
             }
         }
+        WebViewManager.updateTransportCache(WebViewManager.HostTransportSnapshot(
+            playing: isPlaying,
+            positionSeconds: playheadSeconds,
+            anchorHostNs: Int64(Double(hostTime) * Self.machNanosPerTick)
+        ))
     }
 
     func shouldPollTransport() -> Bool {
-        if self.transportDataDelegate != nil { return true }
-        if WebViewManager.isHostTimeStreamActive() { return true }
-        if WebViewManager.isHostTransportStreamActive() { return true }
-        return false
+        WebViewManager.isHostTimeStreamActive() || WebViewManager.isHostTransportStreamActive()
     }
 }

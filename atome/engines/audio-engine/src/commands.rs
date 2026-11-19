@@ -95,6 +95,12 @@ pub fn load_clip_from_bytes(id: &str, bytes: Vec<u8>) -> Result<Value, String> {
     }))
 }
 
+// A sound's length read from its container, never decoded nor loaded as a clip (an upload's duration).
+pub fn probe_duration_from_bytes(bytes: &[u8]) -> Result<Value, String> {
+    let duration = atome_mix_graph::clip_decode::probe_duration(bytes, None)?;
+    Ok(json!({ "success": true, "duration_seconds": duration }))
+}
+
 pub fn has_clip(id: &str) -> Result<Value, String> {
     Ok(json!({ "success": true, "id": id, "loaded": playback::has_clip(id)? }))
 }
@@ -161,6 +167,18 @@ pub fn mix_levels() -> Result<Value, String> {
         .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
         .collect();
     Ok(json!({ "success": true, "levels": levels }))
+}
+
+// The live measurements of the mix's `dsp` modules (gain reduction, loudness, spectrum).
+pub fn mix_readings() -> Result<Value, String> {
+    Ok(json!({ "success": true, "readings": readings_json(mix::readings()?) }))
+}
+
+pub(crate) fn readings_json(readings: Vec<atome_mix_graph::ModuleReading>) -> Vec<Value> {
+    readings
+        .into_iter()
+        .map(|reading| json!({ "module_id": reading.module_id, "values": reading.values }))
+        .collect()
 }
 
 pub fn mix_devices() -> Result<Value, String> {
@@ -249,6 +267,10 @@ pub fn direct_levels() -> Result<Value, String> {
         .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
         .collect();
     Ok(json!({ "success": true, "levels": levels }))
+}
+
+pub fn direct_readings() -> Result<Value, String> {
+    Ok(json!({ "success": true, "readings": readings_json(direct::readings()?) }))
 }
 
 pub fn direct_cut_tail(module_id: &str) -> Result<Value, String> {
@@ -363,10 +385,10 @@ pub fn shutdown() -> Result<Value, String> {
 struct Args {
     id: String,
     path: String,
-    bytes: Vec<u8>,
     asset_id: String,
     voice_id: String,
     strip_id: Option<String>,
+    device_id: Option<String>,
     voices: Vec<ScheduledVoice>,
     device_name: Option<String>,
     program: Value,
@@ -403,7 +425,7 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
     match name.trim_start_matches("audio_") {
         "init" => init(),
         "load_clip" => load_clip(project_root, &parsed.id, &parsed.path),
-        "load_clip_from_bytes" => load_clip_from_bytes(&parsed.id, parsed.bytes),
+        // A clip's bytes never come as JSON: `load_clip_from_bytes` is called with them (iOS FFI, Tauri bridge).
         "has_clip" => has_clip(&parsed.id),
         "play" => play(&parsed.id),
         "play_instance" => play_instance(
@@ -417,6 +439,7 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "render_clock" => render_clock(),
         "mix_apply" => mix_apply(parsed.program),
         "mix_levels" => mix_levels(),
+        "mix_readings" => mix_readings(),
         "mix_devices" => mix_devices(),
         "mix_cut_tail" => mix_cut_tail(&parsed.module_id),
         "mix_asset_load" => mix_asset_load(project_root, &parsed.asset_id, &parsed.path),
@@ -428,6 +451,7 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "instrument" => instrument_run(parsed.command),
         "direct_apply" => direct_apply(parsed.program),
         "direct_levels" => direct_levels(),
+        "direct_readings" => direct_readings(),
         "direct_measure_latency" => direct_measure_latency(parsed.device_name.as_deref()),
         "direct_cut_tail" => direct_cut_tail(&parsed.module_id),
         "direct_module_state" => direct_module_state(&parsed.module_id),
@@ -446,7 +470,14 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
             parsed.channels,
             parsed.input_device_name,
         ),
-        "record_stop" => record_stop(&parsed.session_id),
+        "record_stop" | "record_strip_stop" => record_stop(&parsed.session_id),
+        "record_strip_start" => super::recorder_strip::command(
+            &resolve_path(project_root, &parsed.file_path)?,
+            &parsed.session_id,
+            &parsed.file_path,
+            parsed.strip_id.as_deref(),
+            parsed.device_id.as_deref(),
+        ),
         "get_levels" => get_levels(),
         "get_scope" => get_scope(),
         "shutdown" => shutdown(),

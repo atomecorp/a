@@ -89,6 +89,7 @@ the established solution before attempting a new implementation.
 | An imported HEVC MOV shows wrong colors, or a silent MOV never starts | [media-video-codec-and-silent-playback](media-video-codec-and-silent-playback/README.md) |
 | List Delete has no handler, playback skips paged items, or projected audio progress freezes | [project-view-list-media-regressions](project-view-list-media-regressions/README.md) |
 | Projects disappear, project views look empty, or legacy media returns 404 after identity migration | [project-state-media-identity-reconciliation](project-state-media-identity-reconciliation/README.md) |
+| A panel turned lying → standing keeps its old rows at their lying place, stretched sideways, its slab at the new place | [scroll-restore-overwrites-new-layout](scroll-restore-overwrites-new-layout/README.md) |
 | Bottom menu or moved panels float after rotation or WebView resize | [cross-runtime-viewport-reanchor](cross-runtime-viewport-reanchor/README.md) |
 | Flower or tool glass keeps stale white/image pixels, or turns opaque dark, during resize or content movement | [dynamic-backdrop-refresh](dynamic-backdrop-refresh/README.md) |
 | Browser login with a Tauri-created account terminates Fastify during sync | [sync-subscription-burst-fastify-crash](sync-subscription-burst-fastify-crash/README.md) |

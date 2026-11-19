@@ -59,7 +59,7 @@ impl Visio {
                 peer.consumers
                     .retain(|_, consumed| consumed.transport_id != transport_id);
                 peer.transports.shift_remove(&transport_id);
-                let (peer_id, user) = (peer.id.clone(), peer.user.clone());
+                let (peer_id, user) = (peer.id.clone(), peer.shown.clone());
                 closed
                     .iter()
                     .flat_map(|id| {

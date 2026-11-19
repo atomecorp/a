@@ -73,11 +73,12 @@ fn due(bundles: &Path) -> Result<bool, String> {
     if manifest.schema != SCHEMA_VERSION {
         return Err("health_reference_schema_unsupported: manifest.schema".into());
     }
-    let Ok(built_on) = chrono::NaiveDate::parse_from_str(&manifest.built_on, "%Y-%m-%d") else {
+    use atome_js_values::dates;
+    let Some(built_on) = dates::date(&manifest.built_on, "%Y-%m-%d") else {
         return Ok(false);
     };
-    let age = chrono::Utc::now().date_naive() - built_on;
-    Ok(age.num_days() >= MAX_AGE_DAYS)
+    let day = |instant: dates::Instant| instant.seconds.div_euclid(86_400);
+    Ok(day(dates::Instant::now()) - day(built_on) >= MAX_AGE_DAYS)
 }
 
 // `atome-health-ref run`: its JSON report, or why it failed.

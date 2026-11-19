@@ -29,6 +29,9 @@ pub mod local;
 #[cfg(unix)]
 pub mod mail;
 pub mod media;
+// The one signed OVHcloud API client (SMS, domain registrar).
+#[cfg(unix)]
+pub mod ovh;
 pub mod page_preview;
 #[cfg(unix)]
 pub mod providers;
@@ -40,6 +43,9 @@ pub mod site;
 pub mod social;
 #[cfg(unix)]
 pub mod status;
+// What the people send the team: reports, requests, the Atome contact's thread (R-210).
+#[cfg(unix)]
+pub mod team_reports;
 // The one TLS client configuration of every outgoing connection.
 pub mod tls;
 #[cfg(target_os = "linux")]
@@ -57,3 +63,8 @@ pub mod web;
 pub mod ws_api;
 #[cfg(unix)]
 pub mod ws_sync;
+
+// The server's date readers and writers against chrono's own outputs (jiff replaced it).
+#[cfg(all(test, unix))]
+#[path = "../../../../tests/atome_server/date_golden.rs"]
+mod date_golden;

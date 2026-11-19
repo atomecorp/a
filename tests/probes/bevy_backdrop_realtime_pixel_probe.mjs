@@ -3,29 +3,35 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
+import { startServer } from '../helpers/probe_server.mjs';
 
-const url = process.env.BEVY_BACKDROP_PROBE_URL || 'http://127.0.0.1:3000/';
+// Its own isolated app server unless a URL is named: the page only needs the served modules (eVe/, atome/src).
+const server = process.env.BEVY_BACKDROP_PROBE_URL ? null : await startServer();
+const url = process.env.BEVY_BACKDROP_PROBE_URL || `http://127.0.0.1:${server.port}/`;
 const outDir = path.resolve('temp/probe_reports/bevy_backdrop_realtime');
 fs.mkdirSync(outDir, { recursive: true });
 
+// The magenta's centre in logical px: the linear-light excess of min(red, blue) over the row's ground (its first
+// column), the quantity a linear blur keeps. A sRGB threshold weighed the blurred tail unevenly (R-189).
 const magentaCentroid = (buffer, dpr, logicalBounds) => {
     const png = PNG.sync.read(buffer);
     const [x0, y0, x1, y1] = logicalBounds.map((value) => Math.round(value * dpr));
+    const linear = (byte) => {
+        const value = byte / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    };
+    const magenta = (offset) => Math.min(linear(png.data[offset]), linear(png.data[offset + 2]));
     let weight = 0;
     let weightedX = 0;
     for (let y = y0; y < Math.min(y1, png.height); y += 1) {
+        const ground = magenta((y * png.width + x0) * 4);
         for (let x = x0; x < Math.min(x1, png.width); x += 1) {
-            const offset = (y * png.width + x) * 4;
-            const r = png.data[offset];
-            const g = png.data[offset + 1];
-            const b = png.data[offset + 2];
-            const score = Math.max(0, Math.min(r, b) - g - 18);
-            if (score === 0) continue;
-            weight += score;
-            weightedX += x * score;
+            const excess = Math.max(0, magenta((y * png.width + x) * 4) - ground);
+            weight += excess;
+            weightedX += (x + 0.5) * excess;
         }
     }
-    return weight > 0 ? weightedX / weight : null;
+    return weight > 0 ? weightedX / weight / dpr : null;
 };
 
 const meanRgb = (buffer, dpr, logicalBounds) => {
@@ -52,6 +58,15 @@ const runDpr = async (browser, dpr) => {
     page.on('console', (message) => {
         if (message.type() === 'error') consoleErrors.push(message.text());
     });
+    page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error?.stack || error}`));
+    // The bare page loads no server config: it is given the isolated server's sockets, as loadServerConfig.js
+    // would write them, Fastify forced as the browser probes do, never the Tauri default (127.0.0.1:3000) tried otherwise.
+    const appUrl = new URL(url);
+    await page.addInitScript((origin) => {
+        window.__SQUIRREL_FORCE_FASTIFY__ = true;
+        window.__SQUIRREL_FASTIFY_WS_API_URL__ = `${origin}/ws/api`;
+        window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = `${origin}/ws/sync`;
+    }, `ws://${appUrl.host}`);
     await page.route(url, (route) => route.fulfill({
         contentType: 'text/html',
         body: `<!doctype html><html><head><script type="importmap">${JSON.stringify({ imports: {
@@ -126,10 +141,33 @@ const runDpr = async (browser, dpr) => {
     const canvas = page.locator('#backdrop_pixel_probe');
     const capture = async (name) => {
         const file = path.join(outDir, `dpr${dpr}_${name}.png`);
-        const buffer = await canvas.screenshot({ path: file, animations: 'disabled' });
+        // The page's own composited frame, clipped to the canvas: an element screenshot of a WebGPU canvas comes back
+        // blank in headed Chromium (white, with the canvas drawn on the page), so the probe measured nothing.
+        const box = await canvas.boundingBox();
+        const buffer = await page.screenshot({ path: file, clip: box, animations: 'disabled' });
         return { file, buffer };
     };
-    const initial = await capture('initial');
+    // The first scene is measured once it is on screen and settled: its redraw applied, the GPU presents it a little
+    // later (about 100 ms in headed Chromium, no new redraw), and the first presented frame may still blur a capture
+    // taken before the surface took its DPR (-1.2 px at DPR 1.5, 0 px a frame later). The capture waits for two
+    // identical frames of the scene's own dark ground.
+    await page.evaluate(async () => {
+        const probe = window.__backdropProbe;
+        const state = probe.runtime.readBevyWebRendererState(probe.canvas);
+        const deadline = performance.now() + 2_000;
+        while (state.wasmModule.read_atome_bevy_web_diagnostics().redraw_applied < 1) {
+            if (performance.now() >= deadline) throw new Error('backdrop_probe_first_redraw_timeout');
+            await new Promise((resolve) => setTimeout(resolve, 8));
+        }
+    });
+    let initial = await capture('initial');
+    for (let previous = null, deadline = Date.now() + 3_000;
+        meanRgb(initial.buffer, dpr, [380, 470, 420, 480])[0] > 128 || !previous?.equals(initial.buffer);) {
+        if (Date.now() >= deadline) throw new Error('backdrop_probe_first_frame_not_settled');
+        previous = initial.buffer;
+        await page.waitForTimeout(50);
+        initial = await capture('initial');
+    }
     try {
         await page.evaluate(async () => {
             const probe = window.__backdropProbe;
@@ -197,19 +235,22 @@ const runDpr = async (browser, dpr) => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
     });
     const reactivated = await capture('reactivated_same_frame');
-    const initialX = magentaCentroid(initial.buffer, dpr, [70, 70, 730, 370]);
-    const movedX = magentaCentroid(moved.buffer, dpr, [70, 70, 730, 370]);
     const initialReferenceX = magentaCentroid(initial.buffer, dpr, [70, 16, 730, 42]);
     const movedReferenceX = magentaCentroid(moved.buffer, dpr, [70, 16, 730, 42]);
-    const resizedX = magentaCentroid(resized.buffer, dpr, [70, 70, 700, 370]);
     const resizedReferenceX = magentaCentroid(resized.buffer, dpr, [70, 16, 700, 42]);
+    // The blurred bar is measured within 100 px of its sharp reference (more than 5 σ of the 18 px glass), on the
+    // glass alone: a wider window weighed the glass's own ground gradient into the centre.
+    const aroundReference = (buffer, reference) => reference == null ? null : magentaCentroid(buffer, dpr, [reference - 100, 70, reference + 100, 370]);
+    const initialX = aroundReference(initial.buffer, initialReferenceX);
+    const movedX = aroundReference(moved.buffer, movedReferenceX);
+    const resizedX = aroundReference(resized.buffer, resizedReferenceX);
     assert.ok(initialX != null && movedX != null, 'magenta marker must remain visible through blur');
     assert.ok(initialReferenceX != null && movedReferenceX != null, 'sharp alignment reference must remain visible');
-    assert.ok(Math.abs(initialX - initialReferenceX) <= 1.0, `initial alignment drift: ${initialX - initialReferenceX}px`);
-    assert.ok(Math.abs(movedX - movedReferenceX) <= 1.0, `moved alignment drift: ${movedX - movedReferenceX}px`);
-    assert.ok(Math.abs((movedX - initialX) - (movedReferenceX - initialReferenceX)) <= 1.0, 'blur must update in the presented move frame');
+    assert.ok(Math.abs(initialX - initialReferenceX) <= 0.1, `initial alignment drift: ${initialX - initialReferenceX}px`);
+    assert.ok(Math.abs(movedX - movedReferenceX) <= 0.1, `moved alignment drift: ${movedX - movedReferenceX}px`);
+    assert.ok(Math.abs((movedX - initialX) - (movedReferenceX - initialReferenceX)) <= 0.2, 'blur must update in the presented move frame');
     assert.ok(resizedX != null && resizedReferenceX != null, 'resize markers must remain visible');
-    assert.ok(Math.abs(resizedX - resizedReferenceX) <= 1.0, `resized alignment drift: ${resizedX - resizedReferenceX}px`);
+    assert.ok(Math.abs(resizedX - resizedReferenceX) <= 0.1, `resized alignment drift: ${resizedX - resizedReferenceX}px`);
     const brightWhite = meanRgb(brightSystemGlass.buffer, dpr, [635, 415, 685, 465]);
     const brightGreen = meanRgb(brightSystemGlass.buffer, dpr, [705, 415, 715, 465]);
     assert.ok(Math.max(...brightWhite, ...brightGreen) <= 125,
@@ -256,7 +297,7 @@ const runDpr = async (browser, dpr) => {
         files: [initial.file, moved.file, resized.file, brightSystemGlass.file, reactivated.file] };
 };
 
-const browser = await chromium.launch({ headless: false, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ headless: false, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--use-angle=metal'] });
 try {
     const results = [];
     for (const dpr of [1, 1.5]) results.push(await runDpr(browser, dpr));
@@ -264,4 +305,5 @@ try {
     console.log(`bevy_backdrop_realtime_pixel_probe: PASS (${outDir})`);
 } finally {
     await browser.close();
+    await server?.stop();
 }

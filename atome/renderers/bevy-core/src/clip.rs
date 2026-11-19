@@ -403,6 +403,7 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
     world
         .entity_mut(entity)
         .insert(GlobalTransform::from(transform));
+    crate::progress_ring::crop(world, entity, original, visible)?;
 
     let source_rect = world
         .get::<AtomeSpriteSourceRect>(entity)

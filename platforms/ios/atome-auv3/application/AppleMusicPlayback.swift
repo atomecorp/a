@@ -37,6 +37,11 @@ enum AppleMusicPlayback {
                 let loaded = try await artist.with([.topSongs]); try check()
                 guard let songs = loaded.topSongs, !songs.isEmpty else { throw AppleMusicFailure(code: "ITEM_NOT_FOUND") }
                 player.queue = .init(for: songs)
+            } else if !request.queueIDs.isEmpty {
+                // The list the song was chosen in, in its order, from that song: next and previous move through it.
+                let songs = try await AppleMusicLibrary.songs(request.queueIDs, scope: request.scope, check: check)
+                guard let song = songs.first(where: { $0.id.rawValue == id }) else { throw AppleMusicFailure(code: "ITEM_NOT_FOUND") }
+                try check(); player.queue = .init(for: songs, startingAt: song)
             } else {
                 let song = try await AppleMusicLibrary.song(id, scope: request.scope, check: check)
                 try check(); player.queue = [song]

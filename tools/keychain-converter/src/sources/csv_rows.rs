@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use atome_js_values::dates;
 use serde_json::{Map, Value, json};
 
 use super::csv;
@@ -166,18 +167,19 @@ fn time_of(value: &str) -> Option<u64> {
             number
         });
     }
-    if let Ok(time) = chrono::DateTime::parse_from_rfc3339(value) {
-        return u64::try_from(time.timestamp()).ok();
+    text_time(value)
+}
+
+// A date text, read as chrono read it before jiff.
+fn text_time(value: &str) -> Option<u64> {
+    if let Some(time) = dates::rfc3339(value) {
+        return u64::try_from(time.utc.seconds).ok();
     }
     ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]
         .iter()
-        .find_map(|format| chrono::NaiveDateTime::parse_from_str(value, format).ok())
-        .or_else(|| {
-            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
-                .ok()
-                .and_then(|d| d.and_hms_opt(0, 0, 0))
-        })
-        .and_then(|time| u64::try_from(time.and_utc().timestamp()).ok())
+        .find_map(|format| dates::naive(value, format))
+        .or_else(|| dates::date(value, "%Y-%m-%d"))
+        .and_then(|time| u64::try_from(time.seconds).ok())
 }
 
 fn custom_kind(header: &str) -> FieldKind {
@@ -359,4 +361,25 @@ pub fn convert(
         extensions: Vec::new(),
     };
     Ok((provider, vec![account]))
+}
+
+#[cfg(test)]
+#[path = "../../../../tests/atome_js_values/golden_support.rs"]
+mod golden;
+
+#[cfg(test)]
+mod tests {
+    // A cell's date text reads as chrono read it before jiff (chrono_golden.tsv, the trimmed
+    // cell; an all-digit cell is a Unix time, read without chrono before and after).
+    #[test]
+    fn times_read_as_chrono_read_them() {
+        super::golden::check("", "csv_time", |cell| {
+            super::golden::opt(super::text_time(cell.trim()))
+        });
+        super::golden::check("", "unix_date", |seconds| {
+            super::golden::opt(crate::sources::onepassword::unix_date(
+                seconds.parse().unwrap(),
+            ))
+        });
+    }
 }

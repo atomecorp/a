@@ -255,6 +255,9 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
     {
         video.filters = filters.normalized();
     }
+    if let Some(effects) = patch.effects.as_deref() {
+        crate::media_fx::apply_media_effects(world, entity, effects)?;
+    }
     if let Some(transition) = patch.transition
         && let Some(mut video) =
             world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)

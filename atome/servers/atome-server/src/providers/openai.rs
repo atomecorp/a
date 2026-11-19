@@ -8,7 +8,42 @@ use crate::vault_router::js;
 use base64::Engine;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
-pub const ROOT: &str = "https://api.openai.com/v1";
+const DEFAULT_ROOT: &str = "https://api.openai.com/v1";
+static ROOT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The server setting `OPENAI_API_ROOT`: the provider's address, for a test server's local stand-in only (an HTTPS
+/// address, or HTTP on this machine's loopback); OpenAI's own otherwise. Read once, when the providers load.
+pub fn configure(settings: &crate::settings::Settings) {
+    let Some(root) = settings.get("OPENAI_API_ROOT") else {
+        return;
+    };
+    let root = root.trim().trim_end_matches('/').to_string();
+    let local = ["http://127.0.0.1:", "http://localhost:", "http://[::1]:"]
+        .iter()
+        .any(|prefix| root.starts_with(prefix));
+    if root.starts_with("https://") || local {
+        let _ = ROOT.set(root);
+    } else {
+        eprintln!("[ai-provider] OPENAI_API_ROOT ignored: neither HTTPS nor loopback");
+    }
+}
+
+/// The provider's HTTP address.
+pub fn root() -> &'static str {
+    ROOT.get().map_or(DEFAULT_ROOT, String::as_str)
+}
+
+/// Its Realtime socket's address (text read aloud, speech.rs).
+pub fn socket_root() -> String {
+    let root = root();
+    root.strip_prefix("https://")
+        .map(|rest| format!("wss://{rest}"))
+        .or_else(|| {
+            root.strip_prefix("http://")
+                .map(|rest| format!("ws://{rest}"))
+        })
+        .unwrap_or_else(|| root.to_string())
+}
 
 fn route(action: &str) -> Option<(String, String)> {
     let fixed = match action {
@@ -314,7 +349,7 @@ pub async fn call<L: Link>(
     let method =
         reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| Failure::from("method"))?;
     let mut request = http::client()
-        .request(method, format!("{ROOT}{pathname}"))
+        .request(method, format!("{}{pathname}", root()))
         .header("Authorization", format!("Bearer {key}"));
     request = match body {
         Body::None => request,

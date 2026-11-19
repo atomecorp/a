@@ -5,24 +5,64 @@
 pub mod biquad;
 pub mod catalog;
 pub mod chain;
+pub mod control;
 pub mod convolution;
 pub mod crossover;
+pub mod deesser;
 pub mod delay;
+pub mod denoise;
 pub mod denormal;
+pub mod detector;
+pub mod doubler;
 pub mod drive;
 pub mod dynamics;
 pub mod envelope;
+pub mod eq;
+pub mod expander;
 pub mod gain;
 pub mod gate;
+pub mod harmonizer;
+pub mod imager;
+pub mod lofi;
+pub mod loudness;
+pub mod maximizer;
+pub mod modulation;
+pub mod multiband;
 pub mod nam;
+pub mod noise;
 pub mod oscillator;
+pub mod oversample;
 pub mod param;
+pub mod pitch;
 pub mod resample;
 pub mod reverb;
+pub mod saturator;
+pub mod spectrum;
 pub mod split;
+pub mod stft;
+pub mod svf;
+pub mod transient;
+pub mod tuner;
+pub mod vocoder;
 
 pub use chain::Chain;
 pub use param::{ParamSpec, Smoothed, Unit};
+
+// A parameter's value at every frame of the block (audio-rate modulation).
+#[derive(Clone, Copy)]
+pub struct ParamBuffer<'a> {
+    pub id: u32,
+    pub values: &'a [f32],
+}
+
+// What a control output carries: a modulator writes values in this range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlRange {
+    // −1..1 (an LFO, a macro).
+    Bipolar,
+    // 0..1 (an envelope, a follower).
+    Unipolar,
+}
 
 // Planar stereo block: a mono processor works on `left` and copies to `right`.
 pub struct StereoBlock<'a> {
@@ -100,6 +140,42 @@ pub trait Processor: Send + Sync {
 
     fn process_keyed(&mut self, block: &mut StereoBlock, key: KeyBlock) {
         let _ = key;
+        self.process(block);
+    }
+
+    // Live measurements the UI shows (gain reduction, loudness, a spectrum),
+    // in the order of its kind's `readings` keys; written by `process`, read
+    // after it on the audio thread and published lock-free by the host.
+    fn readings(&self) -> &[f32] {
+        &[]
+    }
+
+    // Control signals it writes beside its audio (a modulator): one value per
+    // frame of the last processed block, read by the host right after it.
+    fn control_outputs(&self) -> usize {
+        0
+    }
+
+    fn control(&self, output: usize) -> &[f32] {
+        let _ = output;
+        &[]
+    }
+
+    // Whether the parameter follows a value per frame (`process_modulated`);
+    // any other parameter is stepped by `set_param` and smoothed as usual.
+    fn audio_rate(&self, id: u32) -> bool {
+        let _ = id;
+        false
+    }
+
+    // Processes the block with `params` given at every frame. A processor
+    // without audio-rate parameters takes each one's first value.
+    fn process_modulated(&mut self, block: &mut StereoBlock, params: &[ParamBuffer]) {
+        for param in params {
+            if let Some(value) = param.values.first() {
+                self.set_param(param.id, *value);
+            }
+        }
         self.process(block);
     }
 }

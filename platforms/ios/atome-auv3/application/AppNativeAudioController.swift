@@ -16,6 +16,7 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     let recordingScopeBinCount = 64
 
     var audioSessionConsumers = AppNativeAudioConsumerRegistry()
+    var captureMusicSnapshot = AppNativeCaptureMusicSnapshot()
     var systemOwnsAudioActivation = false
     /// The category this controller last set on the shared session; nil before its first plan. A recording
     /// category found on the session that this controller did not set belongs to someone else (WebKit's

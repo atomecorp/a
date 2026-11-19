@@ -11,12 +11,19 @@
 //   event  `mcp.confirmation.decided` { confirmation_id, status } when it is answered or withdrawn
 //   then the asker re-sends the same request with { confirmed: true, confirmation_id }.
 // A request is waited on 5 minutes at most (user decision, phase C list B, MD).
+//
+// Asked of the assistant (AGENTS.md rule 22, user 17 Nov. 2026, non-negotiable): the person's own words, spoken or
+// typed, are their yes. What the person asks her is done at once, recorded here as confirmed by their request; only
+// what leaves toward other people or moves money (`policy.outward`) is held, and her conversation asks it in the
+// person's own mode (ai/conversation_session.js): never a panel on the screen.
 import { cloneValue, MCP_ERROR, mcpError, nowIso, pushMcpEvent, trimHistory } from './mcp_core.js';
 import { sanitizeConfirmationParams } from './mcp_security_policy.js';
 import { confirmProposal, createProposalRecord, pushSecurityJournal } from './mcp_security.js';
 import { stableStringify } from '../ai/agent_gateway_normalize.js';
 
 export const MCP_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
+// The assistant's sources: the person speaks or writes to her.
+export const MCP_ASSISTANT_SOURCES = Object.freeze(['ai', 'voice']);
 const MCP_CONFIRMATION_LIMIT = 200;
 
 let confirmationSeq = 0;
@@ -69,12 +76,27 @@ function createConfirmationRecord(method, params, policy, actor) {
     return record;
 }
 
+// The person's request to the assistant stands for their yes: recorded and consumed at once, never offered to a panel.
+function confirmByRequest(method, params, policy, actor) {
+    const now = nowIso();
+    const record = { confirmation_id: `mcp_confirm_${++confirmationSeq}`, method: String(method || ''), scope: String(policy.scope || 'tool'),
+        subject: String(policy.subject || method || ''), status: 'consumed', created_at: now, expires_at: now, decided_at: now, consumed_at: now,
+        actor: { actor_id: actor.actor_id, role: actor.role, source: actor.source }, proposal_id: null, decided_by: 'person_request',
+        required_capabilities: [...(policy.required_capabilities || [])], params: sanitizeConfirmationParams(params) };
+    confirmations.set(record.confirmation_id, record);
+    trimHistory(confirmations, MCP_CONFIRMATION_LIMIT);
+    pushSecurityJournal('confirmation_by_request', { confirmation_id: record.confirmation_id, method: record.method,
+        subject: record.subject, actor_id: record.actor.actor_id, source: record.actor.source });
+    return { ok: true, consumed: true, confirmation_id: record.confirmation_id };
+}
+
 const refusal = (error, confirmationId, extra = {}) => ({ ok: false, gate: { ok: false, error, confirmation_id: confirmationId, ...extra } });
 
 /** The gate run by the entry before the handler. `{ ok: true, consumed }` lets the request through. */
 export function validateConfirmation(method, params = {}, policy = {}, actor = {}) {
     if (policy.confirmation_required !== true) return { ok: true, consumed: false };
     const confirmationId = String(params?.confirmation_id || '').trim();
+    if (MCP_ASSISTANT_SOURCES.includes(actor.source) && policy.outward !== true) return confirmByRequest(method, params, policy, actor);
     if (params?.confirmed !== true || !confirmationId) {
         const record = createConfirmationRecord(method, params, policy, actor);
         return { ok: false, gate: { ok: false, status: 'pending', confirmation_required: true,

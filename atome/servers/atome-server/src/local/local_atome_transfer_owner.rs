@@ -185,7 +185,7 @@ pub(super) async fn handle_transfer_owner(
                     "UPDATE guest_workspace_principals SET status = 'adopted', adopted_principal_id = ?1,
                      adoption_operation_digest = ?2, adopted_at = ?3
                      WHERE guest_principal_id = ?4 AND status = 'active'",
-                    rusqlite::params![to_owner_id, adoption_operation, Utc::now().to_rfc3339(), from_owner_id],
+                    rusqlite::params![to_owner_id, adoption_operation, atome_js_values::dates::now_rfc3339(), from_owner_id],
                 ).map_err(|error| error.to_string())?;
                 crate::local::local_auth::revoke_confirmed_sessions();
                 Ok(())
@@ -209,7 +209,7 @@ pub(super) async fn handle_transfer_owner(
         };
     }
 
-    let now = Utc::now().to_rfc3339();
+    let now = atome_js_values::dates::now_rfc3339();
     let placeholders = vec!["?"; ids.len()].join(", ");
     let mut project_ids = HashSet::new();
     if let Ok(mut stmt) = db.prepare(&format!(

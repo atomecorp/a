@@ -1,0 +1,7 @@
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!-- A console strip's REC: where its take is taken (R-183) — a ring, its point, and the signal passing through. -->
+  <path stroke="none" fill="rgb(0, 0, 0)" fill-rule="evenodd" d="M 64,20 A 44,44 0 1 1 63.99,20 Z M 64,32 A 32,32 0 1 0 64.01,32 Z" />
+  <circle stroke="none" fill="rgb(0, 0, 0)" cx="64" cy="64" r="20" />
+  <rect stroke="none" fill="rgb(0, 0, 0)" x="0" y="58" width="16" height="12" />
+  <rect stroke="none" fill="rgb(0, 0, 0)" x="112" y="58" width="16" height="12" />
+</svg>

@@ -1,5 +1,5 @@
 // A strip whose source is an instrument (todo/sampler_cahier_des_charges §14):
-// the sampler of `atome-instrument` (instrument_spec.rs builds it). Notes reach the render thread through two single-producer rings
+// the sampler or the synth of `atome-instrument` (instrument_synth.rs builds it). Notes reach the render thread through two single-producer rings
 // of atomics: one played now (the start of the next block), one dated on the
 // instrument's own rendered-frame count. A rebuilt sampler is handed over like
 // a graph (`pending`, taken with `try_lock`), the replaced one goes back to the
@@ -11,10 +11,11 @@
 use crate::dsp::AtomicParam;
 use crate::graph::MAX_BLOCK;
 use crate::instrument_actions::{ActionBook, DrainedActions};
-use crate::instrument_spec::{InstrumentSpec, build_sampler};
-use atome_dsp::Processor;
+use crate::instrument_spec::InstrumentSpec;
+use crate::instrument_synth::{Engine, build_engine, plays_param};
 use atome_instrument::sampler::PARAMS;
-use atome_instrument::{EventKind, NoteEvent, SampleData, Sampler};
+use atome_instrument::synth::BrickKind;
+use atome_instrument::{EventKind, NoteEvent, SampleData};
 use kira::Frame;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -22,23 +23,31 @@ use std::sync::{Arc, Mutex};
 
 const RING_EVENTS: usize = 1024;
 
-// A note event in one word: kind (8 bits), note (8 bits), value (f32 bits).
+// A note event in one word: a second byte (8 bits, a brick's parameter), kind (8 bits), note (8 bits), value (f32 bits).
 fn pack(kind: EventKind) -> u64 {
-    let (code, note, value) = match kind {
-        EventKind::NoteOn { note, velocity } => (1u64, note, velocity),
-        EventKind::NoteOff { note } => (2, note, 0.0),
-        EventKind::Sustain { down } => (3, 0, if down { 1.0 } else { 0.0 }),
-        EventKind::PitchBend { semitones } => (4, 0, semitones),
-        EventKind::AllNotesOff => (5, 0, 0.0),
-        EventKind::Controller { number, value } => (6, number, value),
+    let (code, extra, note, value) = match kind {
+        EventKind::NoteOn { note, velocity } => (1u64, 0u8, note, velocity),
+        EventKind::NoteOff { note } => (2, 0, note, 0.0),
+        EventKind::Sustain { down } => (3, 0, 0, if down { 1.0 } else { 0.0 }),
+        EventKind::PitchBend { semitones } => (4, 0, 0, semitones),
+        EventKind::AllNotesOff => (5, 0, 0, 0.0),
+        EventKind::Controller { number, value } => (6, 0, number, value),
+        EventKind::Pressure { value } => (7, 0, 0, value),
+        EventKind::Tempo { bpm } => (8, 0, 0, bpm),
+        EventKind::BrickParam {
+            brick,
+            param,
+            value,
+        } => (9, param, brick, value),
     };
-    (code << 40) | (u64::from(note) << 32) | u64::from(value.to_bits())
+    (u64::from(extra) << 48) | (code << 40) | (u64::from(note) << 32) | u64::from(value.to_bits())
 }
 
 fn unpack(word: u64) -> Option<EventKind> {
     let note = ((word >> 32) & 0xff) as u8;
+    let extra = ((word >> 48) & 0xff) as u8;
     let value = f32::from_bits(word as u32);
-    match word >> 40 {
+    match (word >> 40) & 0xff {
         1 => Some(EventKind::NoteOn {
             note,
             velocity: value,
@@ -49,6 +58,13 @@ fn unpack(word: u64) -> Option<EventKind> {
         5 => Some(EventKind::AllNotesOff),
         6 => Some(EventKind::Controller {
             number: note,
+            value,
+        }),
+        7 => Some(EventKind::Pressure { value }),
+        8 => Some(EventKind::Tempo { bpm: value }),
+        9 => Some(EventKind::BrickParam {
+            brick: note,
+            param: extra,
             value,
         }),
         _ => None,
@@ -87,7 +103,7 @@ impl EventRing {
     }
 
     // Every event due before `until`, at its offset from `from` (an event already late plays at 0).
-    fn drain(&self, from: u64, until: u64, sampler: &mut Sampler) {
+    fn drain(&self, from: u64, until: u64, engine: &mut Engine) {
         let written = self.written.load(Ordering::Acquire);
         let mut read = self.read.load(Ordering::Relaxed);
         while read != written {
@@ -97,7 +113,7 @@ impl EventRing {
                 break;
             }
             if let Some(kind) = unpack(self.words[slot].load(Ordering::Relaxed)) {
-                sampler.schedule(NoteEvent {
+                engine.schedule(NoteEvent {
                     offset: frame.saturating_sub(from) as u32,
                     kind,
                 });
@@ -110,7 +126,7 @@ impl EventRing {
 
 // Its outputs side by side: bus `b` of a block of `frames` is [b * frames, (b + 1) * frames).
 pub struct Playing {
-    sampler: Box<Sampler>,
+    engine: Engine,
     values: [f32; PARAMS.len()],
     outputs: usize,
     left: Vec<f32>,
@@ -151,7 +167,7 @@ impl InstrumentSlot {
 
     fn offer(
         &self,
-        sampler: Sampler,
+        engine: Engine,
         values: [f32; PARAMS.len()],
         outputs: usize,
     ) -> Result<(), String> {
@@ -164,7 +180,7 @@ impl InstrumentSlot {
         }
         let samples = MAX_BLOCK * outputs;
         let playing = Box::new(Playing {
-            sampler: Box::new(sampler),
+            engine,
             values,
             outputs,
             left: vec![0.0; samples],
@@ -213,7 +229,7 @@ impl InstrumentSlot {
             return;
         };
         let Playing {
-            sampler,
+            engine,
             values,
             outputs,
             left,
@@ -223,15 +239,14 @@ impl InstrumentSlot {
             let next = slot.get();
             if next != *value {
                 *value = next;
-                sampler.set_param(id as u32, next);
+                engine.set_param(id as u32, next);
             }
         }
         let rendered = self.rendered.load(Ordering::Relaxed);
-        self.now.drain(u64::MAX, u64::MAX, sampler);
-        self.dated
-            .drain(rendered, rendered + frames as u64, sampler);
+        self.now.drain(u64::MAX, u64::MAX, engine);
+        self.dated.drain(rendered, rendered + frames as u64, engine);
         let span = frames * *outputs;
-        sampler.process_outputs(&mut left[..span], &mut right[..span], frames);
+        engine.process_outputs(&mut left[..span], &mut right[..span], frames);
         for (bus, out) in buses.iter_mut().enumerate().take(*outputs) {
             let at = bus * frames;
             for (frame, (left, right)) in out[..frames].iter_mut().zip(
@@ -286,11 +301,11 @@ impl Instruments {
                 spec.id, spec.outputs
             ));
         }
-        let (mut sampler, values, infos) = build_sampler(&spec, &self.samples, sample_rate)?;
+        let (mut engine, values, infos) = build_engine(&spec, &self.samples, sample_rate)?;
         let book = self.books.entry(spec.id.clone()).or_default();
-        sampler.report_actions(book.queue(), book.record(infos));
+        engine.report_actions(book.queue(), book.record(infos));
         if let Some(slot) = self.slots.get(&spec.id) {
-            slot.offer(sampler, values, spec.outputs)?;
+            slot.offer(engine, values, spec.outputs)?;
         }
         self.specs.insert(spec.id.clone(), spec);
         Ok(())
@@ -314,15 +329,15 @@ impl Instruments {
             .specs
             .get(instrument_id)
             .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
-        let (mut sampler, values, _) = build_sampler(spec, &self.samples, sample_rate)?;
+        let (mut engine, values, _) = build_engine(spec, &self.samples, sample_rate)?;
         // The description's own build: its marker table was recorded when it was set.
         let book = self
             .books
             .get(instrument_id)
             .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
-        sampler.report_actions(book.queue(), book.generation());
+        engine.report_actions(book.queue(), book.generation());
         let slot = InstrumentSlot::new();
-        slot.offer(sampler, values, spec.outputs)?;
+        slot.offer(engine, values, spec.outputs)?;
         self.slots.insert(instrument_id.to_string(), slot.clone());
         Ok(slot)
     }
@@ -375,8 +390,59 @@ impl Instruments {
             .iter()
             .find(|param| param.key == name)
             .ok_or_else(|| format!("instrument param {name} is unknown"))?;
+        if let Some(spec) = self.specs.get(instrument_id)
+            && !plays_param(spec, name)
+        {
+            return Err(format!(
+                "instrument {instrument_id}: {name} belongs to the sampler; a synth's voice is its patch"
+            ));
+        }
         self.played(instrument_id)?.params[param.id as usize].set(param.clamp(value));
         Ok(())
+    }
+
+    // One parameter of a synth brick, heard at once (R-186: a module's value dragged); the description is written by
+    // the next `set`. Refused for a sampler, an unknown brick or parameter, and an envelope's gate (it follows the note).
+    pub fn set_brick_param(
+        &self,
+        instrument_id: &str,
+        module_id: &str,
+        name: &str,
+        value: f32,
+    ) -> Result<(), String> {
+        let synth = self
+            .specs
+            .get(instrument_id)
+            .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?
+            .synth
+            .as_ref()
+            .ok_or_else(|| format!("instrument {instrument_id} is a sampler: it has no bricks"))?;
+        let (brick, desc) = synth
+            .bricks
+            .iter()
+            .enumerate()
+            .find(|(_, brick)| brick.id == module_id)
+            .ok_or_else(|| {
+                format!("instrument {instrument_id}: synth brick {module_id} is not in the voice")
+            })?;
+        let kind = BrickKind::from_key(&desc.kind)?;
+        let spec = kind
+            .params()
+            .iter()
+            .find(|spec| spec.key == name)
+            .filter(|spec| kind.patchable(spec.id))
+            .ok_or_else(|| format!("synth brick {module_id} has no parameter {name} to set"))?;
+        if !value.is_finite() {
+            return Err(format!("synth brick {module_id}: {name} is not a number"));
+        }
+        self.played(instrument_id)?.now.push(
+            0,
+            EventKind::BrickParam {
+                brick: brick as u8,
+                param: spec.id as u8,
+                value: spec.clamp(value),
+            },
+        )
     }
 
     pub fn rendered_frames(&self, instrument_id: &str) -> Result<u64, String> {

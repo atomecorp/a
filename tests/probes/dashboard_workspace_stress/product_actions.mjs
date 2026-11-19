@@ -91,18 +91,18 @@ export const importProjectMedia = async (page, projectId, index, mediaFixtures) 
     });
     await page.setInputFiles('#dashboard_workspace_stress_files', mediaFixtures);
     return page.evaluate(async ({ projectId: pid, index: order }) => {
-        await import('/eVe/intuition/tools/project_drop.js');
-        const projectEl = window.eveToolBase?.ensureProjectLayer?.(pid)
-            || document.getElementById(`project_view_${pid}`)
-            || document.querySelector('[id^="project_view_"]');
+        // The project is drawn on the one Bevy canvas (no DOM layer per project): files go in as the clipboard's paste
+        // sends them (paste.js), under the project at a point of its own.
+        const { importFilesToProjectViaCreator } = await import('/eVe/intuition/tools/project_drop.js');
         const input = document.getElementById('dashboard_workspace_stress_files');
         const entries = Array.from(input?.files || []);
-        if (!projectEl || entries.length === 0) return { ok: false, error: 'media_input_or_project_missing', entries: entries.length, hasProjectEl: !!projectEl };
-        return window.eveProjectDropApi.importFilesToProjectViaCreator({
+        if (entries.length === 0) return { ok: false, error: 'media_input_missing', entries: 0 };
+        return importFilesToProjectViaCreator({
             entries,
             projectId: pid,
-            projectEl,
-            event: { clientX: 430 + order * 5, clientY: 160 + order * 5 },
+            parentId: pid,
+            projectPosition: { left: 430 + order * 5, top: 160 + order * 5 },
+            autoPlace: false,
             origin: 'dashboard_workspace_stress_probe',
             sourceLayer: 'dashboard_workspace_stress_probe',
             actorType: 'probe'

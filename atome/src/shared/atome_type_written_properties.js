@@ -77,7 +77,11 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         copies: A, left: ANY, order: N, render_order: N, top: ANY, z_index: N, zIndex: N
     },
     file: {
-        file_name: ANY, file_path: ANY, is_public: ANY, mime_type: ANY, original_name: ANY, size: ANY
+        file_name: ANY, file_path: ANY, is_public: ANY, mime_type: ANY, original_name: ANY, size: ANY,
+        // Laid in a project as its tile (R-202, eVe/domains/rendering/file_tile_source.js), by the project's drop
+        // (project_drop_external_runtime.js#importFilesToProjectViaCreator): its place, its size and its stored file.
+        height: ANY, left: ANY, media_kind: S, media_url: S, media_user_id: S, order: N, render_order: N, renderOrder: N, top: ANY,
+        width: ANY, z_index: N, zIndex: N
     },
     sound: {
         ...CONVERSATION_MEDIA,
@@ -123,7 +127,11 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         video_track_count: N, visual_ref: S, visual_status: S, width: ANY, z_index: N, zIndex: N
     },
     raw: {
-        file_name: ANY, file_path: ANY, is_public: ANY, mime_type: ANY, original_name: ANY, size: ANY
+        file_name: ANY, file_path: ANY, is_public: ANY, mime_type: ANY, original_name: ANY, size: ANY,
+        // Laid in a project as its tile (R-202, eVe/domains/rendering/file_tile_source.js), by the project's drop
+        // (project_drop_external_runtime.js#importFilesToProjectViaCreator): its place, its size and its stored file.
+        height: ANY, left: ANY, media_kind: S, media_url: S, media_user_id: S, order: N, render_order: N, renderOrder: N, top: ANY,
+        width: ANY, z_index: N, zIndex: N
     },
     site: {
         credit: ANY, description: ANY, page_ids: ANY, site_menu: ANY, site_status: ANY, slug: ANY, title: ANY
@@ -146,15 +154,19 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         current_project_id: S, currentActivityId: S, currentActivityName: S, currentProjectId: S, left: N,
         message_stack: A, notification_stack: A, top: N
     },
+    // `import_source`: the { format, key } of the file a project was imported from
+    // (eVe/domains/molecule_import/timeline_document_import.js), so the same file imported again updates it.
+    // `uses_media`: the media Atome ids its `molecule_timeline` plays (clips, instruments' samples), written at each save
+    // (molecule_stores.js), so a project shared as a folder lets its parties read them (atome-server media/shared_folders.rs).
     project: {
         action_recording: O, action_templates: A, active: B, background: S, backgroundColor: S, bg: S, color: S,
-        forced_activity: S, left: S, loop: B, material: O, matrix_slot: N, matrixSlot: N, molecule_timeline: O,
+        forced_activity: S, import_source: O, left: S, loop: B, material: O, matrix_slot: N, matrixSlot: N, molecule_timeline: O,
         news_audience: S, news_id: S, news_origin_author_id: S, news_participants: A, news_share_mode: S,
         news_template: ANY, news_writable: B, playback_loop: B, playback_mode: S, preview_height: N,
         preview_region_height: N, preview_region_width: N, preview_region_x: N, preview_region_y: N,
         preview_updated_at: S, preview_url: S, preview_width: N, project_number: N, project_tags: A,
         project_template: O, projectNumber: N, render_order: N, system_template_key: S, system_template_version: N,
-        top: S, view_mode: S, work_mode: S, zIndex: N
+        top: S, uses_media: A, view_mode: S, work_mode: S, zIndex: N
     },
     group: {
         action_recording: O, author_id: S, author_name: S, background: S, backgroundColor: S, bg: S, color: S,
@@ -165,7 +177,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         page_cover: B, page_format: S, page_orientation: S, playback_loop: B, playback_mode: S,
         playback_offset_seconds: N, render_layer: N, render_order: N, renderLayer: N, renderOrder: N, rotate: N,
         source_in_seconds: N, source_out_seconds: N, stroke: S, system_template_ref: S, template_instance_id: S,
-        template_link: O, template_slot_id: S, text: ANY, x: N, y: N, zIndex: N
+        template_link: O, template_slot_id: S, text: ANY, uses_media: A, x: N, y: N, zIndex: N
     },
     text: {
         action_recording: O, background: S, backgroundColor: S, bg: ANY, borderRadius: S, color: S, content: S,

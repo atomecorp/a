@@ -7,9 +7,7 @@
 use crate::settings::Settings;
 use serde_json::{Value as JsonValue, json};
 use std::path::Path;
-use std::time::Duration;
 
-const API: &str = "https://eu.api.ovh.com/1.0";
 const KEYS: [&str; 7] = [
     "OVH_API_ENDPOINT",
     "OVH_SMS_SERVICE_NAME",
@@ -23,9 +21,7 @@ const KEYS: [&str; 7] = [
 struct Ovh {
     service: String,
     sender: String,
-    application_key: String,
-    application_secret: String,
-    consumer_key: String,
+    credentials: crate::ovh::Credentials,
 }
 
 pub struct Sms {
@@ -71,9 +67,11 @@ impl Sms {
         let ovh = Ovh {
             service: value("OVH_SMS_SERVICE_NAME"),
             sender: value("OVH_SMS_SENDER"),
-            application_key: value("OVH_API_APPLICATION_KEY"),
-            application_secret: value("OVH_API_APPLICATION_SECRET"),
-            consumer_key: value("OVH_API_CONSUMER_KEY"),
+            credentials: crate::ovh::Credentials {
+                application_key: value("OVH_API_APPLICATION_KEY"),
+                application_secret: value("OVH_API_APPLICATION_SECRET"),
+                consumer_key: value("OVH_API_CONSUMER_KEY"),
+            },
         };
         let service_ok = ovh.service.strip_prefix("sms-").is_some_and(|rest| {
             !rest.is_empty()
@@ -89,9 +87,9 @@ impl Sms {
             == Some("ovh-eu".into())
             && service_ok
             && sender_ok
-            && !ovh.application_key.is_empty()
-            && !ovh.application_secret.is_empty()
-            && !ovh.consumer_key.is_empty();
+            && !ovh.credentials.application_key.is_empty()
+            && !ovh.credentials.application_secret.is_empty()
+            && !ovh.credentials.consumer_key.is_empty();
         Ok(Self {
             mock,
             ovh: if configured {
@@ -138,76 +136,31 @@ impl Sms {
 }
 
 impl Ovh {
-    // A signed call (`$1$` + SHA-1 of secret, consumer, method, URL, body, server time).
-    // Provider bodies may hold recipients or message text: never passed on. No retry: a
-    // timeout may come after OVH has accepted the SMS.
+    // A signed call through the one OVH client (ovh.rs). Provider bodies may hold recipients
+    // or message text: never passed on. No retry: a timeout may come after OVH has accepted
+    // the SMS.
     async fn request(
         &self,
         method: &str,
         resource: &str,
         payload: &JsonValue,
     ) -> Result<JsonValue, String> {
-        let uncertain = |_| "sms_delivery_uncertain".to_string();
-        let client = crate::tls::http_client()
-            .map_err(|_| "sms_delivery_uncertain".to_string())?
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(uncertain)?;
-        let time = client
-            .get(format!("{API}/auth/time"))
-            .timeout(Duration::from_secs(10))
-            .send()
-            .await
-            .map_err(uncertain)?;
-        if !time.status().is_success() {
-            return Err("sms_provider_unavailable".into());
-        }
-        let timestamp = time
-            .json::<JsonValue>()
-            .await
-            .map_err(uncertain)?
-            .as_i64()
-            .filter(|stamp| *stamp > 0 && *stamp <= 9_007_199_254_740_991)
-            .ok_or("sms_provider_unavailable")?;
-        let url = format!("{API}{resource}");
-        let body = payload.to_string();
-        let signed = [
-            self.application_secret.as_str(),
-            &self.consumer_key,
+        crate::ovh::request(
+            crate::ovh::EU_ENDPOINT,
+            &self.credentials,
             method,
-            &url,
-            &body,
-            &timestamp.to_string(),
-        ]
-        .join("+");
-        let signature = format!(
-            "$1${}",
-            super::proof::hex(
-                ring::digest::digest(&ring::digest::SHA1_FOR_LEGACY_USE_ONLY, signed.as_bytes())
-                    .as_ref()
-            )
-        );
-        let response = client
-            .request(method.parse().map_err(|_| "sms_provider_rejected")?, &url)
-            .timeout(Duration::from_secs(15))
-            .header("Content-Type", "application/json")
-            .header("X-Ovh-Application", &self.application_key)
-            .header("X-Ovh-Consumer", &self.consumer_key)
-            .header("X-Ovh-Timestamp", timestamp.to_string())
-            .header("X-Ovh-Signature", signature)
-            .body(body)
-            .send()
-            .await
-            .map_err(uncertain)?;
-        let status = response.status();
-        if !status.is_success() {
-            return Err(if status.as_u16() == 401 || status.as_u16() == 403 {
-                "sms_provider_credentials_rejected"
-            } else {
-                "sms_provider_rejected"
+            resource,
+            Some(payload),
+        )
+        .await
+        .map_err(|failure| {
+            match failure {
+                crate::ovh::Failure::Uncertain => "sms_delivery_uncertain",
+                crate::ovh::Failure::Unavailable => "sms_provider_unavailable",
+                crate::ovh::Failure::Rejected(_) => "sms_provider_rejected",
+                crate::ovh::Failure::CredentialsRejected => "sms_provider_credentials_rejected",
             }
-            .into());
-        }
-        response.json().await.map_err(uncertain)
+            .to_string()
+        })
     }
 }

@@ -175,7 +175,8 @@ test('one Molecule transport replaces its active scope and toggles Stop', async 
         createSession: ({ id }) => {
             const session = {
                 async setTimeline(timeline) { calls.push(['set', timeline.selected_track_ids]); },
-                async play() { calls.push(['play']); },
+                // The engine session's contract (core/media_engine/molecule.js#play): where it started.
+                async play() { calls.push(['play']); return { ok: true, position: 0, playing: true }; },
                 async stop() { calls.push(['stop']); },
                 async dispose() { calls.push(['dispose']); },
                 getTransportState() { return { position: 0, duration: 0, playing: false }; }

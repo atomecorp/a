@@ -110,6 +110,8 @@ pub fn refresh_backdrop_blur_metrics(world: &mut World, device_pixel_ratio: f32)
 pub(crate) mod composition;
 #[path = "workspace_blur_pyramid.rs"]
 pub(crate) mod pyramid;
+#[path = "workspace_blur_snapshot.rs"]
+mod snapshot;
 
 pub struct WorkspaceBlurPlugin;
 
@@ -126,6 +128,7 @@ impl Plugin for WorkspaceBlurPlugin {
         app.sub_app_mut(RenderApp)
             .add_systems(Core2d, workspace_blur_mip_pass());
         pyramid::install(app);
+        snapshot::install(app);
         composition::install(app);
     }
 }

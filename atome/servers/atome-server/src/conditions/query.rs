@@ -289,7 +289,7 @@ pub(super) async fn once(
         tree
     };
     let extra = get(Some(request), "context").and_then(JsonValue::as_object);
-    let now = chrono::Utc::now().timestamp_millis() as f64;
+    let now = atome_js_values::dates::now_ms() as f64;
     let mut matched = Vec::new();
     for item in &candidates {
         let subject = JsonValue::String(candidate_id(item));

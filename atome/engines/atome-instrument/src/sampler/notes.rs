@@ -3,7 +3,8 @@
 // a zone's cuts choke what they name; the key let go sounds its release take,
 // quieter the longer it was held. A keyswitch key chooses which switched zones
 // sound and plays nothing unless a zone covers it; a one-shot zone ignores the
-// key let go; a zone's filter is set on each voice it starts.
+// key let go; a zone's filter is set on each voice it starts, its envelope
+// (else the instrument's) shapes them.
 use super::{HELD_NOTES, POLYPHONY, Sampler, TUNE_CENTS, VoiceMode};
 use crate::keymap::{NO_PICK, Pick};
 use crate::zone::{MAX_PLAYERS, midi_velocity};
@@ -97,7 +98,7 @@ impl Sampler {
             take,
             level: 1.0,
         }];
-        let shape = self.shape();
+        let shape = self.shape(zone);
         let index = self.pool.take(self.values[POLYPHONY as usize] as usize);
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
         let voice = &mut self.pool.voices_mut()[index];
@@ -120,7 +121,6 @@ impl Sampler {
     pub(super) fn start_note(&mut self, note: u8, velocity: f32) {
         self.triggers += 1;
         let level = self.velocity_level(velocity);
-        let shape = self.shape();
         let polyphony = self.values[POLYPHONY as usize] as usize;
         let midi = midi_velocity(velocity);
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
@@ -145,6 +145,7 @@ impl Sampler {
                     voice.choke();
                 }
             }
+            let shape = self.shape(zone);
             let index = self.pool.take(polyphony);
             if self.keymap.zone(zone).composed.is_some() {
                 self.pool.voices_mut()[index].start_composed(

@@ -21,7 +21,7 @@ pub(super) async fn ws_sync_handler(
 pub(super) async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
     println!("🔗 New WebSocket sync connection");
 
-    let now_iso = || chrono::Utc::now().to_rfc3339();
+    let now_iso = || atome_js_values::dates::now_rfc3339();
     let auth_state = match state.auth_state.as_ref() {
         Some(auth_state) => auth_state,
         None => {

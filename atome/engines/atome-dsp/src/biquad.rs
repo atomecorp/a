@@ -1,7 +1,7 @@
 // RBJ biquad (transposed direct form II): filters, shelves and bells.
 
 use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_1_SQRT_2, PI};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -122,7 +122,7 @@ pub const Q: u32 = 1;
 pub const GAIN_DB: u32 = 2;
 pub const PARAMS: [ParamSpec; 3] = [
     ParamSpec::new(FREQUENCY, "frequency", 20.0, 20000.0, 1000.0, Unit::Hertz),
-    ParamSpec::new(Q, "q", 0.1, 18.0, 0.707, Unit::Ratio),
+    ParamSpec::new(Q, "q", 0.1, 18.0, FRAC_1_SQRT_2, Unit::Ratio),
     ParamSpec::new(GAIN_DB, "gain_db", -24.0, 24.0, 0.0, Unit::Decibels),
 ];
 
@@ -134,8 +134,8 @@ pub fn params_for(shape: Shape) -> &'static [ParamSpec] {
     }
 }
 
-// Coefficients follow the smoothed parameters every few frames: cheap and
-// free of zipper noise.
+// Coefficients follow the smoothed parameters every few frames, counted
+// across blocks so the result never depends on how the host cuts them.
 const REDESIGN_FRAMES: usize = 16;
 
 pub struct Biquad {
@@ -147,6 +147,8 @@ pub struct Biquad {
     coefficients: Coefficients,
     left: Section,
     right: Section,
+    // Frames left before the next redesign.
+    countdown: usize,
 }
 
 impl Biquad {
@@ -160,6 +162,7 @@ impl Biquad {
             coefficients: Coefficients::default(),
             left: Section::default(),
             right: Section::default(),
+            countdown: 0,
         }
     }
 
@@ -191,10 +194,17 @@ impl Processor for Biquad {
         let frames = block.frames();
         let mut start = 0;
         while start < frames {
-            let end = (start + REDESIGN_FRAMES).min(frames);
-            if !(self.frequency.is_settled() && self.q.is_settled() && self.gain_db.is_settled()) {
-                self.redesign(end - start);
+            if self.countdown == 0 {
+                self.countdown = REDESIGN_FRAMES;
+                if !(self.frequency.is_settled()
+                    && self.q.is_settled()
+                    && self.gain_db.is_settled())
+                {
+                    self.redesign(REDESIGN_FRAMES);
+                }
             }
+            let end = (start + self.countdown).min(frames);
+            self.countdown -= end - start;
             let c = self.coefficients;
             for index in start..end {
                 block.left[index] = self.left.tick(&c, block.left[index]);
@@ -222,6 +232,7 @@ impl Processor for Biquad {
             smoothed.settle();
         }
         self.redesign(1);
+        self.countdown = 0;
         self.left.reset();
         self.right.reset();
     }

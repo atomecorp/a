@@ -6,7 +6,8 @@ use crate::scroll_area::*;
 use crate::scroll_motion::*;
 
 const MOTION: ScrollMotionSpec = ScrollMotionSpec {
-    velocity_blend: 0.5,
+    velocity_window_ms: 100.0,
+    min_span_ms: 16.0,
     min_velocity_px_per_ms: 0.02,
     max_velocity_px_per_ms: 6.0,
     friction_per16_ms: 0.968_475_3,
@@ -338,4 +339,112 @@ fn a_record_laid_again_where_it_was_presented_takes_the_offset_of_its_new_descri
     tree.describe(spec(2.0, 0.0, false));
     tree.present(app.world_mut(), 64.0).unwrap();
     assert_eq!(y(&app), 502.0);
+}
+
+#[test]
+fn moves_handed_in_bursts_glide_as_far_as_the_same_finger_moving_evenly() {
+    // 80 px over 80 ms (1 px/ms): evenly, a move a frame; in bursts, a frame's two moves at one instant (an iPad).
+    let mut even = list(100.0);
+    even.press(300.0, 0.0);
+    for step in 1..=5 {
+        even.drag(300.0 - f64::from(step) * 16.0, f64::from(step) * 16.0);
+    }
+    even.release(81.0);
+    let mut burst = list(100.0);
+    burst.press(300.0, 0.0);
+    for step in 1..=5 {
+        let at = f64::from(step) * 16.0;
+        burst.drag(300.0 - f64::from(step) * 16.0 + 8.0, at);
+        burst.drag(300.0 - f64::from(step) * 16.0, at);
+    }
+    burst.release(81.0);
+    run(&mut even, 3000.0);
+    run(&mut burst, 3000.0);
+    assert!(
+        (burst.offset() - even.offset()).abs() < 1.0,
+        "burst {} vs even {}",
+        burst.offset(),
+        even.offset()
+    );
+}
+
+// User, 17 Nov. 2026: a Sport card open lying, its list scrolled, then turned standing: the panel laid again
+// at its new place and width fits without scrolling, so the browser detaches its scroll tree. Restored, every
+// record went back to its lying base (place and width) over the standing pose the browser had just laid, its
+// text already drawn for the new width: rows stretched across a lying layout. A record the browser laid again
+// keeps that pose; one it did not is laid back on its description.
+#[test]
+fn a_detached_tree_lays_back_only_the_records_the_browser_did_not_lay_again() {
+    use bevy::prelude::*;
+    let mut app = App::new();
+    app.add_plugins(crate::AtomeBevyRendererPlugin::new(
+        crate::AtomeBevyRendererConfig::empty(932.0, 430.0),
+    ));
+    app.update();
+    let spawn = |app: &mut App, id: &str, y: f32| {
+        let node: crate::AtomeRenderNode = serde_json::from_value(serde_json::json!({
+            "id": id, "kind":"shape", "logical_position":[20.0, y], "logical_size":[880.0, 30.0],
+            "layer":3, "color":[0.0,1.0,0.0,1.0], "opacity":1.0
+        }))
+        .unwrap();
+        crate::apply_spawn(app.world_mut(), node).unwrap()
+    };
+    let relaid = spawn(&mut app, "row_relaid", 200.0);
+    let kept = spawn(&mut app, "row_kept", 240.0);
+    let record = |id: &str| ScrollRecordSpec {
+        id: id.into(),
+        opacity: 1.0,
+        role: ScrollRecordRole::Content,
+        area: None,
+        chain: vec![ScrollChainLink {
+            area: Some("body".into()),
+            clip: None,
+        }],
+    };
+    let mut tree = ScrollTree::new(ScrollTreeSpec {
+        areas: vec![ScrollAreaSpec {
+            id: "body".into(),
+            motion: MOTION,
+            area_box: [10.0, 100.0, 900.0, 250.0],
+            max: 120.0,
+            offset: 0.0,
+            jump: false,
+            edge_mask: None,
+            thumb_travel: 0.0,
+        }],
+        records: vec![record("row_relaid"), record("row_kept")],
+    });
+    tree.present(app.world_mut(), 0.0).unwrap();
+    tree.motion_mut("body").unwrap().wheel(40.0);
+    tree.present(app.world_mut(), 16.0).unwrap();
+    let place = |app: &App, entity: Entity| {
+        let position = app
+            .world()
+            .get::<crate::AtomeLogicalPosition>(entity)
+            .unwrap();
+        let size = app.world().get::<crate::AtomeLogicalSize>(entity).unwrap();
+        (position.y, size.width)
+    };
+    assert_eq!(
+        place(&app, relaid),
+        (160.0, 880.0),
+        "the list did not scroll"
+    );
+    // The screen turned: the browser lays one row again at its standing place and width.
+    let patch: crate::AtomeTransformPatch = serde_json::from_value(serde_json::json!({
+        "id":"row_relaid", "logical_position":[10.0, 520.0], "logical_size":[409.0, 30.0]
+    }))
+    .unwrap();
+    crate::apply_transform(app.world_mut(), patch).unwrap();
+    tree.restore(app.world_mut()).unwrap();
+    assert_eq!(
+        place(&app, relaid),
+        (520.0, 409.0),
+        "the row laid again went back to its former place and width"
+    );
+    assert_eq!(
+        place(&app, kept),
+        (240.0, 880.0),
+        "the row not laid again stayed where the list had moved it"
+    );
 }

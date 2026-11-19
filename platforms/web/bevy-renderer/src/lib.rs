@@ -13,6 +13,7 @@ use bevy::{
 };
 use serde::Serialize;
 use std::cell::{Cell, RefCell};
+mod browser_texture_exports;
 mod exports;
 mod frame_clock;
 mod linear_lens;
@@ -272,7 +273,8 @@ fn op_targets_id(op: &AtomeRenderOp, id: &str) -> bool {
         AtomeRenderOp::Surface(_)
         | AtomeRenderOp::SurfaceBackground(_)
         | AtomeRenderOp::SceneEffects(_)
-        | AtomeRenderOp::ProjectView(_) => false,
+        | AtomeRenderOp::ProjectView(_)
+        | AtomeRenderOp::Lut(_) => false,
     }
 }
 
@@ -297,6 +299,9 @@ fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePat
     }
     if next.filters.is_some() {
         existing.filters = next.filters;
+    }
+    if next.effects.is_some() {
+        existing.effects = next.effects.clone();
     }
     if next.transition.is_some() {
         existing.transition = next.transition;

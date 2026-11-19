@@ -5,21 +5,13 @@
 // zone in the server's local time), and `Date.prototype.toUTCString`. V8's other legacy spellings
 // (a month as a number, a date without its year) are not read: they are not mail's.
 use crate::vault_router::js;
-use chrono::TimeZone;
+use atome_js_values::dates;
 use serde_json::json;
 
 const MONTHS: [&str; 12] = [
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
 ];
 const MAX_TIME_MS: i64 = 8_640_000_000_000_000;
-
-/// `new Date(ms).toUTCString()`.
-pub fn utc_string(ms: i64) -> String {
-    chrono::DateTime::from_timestamp_millis(ms)
-        .unwrap_or_default()
-        .format("%a, %d %b %Y %H:%M:%S GMT")
-        .to_string()
-}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Token<'a> {
@@ -183,16 +175,26 @@ fn legacy(text: &str) -> Option<i64> {
     if !(1..=31).contains(&day) || !(hour < 24 || midnight) || minute > 59 || second > 59 {
         return None;
     }
-    let first_day = chrono::NaiveDate::from_ymd_opt(i32::try_from(year).ok()?, month, 1)?;
-    let wall = first_day.and_hms_opt(0, 0, 0)?
-        + chrono::TimeDelta::days(day - 1)
-        + chrono::TimeDelta::milliseconds(((hour * 60 + minute) * 60 + second) * 1000 + millis);
+    wall_ms(year, month, day, [hour, minute, second, millis], offset)
+}
+
+// The instant of a wall time from the first of its month (a day past the month's end carried
+// into the next), at `offset` minutes east of UTC, else in the server's local time.
+pub(crate) fn wall_ms(
+    year: i64,
+    month: u32,
+    day: i64,
+    [hour, minute, second, millis]: [i64; 4],
+    offset: Option<i64>,
+) -> Option<i64> {
+    let first_day = dates::date_days(year, i64::from(month), 1)?;
+    let wall =
+        (first_day + day - 1) * 86_400_000 + ((hour * 60 + minute) * 60 + second) * 1000 + millis;
     let ms = match offset {
-        Some(minutes) => wall.and_utc().timestamp_millis() - minutes * 60_000,
-        None => chrono::Local
-            .from_local_datetime(&wall)
-            .earliest()?
-            .timestamp_millis(),
+        Some(minutes) => wall - minutes * 60_000,
+        None => dates::local(dates::Instant::from_millis(wall)?)
+            .first()?
+            .millis(),
     };
     (ms.abs() <= MAX_TIME_MS).then_some(ms)
 }

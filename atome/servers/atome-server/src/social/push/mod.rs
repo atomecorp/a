@@ -59,7 +59,7 @@ pub struct Audience {
 }
 
 fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 // `/^[a-f0-9-]{36}$/.test(value)`.

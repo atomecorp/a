@@ -89,7 +89,7 @@ impl Session {
 static SESSIONS: LazyLock<Mutex<IndexMap<String, Session>>> = LazyLock::new(Mutex::default);
 
 fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 fn session(session_id: &str) -> Option<Session> {

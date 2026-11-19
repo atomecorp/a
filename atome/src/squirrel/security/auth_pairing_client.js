@@ -86,7 +86,9 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         approveAvailable: () => approver.available(),
         signupStatus: (invite) => request('signup-status', { invite: invite || undefined }),
         // Mailed by the server from its own sender; `clientRef` makes a resend after a lost answer harmless.
-        createInvite: ({ email, clientRef, subject, fromName, text }) => authenticated('invite-create', { email, clientRef, subject, fromName, text }),
+        // `activation`: an administrator's terms for the account it opens (offered, to pay, a discount).
+        createInvite: ({ email, clientRef, subject, fromName, text, activation }) => authenticated('invite-create', { email, clientRef, subject, fromName, text,
+            ...(activation ? { activation } : {}) }),
         async createAccount({ deviceClass, platform = 'web', label = '', payment = { method: 'card' }, invite } = {}) {
             const scope = newScope();
             const device = await devices.forScope(scope);

@@ -33,6 +33,13 @@ pub enum InstrumentCommand {
         name: String,
         value: f32,
     },
+    // One parameter of a synth brick while it plays (instrument.rs#set_brick_param).
+    BrickParam {
+        instrument_id: String,
+        module_id: String,
+        name: String,
+        value: f32,
+    },
     Clock {
         instrument_id: String,
     },
@@ -62,6 +69,10 @@ pub enum NoteKind {
     // MIDI controller `number` at `value` 0..127.
     Controller { number: u8, value: u8 },
     AllNotesOff,
+    // Channel pressure 0..127.
+    Pressure { value: u8 },
+    // The host's tempo, beats per minute.
+    Tempo { bpm: f32 },
 }
 
 fn event_kind(kind: NoteKind) -> Result<EventKind, String> {
@@ -88,6 +99,17 @@ fn event_kind(kind: NoteKind) -> Result<EventKind, String> {
             value: f32::from(value.min(127)) / 127.0,
         },
         NoteKind::AllNotesOff => EventKind::AllNotesOff,
+        NoteKind::Pressure { value } => EventKind::Pressure {
+            value: f32::from(value.min(127)) / 127.0,
+        },
+        NoteKind::Tempo { bpm } => {
+            if !(bpm.is_finite() && bpm > 0.0) {
+                return Err(format!(
+                    "tempo {bpm} is not a positive number of beats per minute"
+                ));
+            }
+            EventKind::Tempo { bpm }
+        }
     })
 }
 
@@ -119,6 +141,15 @@ pub fn run(graph: &mut MixGraph, command: InstrumentCommand) -> Result<Instrumen
         } => graph
             .instruments_ref()
             .set_param(&instrument_id, &name, value)
+            .map(done),
+        InstrumentCommand::BrickParam {
+            instrument_id,
+            module_id,
+            name,
+            value,
+        } => graph
+            .instruments_ref()
+            .set_brick_param(&instrument_id, &module_id, &name, value)
             .map(done),
         InstrumentCommand::Clock { instrument_id } => graph
             .instruments_ref()

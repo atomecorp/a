@@ -40,7 +40,13 @@ pub(super) const PUBLIC_TYPES: [&str; 20] = [
 // feature requests (server/auth_account_roles.js, server/ws_feature_requests.js) and the shares between accounts
 // (server/syncSharingService.js). The desktop runtime forwards them with the account's remote credential, never the
 // local token, once the local session is verified; the server checks the account and its rights again.
-pub(super) const ACCOUNT_TYPES: [&str; 3] = ["account-roles", "feature-request-admin", "share"];
+pub(super) const ACCOUNT_TYPES: [&str; 5] = [
+    "account-roles",
+    "feature-request-admin",
+    "share",
+    "billing",
+    "atome-thread",
+];
 
 fn failure_code(request_type: &str) -> &'static str {
     match request_type {

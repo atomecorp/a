@@ -9,7 +9,7 @@ import {
 } from '../atome/src/shared/adole_event_contract.js';
 import { createHash } from 'node:crypto';
 
-const intentHash = event => createHash('sha256').update(JSON.stringify(eventIdempotencyIntent(event))).digest('hex');
+export const intentHash = event => createHash('sha256').update(JSON.stringify(eventIdempotencyIntent(event))).digest('hex');
 
 const parseStoredValue = (value) => {
     if (value === null || value === undefined) return null;
@@ -18,6 +18,16 @@ const parseStoredValue = (value) => {
     } catch {
         return value;
     }
+};
+
+const PARENT_KEYS = ['parent_id', 'parentId'];
+const IDENTITY_KEYS = ['kind', 'type', 'atome_type'];
+
+// An identity or parent key written with the value the atome's envelope already holds.
+const sameAsEnvelope = (key, value, identity) => {
+    const stored = PARENT_KEYS.includes(key) ? identity.parent_id : identity.atome_type;
+    if (value === null) return stored === null || stored === undefined;
+    return typeof value === 'string' && stored === value;
 };
 
 const versionConflict = () => {
@@ -51,15 +61,16 @@ export function createAdoleEventMutationApi({ query }) {
         }
         assertIdempotentEventReplay(existing, incoming);
     };
+    // `{ event, unchanged }`: the event to record, or a `set` that changes nothing, recorded nowhere.
     const prepare = async (event, options = {}) => {
         const incomingPayload = parseStoredValue(resolveEventPayload(event));
         event = { ...event, payload: { ...(incomingPayload && typeof incomingPayload === 'object' ? incomingPayload : {}),
             idempotency_intent_hash: intentHash(event) } };
         const atomeId = event?.atome_id || null;
         const touchedKeys = eventTouchedPropertyKeys(event);
-        if (!atomeId || !touchedKeys.length) return event;
+        if (!atomeId || !touchedKeys.length) return { event, unchanged: false };
 
-        const identity = await query('get', 'SELECT parent_id, atome_type FROM atomes WHERE atome_id = ?', [atomeId]);
+        const identity = await query('get', 'SELECT parent_id, atome_type, deleted_at FROM atomes WHERE atome_id = ?', [atomeId]);
         const rows = await query(
             'all',
             `SELECT particle_key, particle_value, value_type, version
@@ -88,20 +99,32 @@ export function createAdoleEventMutationApi({ query }) {
         //
         // Retirer ces clés est neutre pour la relecture (les rejouer ne change
         // aucun état), pour la résolution de conflit (aucune écriture, donc rien à
-        // arbitrer) et pour la projection (même état résultant).
+        // arbitrer) et pour la projection (même état résultant). Le type ou le parent que
+        // l'enveloppe porte déjà ne change rien non plus (une passe d'import réécrivant
+        // chaque origine avec son type, known-bug-solutions/ios-outbox-backlog-unchanged-import-origins).
         const patch = eventPropertyPatch(event) || {};
         const unchangedKeys = new Set();
         for (const key of touchedKeys) {
             if (!(key in patch)) continue;
+            if (identity && (PARENT_KEYS.includes(key) || IDENTITY_KEYS.includes(key))) {
+                if (!(key in expectedVersions) && sameAsEnvelope(key, patch[key], identity)) unchangedKeys.add(key);
+                continue;
+            }
             const row = currentByKey.get(key);
             if (!row || row.value_type === 'deleted') continue;
-            if (identity && (key === 'parent_id' || key === 'parentId')) continue;
-            if (identity && ['kind', 'type', 'atome_type'].includes(key)) continue;
             if (key in expectedVersions) continue;
             let storedJson = row.particle_value;
             let patchJson;
             try { patchJson = JSON.stringify(patch[key]); } catch { continue; }
             if (patchJson !== undefined && patchJson === storedJson) unchangedKeys.add(key);
+        }
+
+        // A `set` on a live atome whose every key is unchanged (no delete, no expected version,
+        // the envelope's own type and parent) changes nothing: it is recorded nowhere.
+        if (event.kind === 'set' && identity && !identity.deleted_at
+            && touchedKeys.every((key) => unchangedKeys.has(key))
+            && Object.keys(patch).every((key) => unchangedKeys.has(key))) {
+            return { event, unchanged: true };
         }
 
         const effectiveKeys = touchedKeys.filter((key) => !unchangedKeys.has(key));
@@ -111,8 +134,8 @@ export function createAdoleEventMutationApi({ query }) {
         for (const key of effectiveKeys) {
             const row = currentByKey.get(key);
             baseVersions[key] = Number(row?.version || 0);
-            if (identity && (key === 'parent_id' || key === 'parentId')) before[key] = identity.parent_id;
-            else if (identity && ['kind', 'type', 'atome_type'].includes(key)) before[key] = identity.atome_type;
+            if (identity && PARENT_KEYS.includes(key)) before[key] = identity.parent_id;
+            else if (identity && IDENTITY_KEYS.includes(key)) before[key] = identity.atome_type;
             else if (!row || row.value_type === 'deleted') beforeMissing.push(key);
             else before[key] = parseStoredValue(row.particle_value);
         }
@@ -132,7 +155,7 @@ export function createAdoleEventMutationApi({ query }) {
         payload.base_versions = baseVersions;
         // Compact the patch without losing the original delivery identity or
         // duplicating large unchanged profile/media properties in the journal.
-        return { ...event, payload };
+        return { event: { ...event, payload }, unchanged: false };
     };
 
     const applyDeletes = async ({ atomeId, keys, author = null, timestamp, eventId = null }) => {

@@ -4,6 +4,7 @@
 // into the shared base everyone browses, visitor and guest included (server/shop_listings.js); buying,
 // writing to the seller and a favourite need an account. One owner for the listing's shape, the price split
 // and the escrow's rules, client and server.
+import { billingCommissionCents } from './billing_contract.js';
 import { normalizePlace, PUBLIC_EVENT_POSTER_MAX_CHARS } from './public_event_contract.js';
 
 export const SHOP_LISTING_TYPE = 'shop_listing';
@@ -15,8 +16,6 @@ export const SHOP_DIGITAL_KINDS = Object.freeze(['project', 'content', 'template
 export const SHOP_LISTING_STATUSES = Object.freeze(['live', 'refused', 'hidden', 'sold_out']);
 // `event`: a ticket whose event is not live (refused, hidden, cancelled, deleted, made private).
 export const SHOP_LISTING_REASONS = Object.freeze(['invalid', 'quota', 'suspended', 'reported', 'event']);
-// Atome's share of every sale, taken from the seller (the buyer pays the price shown).
-export const SHOP_COMMISSION_RATE = 0.03;
 export const SHOP_TITLE_MAX_CHARS = 80;
 export const SHOP_COMMENT_MAX_CHARS = 600;
 // The photos are small pictures carried by the listing itself (JPEG data URLs, the poster's size), cycled by a sideways drag.
@@ -101,10 +100,12 @@ export const listingError = (listing) => {
     return null;
 };
 
-// A sale's money: what the buyer pays, Atome's 3 %, what the seller receives — in cents, so no rounding drifts.
-export const shopSplit = (amount) => {
-    const cents = Math.round(Number(amount) * 100);
+// A sale's money (R-193): the seller receives the whole price, Atome's 3 % is added on top for the buyer
+// (half rounded up, billing_contract.js#billingCommissionCents), never taken from the seller — in cents, so
+// no rounding drifts. 10 € listed: the buyer pays 10,30 €, the seller receives 10 €, Atome keeps 0,30 €.
+export const shopSplit = (price) => {
+    const cents = Math.round(Number(price) * 100);
     if (!Number.isFinite(cents) || cents < 0) return null;
-    const commission = Math.round(cents * SHOP_COMMISSION_RATE);
-    return { amount: cents / 100, commission: commission / 100, net: (cents - commission) / 100 };
+    const commission = billingCommissionCents(cents);
+    return { amount: (cents + commission) / 100, commission: commission / 100, net: cents / 100 };
 };

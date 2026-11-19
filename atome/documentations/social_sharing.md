@@ -1,4 +1,59 @@
-# Social sharing (TikTok, Instagram, Facebook)
+# Social sharing (ten networks)
+
+Update (2026-11-16, register R-190, universal publishing): the live server is the Rust **atome-server**
+(`atome/servers/atome-server/src/providers/social/`), reached on every platform through the `ai-provider` frame of
+`/ws/api`; the JavaScript `server/social/` is the reference implementation kept for its tests (TikTok, Instagram,
+Facebook only). The sections below the next one describe the first version (2026-10-03, three networks) and stay
+true for those three, except where this section says otherwise.
+
+## Ten networks and the R-190 operations
+
+Networks (`SOCIAL_NETWORKS`, `atome/src/squirrel/social/contracts.js`), with what each takes
+(`SOCIAL_NETWORK_CONTENT`) and how it is linked once (`SOCIAL_NETWORK_SETUP`):
+
+| Network | Text | Image | Video | Linked by |
+| --- | --- | --- | --- | --- |
+| TikTok | no | yes | yes | official page (OAuth) |
+| Instagram | no | yes | yes | official page |
+| Facebook (Pages; profile by copy/share) | yes | yes | yes | official page |
+| Threads | yes (≤ 500) | yes | yes | official page |
+| YouTube | no | no | yes | official page (accounts.google.com) |
+| LinkedIn | yes | yes | yes | official page |
+| Bluesky | yes (≤ 300) | yes | yes | official page, after the person's handle |
+| Mastodon | yes (≤ 500) | yes | yes | official page of the person's instance |
+| Telegram | yes | yes | yes | a robot's token and a chat id typed once in Settings |
+| Discord | yes | yes | yes | a channel's webhook link (bot token, channel id optional) typed once in Settings |
+
+A content a network does not take is skipped and named (`social_text_only_unsupported`,
+`social_media_type_unsupported`), never sent degraded. Text limits: `socialTextLimit(network, kind)` in
+`capabilities.js`.
+
+Destinations name an account: `<network>[:<account>]` (`SOCIAL_DESTINATION_PATTERN`, shared with `publish.*` and
+`events.share`); the bare network is its first enabled account; Facebook keeps `facebook:page:<id>` and
+`facebook:profile`. Route planning (`planSocialDestination({ destination, networks, kind, handoff })`,
+`listSocialDestinations(networks)`) reads the `social.accounts` view; the atome-server's `providers/social/plan.rs`
+follows the same rules.
+
+Operations (`SOCIAL_COMMANDS`; MCP list `SOCIAL_MCP_COMMANDS`; confirmed: connect, publish, disconnect,
+account.enable, delete, reply):
+
+- `social.accounts {}` → `{ networks: [{ network, configured, accounts: [{ account, label, identity, state, scopes, pages? }] }] }`, never a token.
+- `social.connect { network, instance?, handle? }` (Mastodon's instance, Bluesky's handle).
+- `social.disconnect { network, account? }`; `social.account.enable { network, account, enabled }`.
+- `social.credentials.save { network: telegram|discord, fields }`: typed in Settings only, never on MCP.
+- `social.prepare`, `social.publish` (options: TikTok's fields, `youtube { title, visibility, made_for_kids }`,
+  `bluesky { text }`, `threads { text }`), `social.status`, `social.cancel`, `social.delete { job_id, destination }`.
+- `social.reply { notification_id | origin, text, attachment_ids?, private? }` and
+  `social.thread.read { network, account, thread, cursor? }`: messages and comments received from a network.
+
+Client functions: `atome/src/squirrel/social/client.js` (`socialAccounts`, `connectSocialAccount`,
+`socialCredentialsSave`, `socialAccountEnable`, `socialDisconnect`, `socialReply`, `socialThreadRead`, …).
+
+What the user sees now: Settings › Préférences › Communication › Réseaux sociaux (mockup M1,
+`bevy_panel_home_social.js`), one row per network the server offers, each unfolding its accounts (a Facebook
+account its Pages) and what they allow; Ajouter, Reconnex., Déconn. and Lier in the foot band. The Communication
+panel's « Publier sur les réseaux » accordion described below was removed (R-190); publishing goes through the
+universal Publier flow.
 
 Status (2026-10-03): implemented and covered by local tests, plus an end-to-end
 run on an isolated real `server.js` where only the TikTok and Meta hosts were
@@ -67,8 +122,9 @@ sentence, and a preview.
   adapters, and `social_http.js` makes the provider calls.
 - Transport: the `ai-provider` frame on `/ws/api`, the same authenticated channel
   that the Tauri (`provider_relay.rs`) and iOS (`FastifySyncClient.sendProvider`)
-  hosts already relay to the remote Fastify unchanged. No new application
-  transport, relay or native code was needed for it. The only HTTP surfaces are
+  hosts already relay to the remote server unchanged. No new application
+  transport, relay or native code was needed for it. (Since R-190 the server answering this frame is the Rust
+  atome-server on every platform.) The only HTTP surfaces are
   imposed by the providers:
   - `GET /api/social/oauth/callback/:network` — the registered OAuth redirect.
     It answers in plain text and is excluded from request logs.

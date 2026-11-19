@@ -172,7 +172,9 @@ Le rapport final (dans ce fichier) dira :
 - [x] L3 plan, rythme, objectif, budget, Agenda (2026-11-06)
 - [x] L4 page de la boutique, Achat, panier rempli, stock réapprovisionné (2026-11-06)
 - [x] L5 proposition d'eVe et « Ne plus proposer » (2026-11-06)
-- [ ] Amazon (identifiant Partenaires), Nutrimuscle, réglage de quantité à l'écran (maquette) — bloqués, voir R-119
+- [x] Affiliation : pas pour l'instant, rappel + lien partout (choix de l'utilisateur, 2026-11-18)
+- [x] Quantité au rouleau du Sport sur la page de la boutique (2026-11-18)
+- [ ] Nutrimuscle (lien de panier non prouvé) — bloqué, voir R-119
 
 # Résultats de l'analyse (2026-11-05)
 
@@ -370,4 +372,5 @@ Réponse : **non**, les deux restent séparées, rien n'est supprimé.
 
 - m1 fiche d'une boutique du web : `temp/achats_recurrents/mockups/m1_phone.png`, `m1_desktop.png` (outils Achat, Rythme, Site, Favori).
 - m2 outil « Achat » au maintien d'un complément et d'un article de Mes courses : `m2a_complement.png`, `m2b_courses.png`.
+  m2b remplacée (toi, 18 nov., Q3 « C ») : depuis Mes courses on ne passe plus par une boutique du Web (complément et assistante seulement).
 - m3 proposition « à commander » dans la phrase d'eVe du champ du bas : `m3_phone.png`, `m3_desktop.png`.

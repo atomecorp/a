@@ -39,41 +39,43 @@ test('eVe Basic composes the same home and hides every other tile; retired style
 
 // The one home matrix (dashboard_home_matrix.js, V6.1), standing on a phone: units of a tool, a tile 2 x 2 units.
 test('eVe Pro reads like the decision grid and eVe Basic lays its four tiles as a cross around the Atom', () => {
-    const matrix = basic => dashboardHomeMatrix({ width: 360, height: 640, basic });
+    const matrix = basic => dashboardHomeMatrix({ domain: 'eve', width: 360, height: 640, basic });
     const shown = (basic, options = {}) => [...dashboardHomeLayout(basic).tileRefs, 'clock', 'weather']
         .filter(ref => dashboardEveHomeCellVisible(ref, { basic, ...options }));
     const at = (basic, row, column) => shown(basic).find(ref => {
         const place = dashboardHomeMatrixPlace(matrix(basic), ref);
         return place[1] === row && place[0] === column && place[2] === 2;
     });
-    // eVe Pro: the time and the weather, the wide Agenda, then Activity · the V logo · Média, Projects · Contacts, the Moniteur
-    // under them at the centre; Capture laid unseen between Projects and Contacts, its record tool in the band (user, 12 Nov. 2026).
+    // eVe Pro: the strip (the time 2 × 1, the V tool, the next appointment 3 × 1; R-152), the weather under it, then
+    // Activité · the V logo · Réalisations, Médiathèque · Contacts, the Moniteur under them at the centre (R-164); Capture
+    // laid unseen between Médiathèque and Contacts, its record tool in the band (user, 12 Nov. 2026).
     expect(['clock', 'weather', 'next_event'].map(ref => dashboardHomeMatrixPlace(matrix(false), ref)))
-        .toEqual([[0, 0, 3, 1], [3, 0, 3, 1], [0, 1, 6, 1]]);
+        .toEqual([[0, -1, 2, 1], [0, 0, 6, 1], [3, -1, 3, 1]]);
     expect([2, 4, 6].map(row => [0, 2, 4].map(column => at(false, row, column)))).toEqual([
-        ['activity', 'session', 'media'], ['projects', undefined, 'contacts'], [undefined, 'monitor_0', undefined]]);
+        ['activity', 'session', 'objectives'], ['media', undefined, 'contacts'], [undefined, 'monitor_0', undefined]]);
     expect(dashboardHomeMatrixPlace(matrix(false), 'capture')).toEqual([2, 4, 2, 2]);
     expect(dashboardHomeMatrixPlace(matrix(false), 'settings')).toBeNull();
     // eVe Basic: the chosen monitor above the V logo, Contacts left, the Agenda right, Objectives under it.
     expect(dashboardHomeMatrixNeighbours(matrix(true), shown(true, { monitors: 1 })))
         .toEqual({ above: 'monitor_0', below: 'objectives', left: 'contacts', right: 'next_event' });
     expect(dashboardHomeMatrixNeighbours(matrix(false), shown(false)))
-        .toEqual({ above: '', below: 'monitor_0', left: 'activity', right: 'media' });
+        .toEqual({ above: 'clock', below: 'monitor_0', left: 'activity', right: 'objectives' });
 });
 
 // The home's first screen leaves the top strip empty: the time, the weather and the Agenda rise into it, one cell nearer
 // the top, on the same cell, the tiles unmoved; elsewhere they step back under it (choice A1, user 13 Nov. 2026).
 test('the pinned time, weather and Agenda rise into the empty top strip on the first screen only', () => {
     const pinned = options => ['clock', 'weather', 'next_event', 'activity', 'last_project']
-        .map(ref => dashboardHomeMatrixPlace(dashboardHomeMatrix({ width: 360, height: 760, ...options }), ref));
+        .map(ref => dashboardHomeMatrixPlace(dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760, ...options }), ref));
     // 760 / 60 = 12 whole cells: the strip, two spare rows, the block of eight, the band.
-    expect(pinned({})).toEqual([[0, -2, 3, 1], [3, -2, 3, 1], [0, -1, 6, 1], [0, 2, 2, 2], [0, -4, 2, 2]]);
-    expect(pinned({ stripFree: true })).toEqual([[0, -3, 3, 1], [3, -3, 3, 1], [0, -2, 6, 1], [0, 2, 2, 2], [0, -5, 2, 2]]);
-    const free = dashboardHomeMatrix({ width: 360, height: 760, stripFree: true });
+    // The first screen holds no V tool: the next appointment takes its cell, 4 × 1 (R-172).
+    expect(pinned({})).toEqual([[0, -3, 2, 1], [0, -2, 6, 1], [3, -3, 3, 1], [0, 2, 2, 2], [0, -4, 2, 2]]);
+    expect(pinned({ stripFree: true })).toEqual([[0, -3, 2, 1], [0, -2, 6, 1], [2, -3, 4, 1], [0, 2, 2, 2], [0, -5, 2, 2]]);
+    const free = dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760, stripFree: true });
     expect([free.cell, free.spare, free.rise]).toEqual([60, 2, 3]);
     // eVe Basic pins nothing; a phone lying has no strip: neither moves.
-    expect(dashboardHomeMatrix({ width: 360, height: 760, basic: true, stripFree: true }).rise).toBe(0);
-    expect(dashboardHomeMatrix({ width: 760, height: 360, stripFree: true }).places.clock).toEqual([0, 0, 3, 1]);
+    expect(dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760, basic: true, stripFree: true }).rise).toBe(0);
+    expect(dashboardHomeMatrix({ domain: 'eve', width: 760, height: 360, stripFree: true }).places.clock).toEqual([0, 0, 2, 1]);
 });
 
 test('a restored launch starts solo, an explicit connection starts with the grid, and a home revisit retains its revealed state', () => {

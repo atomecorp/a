@@ -23,8 +23,9 @@ const contract = (name, description, write, properties = {}, required = [], extr
 });
 
 export const CALENDAR_AGENDA_TOOLS = [
-    contract('time.read', 'Read current time, epoch milliseconds and local timezone.', false),
-    contract('alarm.set', 'Set an agenda alarm at an ISO date with timezone or after delay_ms; or, on an event (eventId), offsetMinutes before (negative) or after (positive) its start, or its end with relativeTo end (« 15 min avant le début », « 30 min après la fin »), with what it does: a ringtone or a launch (music, media, project, tool, visio and its guests). Optional command runs a Runtime V2 tool through MCP at that time; sensitive actions still need approval. eventId/alarmId replace an existing alarm.', true, {
+    contract('time.read', 'Read current time: UTC, epoch milliseconds, local timezone, and the device\'s local_date, local_time and weekday: the clock for « quelle heure est-il », « on est quel jour ».', false),
+    contract('alarm.set', 'Set an agenda alarm at a local time said by the user (time HH:MM, the next one to come, date YYYY-MM-DD for another day: « à 17 h 01 » → time 17:01, never converted to UTC), at an ISO date with its offset, or after delay_ms; or, on an event (eventId), offsetMinutes before (negative) or after (positive) its start, or its end with relativeTo end (« 15 min avant le début », « 30 min après la fin »), with what it does: a ringtone or a launch (music, media, project, tool, visio and its guests). Optional command (not with a ringtone or a launch) runs a Runtime V2 tool through MCP at that time (« à 17 h, lance ma playlist Favoris » → command apple_music.play with the id found first by apple_music.search); its notice still rings and says when the tool failed. eventId/alarmId replace an existing alarm.', true, {
+        time: { type: 'string', pattern: '^\\d{1,2}:\\d{2}(:\\d{2})?$' }, date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
         at: isoDate, delay_ms: { type: 'number', minimum: 1 }, title: { type: 'string' }, message: { type: 'string' },
         offsetMinutes: { type: 'integer', minimum: -44640, maximum: 44640 }, relativeTo: { type: 'string', enum: ['start', 'end'] },
         ringtone: { type: 'string', description: 'gentle, chime, birds, bells, gong, clock; or media with ringtone_media (a sound of the person, mp3 or mp4).' },

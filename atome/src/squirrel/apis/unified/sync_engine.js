@@ -1,3 +1,4 @@
+import { isExternalDisplayFollower } from '../../external_display_role.js';
 import { socketHealthMixin } from './websocket_health.js';
 import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
@@ -12,6 +13,7 @@ const boundToKey = (token) => {
     try { return JSON.parse(atob(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).cnf?.pop === true; } catch (_) { return false; }
 };
 
+const EXTERNAL_DISPLAY_SOURCE_SUFFIX = ':external_display';
 const DEVICE_KEY = 'squirrel_sync_device_id_v1';
 const PERSIST_DELAY_MS = 250;
 // Streams announced within this window go out in one `subscribe`.
@@ -99,6 +101,9 @@ export class SyncEngine {
     loadDeviceSource() {
         const storage = this.env?.localStorage;
         const stored = String(storage?.getItem?.(DEVICE_KEY) || '').trim();
+        // A connected screen's page shares this browser's storage, not its changes: under its own source the
+        // server sends it every change the device's page makes, as to another device (R-212).
+        if (isExternalDisplayFollower()) return `${stored || randomId(this.env)}${EXTERNAL_DISPLAY_SOURCE_SUFFIX}`;
         if (stored) return stored;
         const source = randomId(this.env);
         this.devicePersisted = this.legacyRelease.then(() => { storage?.setItem?.(DEVICE_KEY, source); return true; })

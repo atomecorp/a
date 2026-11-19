@@ -1,23 +1,21 @@
 // The bug reports sent from the apps (server/ws_bug_reports.js and the server's half of
-// atome/src/shared/bug_report_contract.js, ported): a `bug-report-submit` frame on /ws/api writes
-// one JSON file per report, for the team to read on the server, under
-//
-//     <project>/logs/bug_reports/<YYYY-MM-DD>/<created_iso>_<id>.json
-//
-// (the day and time the report was filed, `:` and `.` written `-`). The file holds the bounded
-// report, the server's own versions, the account id when the frame comes from a signed-in page, and
-// the contact only when the user agreed to give it. A report sent again (a retry) keeps its first
-// file. The frame is public; each address may send a few per minute. Once fixed, the team writes its
-// `resolution` into the file (scripts/bug_reports_admin.mjs); `bug-report-status` asks which of a
+// atome/src/shared/bug_report_contract.js, ported): a `bug-report-submit` frame on /ws/api keeps
+// one row per report in the central database's `team_reports` table (crate::team_reports, thread
+// `report`), for the team to read with the `team_reports` tool. The row holds the bounded report,
+// the server's own versions, the account id when the frame comes from a signed-in page, and the
+// contact only when the user agreed to give it. A report sent again (a retry) keeps its first
+// row. The frame is public; each address may send a few per minute. Once fixed, the team writes
+// its `resolution` into the row (`team_reports resolve`); `bug-report-status` asks which of a
 // device's sent reports are resolved, by their id and day, and for a feature request (kind
-// `request`, feature_requests.rs) answers its review and its Roadmap state.
+// `request`, feature_requests.rs) answers its review and its Roadmap state. The files written
+// before the table (`logs/bug_reports/<day>/*.json`) are read into it at the first use.
 use super::Asker;
 use super::common::{environment, plain, reply};
 use super::public_source::RateLimit;
+use crate::team_reports;
 use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 pub(super) const SUBMIT: &str = "bug-report-submit";
@@ -29,11 +27,6 @@ const MAX_CONTEXT_BYTES: usize = 32 * 1024;
 
 static LIMITED: LazyLock<RateLimit> = LazyLock::new(|| RateLimit::new(60_000, 12));
 static STATUS_LIMITED: LazyLock<RateLimit> = LazyLock::new(|| RateLimit::new(60_000, 30));
-
-/// `<project>/logs/bug_reports`.
-pub(super) fn root() -> Result<PathBuf, String> {
-    Ok(environment()?.1.join("logs").join("bug_reports"))
-}
 
 /// `String(value ?? '').trim().slice(0, max)`.
 pub(super) fn bounded(value: Option<&JsonValue>, max: usize) -> String {
@@ -77,32 +70,6 @@ pub(super) fn normalize_refs(refs: Option<&JsonValue>) -> Result<Vec<(String, St
         }
     }
     Ok(normalized)
-}
-
-/// `bugReportFilePath(root, { id, created_iso })`.
-pub(super) fn file_path(root: &Path, id: &str, created_iso: &str) -> PathBuf {
-    let stamp = created_iso.replace([':', '.'], "-");
-    root.join(js::slice(created_iso, 10))
-        .join(format!("{stamp}_{id}.json"))
-}
-
-/// `readBugReportFile(file)`: its report, none when the server never kept it.
-pub(super) fn read_file(file: &Path) -> Result<Option<JsonValue>, String> {
-    match std::fs::read(file) {
-        Ok(bytes) => serde_json::from_str(&String::from_utf8_lossy(&bytes))
-            .map(|report: JsonValue| Some(plain(&report)))
-            .map_err(|error| format!("SyntaxError: {} {error}", file.display())),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(format!("{}: {error}", file.display())),
-    }
-}
-
-/// `JSON.stringify(report, null, 2) + '\n'`.
-pub(super) fn pretty(report: &JsonValue) -> String {
-    format!(
-        "{}\n",
-        serde_json::to_string_pretty(report).unwrap_or_default()
-    )
 }
 
 /// `featureRequestStateOf(report)`: what the requester's device learns of its feature request.
@@ -251,21 +218,12 @@ fn version(file: PathBuf) -> String {
         .unwrap_or_else(|| "unknown".into())
 }
 
-fn status(message: &JsonValue, root: &Path) -> JsonValue {
-    let refs = match normalize_refs(message.get("refs")) {
-        Ok(refs) => refs,
-        Err(failure) => return failure,
-    };
+fn status(db: &rusqlite::Connection, refs: &[(String, String)]) -> Result<JsonValue, String> {
     let (mut resolved, mut requests) = (Vec::new(), Vec::new());
-    for (id, created_iso) in &refs {
-        let stored = match read_file(&file_path(root, id, created_iso)) {
-            Ok(stored) => stored,
-            Err(error) => {
-                eprintln!("[bug_reports] status read failed {error}");
-                return fail("bug_report_status_failed");
-            }
-        };
-        let Some(stored) = stored.filter(|stored| stored.get("id") == Some(&json!(id))) else {
+    for (id, created_iso) in refs {
+        let Some((_, stored)) = team_reports::get(db, id)?
+            .filter(|(_, stored)| stored.get("created_iso") == Some(&json!(created_iso)))
+        else {
             continue;
         };
         let resolution = stored.get("resolution");
@@ -283,21 +241,32 @@ fn status(message: &JsonValue, root: &Path) -> JsonValue {
             requests.push(request_state(&stored));
         }
     }
-    json!({ "ok": true, "resolved": resolved, "requests": requests })
+    Ok(json!({ "ok": true, "resolved": resolved, "requests": requests }))
 }
 
 pub(super) async fn answer(asker: &Asker<'_>, message: &JsonValue) -> Result<JsonValue, String> {
     let kind = js::text(message.get("type"));
-    let now = chrono::Utc::now().timestamp_millis();
-    let root = root()?;
+    let now = atome_js_values::dates::now_ms();
+    let project = environment()?.1.clone();
+    let central = asker.connection.ws_api.sessions.central();
     if kind == STATUS {
         if STATUS_LIMITED.limited(asker.address, now) {
             return Ok(reply(&kind, message, fail("bug_report_rate_limited")));
         }
-        let asked = message.clone();
-        let fields = tokio::task::spawn_blocking(move || status(&asked, &root))
+        let refs = match normalize_refs(message.get("refs")) {
+            Ok(refs) => refs,
+            Err(failure) => return Ok(reply(&kind, message, failure)),
+        };
+        let fields = central
+            .transaction(move |db| {
+                team_reports::import_files(db, &project)?;
+                status(db, &refs)
+            })
             .await
-            .map_err(|error| error.to_string())?;
+            .unwrap_or_else(|error| {
+                eprintln!("[bug_reports] status read failed {error}");
+                fail("bug_report_status_failed")
+            });
         return Ok(reply(&kind, message, fields));
     }
     if LIMITED.limited(asker.address, now) {
@@ -320,10 +289,11 @@ pub(super) async fn answer(asker: &Asker<'_>, message: &JsonValue) -> Result<Jso
         .filter(|user| js::truthy(Some(user)))
         .cloned()
         .unwrap_or(JsonValue::Null);
-    let (_, project) = environment()?;
     let mut stored = report.as_object().cloned().unwrap_or_default();
     stored.insert("received_at".into(), json!(js::iso(now)));
-    stored.insert("ws_user_id".into(), user);
+    stored.insert("ws_user_id".into(), user.clone());
+    stored.insert("thread".into(), json!(team_reports::REPORT_THREAD));
+    stored.insert("author".into(), json!("person"));
     stored.insert(
         "server_versions".into(),
         json!({
@@ -331,23 +301,19 @@ pub(super) async fn answer(asker: &Asker<'_>, message: &JsonValue) -> Result<Jso
         "eve": version(project.join("eVe").join("version.txt")) }),
     );
     let id = report["id"].clone();
-    let file = file_path(&root, &js::string(&id), &js::string(&report["created_iso"]));
-    let written = tokio::task::spawn_blocking(move || {
-        std::fs::create_dir_all(file.parent().expect("day folder"))?;
-        let mut options = std::fs::OpenOptions::new();
-        let mut handle = options.write(true).create_new(true).open(&file)?;
-        std::io::Write::write_all(&mut handle, pretty(&JsonValue::Object(stored)).as_bytes())
-    })
-    .await
-    .map_err(|error| error.to_string())?;
+    let principal = user.as_str().map(str::to_string);
+    let written = central
+        .transaction(move |db| {
+            team_reports::import_files(db, &project)?;
+            team_reports::insert(db, principal.as_deref(), &JsonValue::Object(stored))
+        })
+        .await;
     Ok(reply(
         &kind,
         message,
         match written {
-            Ok(()) => json!({ "ok": true, "id": id }),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-                json!({ "ok": true, "id": id, "duplicate": true })
-            }
+            Ok(true) => json!({ "ok": true, "id": id }),
+            Ok(false) => json!({ "ok": true, "id": id, "duplicate": true }),
             Err(error) => {
                 // The report stays unsent on the device, which sends it again later.
                 eprintln!("[bug_reports] storage failed {error}");

@@ -12,6 +12,12 @@ pub enum EventKind {
     // A MIDI controller moved, `value` normalized 0..1 (composed-note thresholds).
     Controller { number: u8, value: f32 },
     AllNotesOff,
+    // Channel pressure (aftertouch), normalized 0..1: a synth's pressure brick reads it.
+    Pressure { value: f32 },
+    // The host's tempo in beats per minute: a synth's LFO in tempo follows it.
+    Tempo { bpm: f32 },
+    // One parameter of a synth brick set while it plays (R-186): `brick` its place in the patch, `param` its id.
+    BrickParam { brick: u8, param: u8, value: f32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

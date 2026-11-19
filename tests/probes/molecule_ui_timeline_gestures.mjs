@@ -1,4 +1,4 @@
-import { assert, findBevyUiNodeTarget, playwrightPointForClientTarget, waitFor } from './molecule_ui_acceptance_support.mjs';
+import { assert, awaitBevyUiNodeTarget, findBevyUiNodeTarget, playwrightPointForClientTarget, waitFor } from './molecule_ui_acceptance_support.mjs';
 
 export const exerciseMixerLassoBlock = async (page) => {
     const blocker = await findBevyUiNodeTarget(page, {
@@ -38,10 +38,18 @@ export const exerciseTimelineEditingGestures = async ({ page, ownerId, clipId } 
     const clipNode = `project_view_timeline_clip_${String(clipId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
     const clip = await findBevyUiNodeTarget(page, { nodeId: clipNode, treeId: 'eve_bevy_ui_project_view', step: 3 });
     assert(clip, `timeline_clip_not_actionable:${clipNode}`);
-    const clipPoint = await playwrightPointForClientTarget(page, clip);
-    await page.mouse.click(clipPoint.x, clipPoint.y);
+    // A touch on the clip ALREADY selected opens its Inspector in full screen, a level beneath the Timeline
+    // (project_view_timeline_inspector.js#inspectorModeOf, `inspectorClipId`), which hides the lanes: the clip is
+    // touched only when it is not the selection yet (the drag before this selected it).
+    const selectedClipId = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+        .readProjectViewSurfaceState().content?.selectedClipId || '');
+    if (selectedClipId !== clipId) {
+        const clipPoint = await playwrightPointForClientTarget(page, clip);
+        await page.mouse.click(clipPoint.x, clipPoint.y);
+    }
     const previousDuration = (await readTimeline()).clips.find((entry) => entry.clip_id === clipId).timeline.duration_frames;
-    const edge = await findBevyUiNodeTarget(page, { nodeId: `${clipNode}_edge_end`, treeId: 'eve_bevy_ui_project_view', step: 2 });
+    // The crop handles are drawn on the selected clip once its selection is projected.
+    const edge = await awaitBevyUiNodeTarget(page, { nodeId: `${clipNode}_edge_end`, treeId: 'eve_bevy_ui_project_view', step: 2 });
     assert(edge, `timeline_crop_edge_not_actionable:${clipNode}`);
     const edgePoint = await playwrightPointForClientTarget(page, edge);
     await page.mouse.move(edgePoint.x, edgePoint.y); await page.mouse.down();

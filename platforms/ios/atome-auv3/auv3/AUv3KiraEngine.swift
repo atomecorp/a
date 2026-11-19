@@ -27,10 +27,40 @@ extension auv3Utils {
         return Double(info.numer) / Double(max(1, info.denom))
     }()
 
+    /// Real-time: notes, once per take, where the take's first sample (heard by the host at `hostTime`) lies on the
+    /// engine's clock, so the take is placed exactly (`exact_placement.js#nativeTakeStart`, R-179). Retried on the
+    /// next quantum while the engine has no output anchor yet or the lock is busy.
+    func noteRecordingCaptureClock(hostTime: UInt64) {
+        guard kiraEngineStarted, os_unfair_lock_trylock(&recordingTimingLock) else { return }
+        defer { os_unfair_lock_unlock(&recordingTimingLock) }
+        guard recordingCaptureClock == nil else { return }
+        var clock = AtomeIosCaptureClock()
+        if atome_ios_audio_host_capture_clock(Int64(Double(hostTime) * Self.machNanosPerTick), &clock) {
+            recordingCaptureClock = clock
+        }
+    }
+
+    /// The take's capture clock as the JS reads it (`record_done.capture_clock`), then forgotten; nil without one.
+    func takeRecordingCaptureClock() -> [String: Any]? {
+        os_unfair_lock_lock(&recordingTimingLock)
+        let clock = recordingCaptureClock
+        recordingCaptureClock = nil
+        os_unfair_lock_unlock(&recordingTimingLock)
+        guard let clock else { return nil }
+        return [
+            "first_capture_host_ns": clock.first_capture_host_ns,
+            "anchor_frame": clock.anchor_frame,
+            "anchor_host_ns": clock.anchor_host_ns,
+            "output_sample_rate": clock.output_sample_rate,
+            "discontinuities": clock.discontinuities
+        ]
+    }
+
     /// The host's input, just pulled into the output buffers, handed to the strips whose IN is `host`
     /// (todo/effets_generateurs_audio L8). When one listens, the dry input leaves the output: the chain
     /// plays it, added by `mixKiraEngine` in this same quantum. Real-time safe: the scratch is preallocated.
     func routeHostInput(bufferList: AudioBufferListWrapper,
+                        hostTime: UInt64,
                         frameCount: AUAudioFrameCount,
                         channels: Int,
                         interleaved: Bool,
@@ -38,6 +68,8 @@ extension auv3Utils {
         let frames = Int(frameCount)
         guard kiraEngineStarted, isFloat32, frames <= Self.kiraScratchFrames, bufferList.numberOfBuffers > 0 else { return }
         let listened: Bool
+        // The quantum's host instant, on the clock `atome_ios_audio_host_render` notes: a take's REC point is placed by it.
+        let hostNs = Int64(Double(hostTime) * Self.machNanosPerTick)
         if interleaved || bufferList.numberOfBuffers == 1 {
             guard let mData = bufferList.buffer(at: 0).mData else { return }
             let input = mData.assumingMemoryBound(to: Float.self)
@@ -46,11 +78,11 @@ extension auv3Utils {
                 kiraLeft[frame] = input[frame * stride]
                 kiraRight[frame] = stride > 1 ? input[frame * stride + 1] : input[frame * stride]
             }
-            listened = atome_ios_audio_host_input(kiraLeft, kiraRight, frameCount)
+            listened = atome_ios_audio_host_input(kiraLeft, kiraRight, frameCount, hostNs)
         } else {
             guard let left = bufferList.buffer(at: 0).mData?.assumingMemoryBound(to: Float.self) else { return }
             let right = bufferList.buffer(at: 1).mData?.assumingMemoryBound(to: Float.self) ?? left
-            listened = atome_ios_audio_host_input(left, right, frameCount)
+            listened = atome_ios_audio_host_input(left, right, frameCount, hostNs)
         }
         guard listened else { return }
         for index in 0..<bufferList.numberOfBuffers {

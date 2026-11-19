@@ -457,14 +457,13 @@ impl VaultRouter {
         principal: &str,
         owner: &str,
         parent_id: &str,
+        event: &JsonValue,
     ) -> Result<(), String> {
-        let share = self
-            .share_for_atome(principal, parent_id, Some(owner.to_string()))
-            .await?;
-        if share.is_none() || !rights(share.as_ref()).create {
+        let share = self.share_for_atome(principal, parent_id, Some(owner.to_string()));
+        let Some(share) = share.await?.filter(|share| rights(Some(share)).create) else {
             return Err("property_create_denied".into());
-        }
-        Ok(())
+        };
+        crate::media::shared_folders::guard_write(self, principal, &share, event).await
     }
 
     pub async fn authorize_shared_write(
@@ -489,6 +488,7 @@ impl VaultRouter {
         if !rights.write {
             return Err("property_write_denied".into());
         }
+        crate::media::shared_folders::guard_write(self, principal, &share, event).await?;
         let Some(allowed) = writable(&share) else {
             return Ok(());
         };

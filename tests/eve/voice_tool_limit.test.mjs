@@ -15,13 +15,14 @@ const session = (preload) => createConversationSession({ actor: () => ({ id: 'u'
         : { tools: [] } }),
     request: async () => { throw new Error('no provider request expected'); } });
 
-test('the voice session carries at most the provider limit, the search tool and the open tools first', async () => {
+test('the voice session carries at most the provider limit, its own tools and the open tools first', async () => {
     assert.ok(names.length > PROVIDER_SESSION_TOOL_LIMIT, 'the preload list itself exceeds the limit');
     const voice = await session(['tool.open_now']).createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
     assert.equal(voice.tools.length, PROVIDER_SESSION_TOOL_LIMIT);
-    assert.equal(voice.tools[0].name, 'atome_tool_search');
-    assert.match(voice.tools[1].description, /^tool\.open_now:/);
-    const contextFirst = voice.tools.slice(2, 2 + ASSISTANT_CONTEXT_COMMAND_NAMES.length).map(tool => tool.description.split(':')[0]);
+    // The session's own tools first: discovery and the held action's yes (AGENTS.md rule 22).
+    assert.deepEqual(voice.tools.slice(0, 2).map(tool => tool.name), ['atome_tool_search', 'atome_confirm']);
+    assert.match(voice.tools[2].description, /^tool\.open_now:/);
+    const contextFirst = voice.tools.slice(3, 3 + ASSISTANT_CONTEXT_COMMAND_NAMES.length).map(tool => tool.description.split(':')[0]);
     assert.deepEqual(contextFirst, ASSISTANT_CONTEXT_COMMAND_NAMES.filter(name => name !== 'tool.open_now'));
     assert.ok(voice.tools.every(tool => tool.type === 'function'));
 });

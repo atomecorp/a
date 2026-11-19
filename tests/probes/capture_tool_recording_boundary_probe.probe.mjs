@@ -145,11 +145,11 @@ test('recording UI tool ids reach the real audio/video start and stop boundaries
             readGroupTimeline: () => ({
                 timeline: { transport: { playhead_frame: 24000 }, timebase: { sample_rate: 48000 } }
             }),
-            startGroupTimelineRecording: async (detail) => {
+            startGroupTimelineGenericRecording: async (detail) => {
                 moleculeCalls.push({ phase: 'start', detail });
                 return { ok: true, status: 'recording' };
             },
-            stopGroupTimelineRecording: async (detail) => {
+            stopGroupTimelineGenericRecording: async (detail) => {
                 moleculeCalls.push({ phase: 'stop', detail });
                 return { ok: true, status: 'stopped' };
             }

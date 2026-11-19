@@ -317,7 +317,7 @@ fn bind(
             )
             .map_err(|_| "local_account_write_failed")?;
         }
-        let now = Utc::now().to_rfc3339();
+        let now = atome_js_values::dates::now_rfc3339();
         let inserted = tx.execute("INSERT OR IGNORE INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, created_source, sync_status)
             VALUES (?1,'user',?1,?1,?2,?2,'tauri','pending')", rusqlite::params![principal,now]).map_err(|_| "local_account_write_failed")?;
         if !phone.is_empty() {
@@ -383,7 +383,7 @@ fn challenge(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, S
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .map_err(|_| "local_session_locked")?;
-    let now = Utc::now().timestamp_millis();
+    let now = atome_js_values::dates::now_ms();
     db.execute(
         "DELETE FROM auth_local_challenges WHERE expires_ms <= ?1",
         [now],
@@ -419,7 +419,7 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
         let (principal,scope,key,generation): (String,String,String,i64) = db.query_row(
             "SELECT local_principal,key_scope,key_id,generation FROM auth_local_grants WHERE grant_id=?1 AND locked=0",[grant],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(|_| "local_session_locked")?;
-        let now = Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         let reference = format!("{grant}:{generation}");
         let (nonce,issued): (String,i64) = db.query_row("SELECT nonce,issued_ms FROM auth_local_challenges
             WHERE challenge_id=?1 AND grant_id=?2 AND purpose=?3 AND reference_id=?4 AND expires_ms>?5 AND consumed_ms IS NULL",
@@ -452,7 +452,7 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
         let tx = db
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| "local_database_unavailable")?;
-        let now = Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         let consumed = tx
             .execute(
                 "UPDATE auth_local_challenges SET consumed_ms=?1

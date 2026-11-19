@@ -239,7 +239,7 @@ it('projects native panel controls and Dashboard material without a private skin
                 }
                 expect(EVE_FR_FIRST_LAUNCH_MESSAGES['eve.first_launch.pay']).toBe('Payer');
                 expect(EVE_EN_FIRST_LAUNCH_MESSAGES['eve.first_launch.pay']).toBe('Pay');
-                expect(EVE_FR_FIRST_LAUNCH_MESSAGES['eve.first_launch.price']).toBe('12 € par mois');
+                expect(EVE_FR_FIRST_LAUNCH_MESSAGES['eve.first_launch.price']).toBe('12 € de crédit');
                 const pay = nodes.find(node => node.id === 'pay');
                 expect(pay.style.surfacePaint).toBe(BEVY_PANEL_TOKENS.buttonMaterial.idle.surfacePaint);
                 expect(pay.style.shadow).toBe(BEVY_PANEL_TOKENS.buttonMaterial.idle.shadow);

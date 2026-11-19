@@ -302,10 +302,9 @@ pub async fn accepted_note(
         "contact_request_{}",
         identity(&peer_id, &format!("{owner}:{}", js::text(Some(at))))
     );
-    let timestamp = chrono::DateTime::from_timestamp_millis(js::number(Some(at)) as i64)
-        .ok_or("contact_request_time_invalid")?
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string();
+    let at_ms = js::number(Some(at)) as i64;
+    js::dates::Instant::from_millis(at_ms).ok_or("contact_request_time_invalid")?;
+    let timestamp = js::iso(at_ms);
     let or = |value: Option<&JsonValue>, fallback: JsonValue| {
         value
             .filter(|v| js::truthy(Some(v)))

@@ -38,3 +38,7 @@ assert.deepEqual(
     ['delete_a', 'delete_b'],
     'delete selection handler should receive the selected atome ids'
 );
+
+console.log('delete_selection_v2_registry.probe: PASS');
+// The imported runtime keeps its app-lifetime timers alive.
+process.exit(0);

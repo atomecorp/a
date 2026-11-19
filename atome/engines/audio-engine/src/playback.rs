@@ -98,7 +98,7 @@ enum NativeContainer {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum NativeDecodeRoute {
     Kira,
-    SymphoniaIsoBmff,
+    Symphonia,
 }
 
 fn is_isobmff_extension(extension_hint: Option<&str>) -> bool {
@@ -246,8 +246,12 @@ fn resolve_native_decode_route(
     source_label: &str,
 ) -> Result<NativeDecodeRoute, String> {
     let container = sniff_native_container(bytes);
-    if container == NativeContainer::IsoBmff || is_isobmff_extension(extension_hint) {
-        return Ok(NativeDecodeRoute::SymphoniaIsoBmff);
+    let symphonia_only = atome_mix_graph::clip_decode::is_aiff_container(bytes);
+    if symphonia_only
+        || container == NativeContainer::IsoBmff
+        || is_isobmff_extension(extension_hint)
+    {
+        return Ok(NativeDecodeRoute::Symphonia);
     }
     if matches!(
         container,
@@ -275,7 +279,7 @@ pub(crate) fn decode_static_sound_data(
     source_label: &str,
 ) -> Result<StaticSoundData, String> {
     match resolve_native_decode_route(extension_hint, &bytes, source_label)? {
-        NativeDecodeRoute::SymphoniaIsoBmff => {
+        NativeDecodeRoute::Symphonia => {
             let symphonia_hint = if is_isobmff_extension(extension_hint) {
                 extension_hint
             } else {
@@ -407,6 +411,8 @@ pub fn play_instance(
         loop_start_seconds,
         loop_end_seconds,
         envelope: None,
+        reverse: false,
+        warp: None,
     };
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
@@ -548,52 +554,5 @@ pub fn shutdown() -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod decode_route_tests {
-    use super::{
-        NativeContainer, NativeDecodeRoute, resolve_native_decode_route, sniff_native_container,
-    };
-
-    #[test]
-    fn routes_iso_bmff_by_signature_without_extension() {
-        let bytes = [
-            0x00, 0x00, 0x00, 0x18, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm', 0x00, 0x00,
-            0x02, 0x00,
-        ];
-        assert_eq!(sniff_native_container(&bytes), NativeContainer::IsoBmff);
-        assert_eq!(
-            resolve_native_decode_route(None, &bytes, "clip").unwrap(),
-            NativeDecodeRoute::SymphoniaIsoBmff
-        );
-    }
-
-    #[test]
-    fn routes_iso_bmff_when_free_box_precedes_ftyp() {
-        let bytes = [
-            0x00, 0x00, 0x00, 0x08, b'f', b'r', b'e', b'e', 0x00, 0x00, 0x00, 0x18, b'f', b't',
-            b'y', b'p', b'i', b's', b'o', b'm',
-        ];
-        assert_eq!(sniff_native_container(&bytes), NativeContainer::IsoBmff);
-        assert_eq!(
-            resolve_native_decode_route(Some("mp3"), &bytes, "clip").unwrap(),
-            NativeDecodeRoute::SymphoniaIsoBmff
-        );
-    }
-
-    #[test]
-    fn rejects_mp3_extension_with_non_mp3_bytes() {
-        let bytes = b"not an mp3 stream";
-        let error = resolve_native_decode_route(Some("mp3"), bytes, "clip").unwrap_err();
-        assert!(error.contains("Native audio container mismatch"));
-        assert!(error.contains("extension=mp3"));
-    }
-
-    #[test]
-    fn routes_wav_bytes_to_kira() {
-        let bytes = b"RIFF\x24\x00\x00\x00WAVEfmt ";
-        assert_eq!(sniff_native_container(bytes), NativeContainer::Wav);
-        assert_eq!(
-            resolve_native_decode_route(None, bytes, "clip").unwrap(),
-            NativeDecodeRoute::Kira
-        );
-    }
-}
+#[path = "playback_decode_tests.rs"]
+mod decode_route_tests;

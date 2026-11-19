@@ -35,7 +35,8 @@ const forbiddenByFile = [
         patterns: [/tauri-plugin-fs/]
     },
     {
-        path: 'platforms/desktop-tauri/Cargo.lock',
+        // The one Cargo workspace lives at the root: its lock resolves the Tauri crate's dependencies.
+        path: 'Cargo.lock',
         patterns: [/name = "tauri-plugin-fs"/]
     },
     {
@@ -81,6 +82,18 @@ for (const entry of forbiddenByFile) {
         );
     }
 }
+
+const workspaceMembers = readText('Cargo.toml').match(/^members\s*=\s*\[([^\]]*)\]/m);
+assert.ok(workspaceMembers, 'root Cargo.toml must declare the workspace members');
+assert.ok(
+    workspaceMembers[1].includes('"platforms/desktop-tauri"'),
+    'platforms/desktop-tauri must be a member of the root Cargo workspace, so the root Cargo.lock covers it'
+);
+assert.equal(
+    fs.existsSync(resolvePath('platforms/desktop-tauri/Cargo.lock')),
+    false,
+    'platforms/desktop-tauri must not keep a Cargo.lock of its own outside the root workspace'
+);
 
 assert.equal(
     fs.existsSync(path.join(rootDir, 'atome/src/tauri-plugin-fs/api-iife.js')),

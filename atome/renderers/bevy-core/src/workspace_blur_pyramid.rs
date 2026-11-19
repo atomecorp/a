@@ -5,7 +5,7 @@
 //! A12-class iPad exposes exactly that minimum: the pipeline failed validation,
 //! Bevy's default `RenderErrorHandler` quit the app, and the canvas stayed grey.
 //! Colour attachments and one sampled texture binding are available on every
-//! WebGPU adapter, so this chain renders the same 2x2 box-filtered pyramid
+//! WebGPU adapter, so this chain renders the pyramid (a tent [1, 3, 3, 1] / 8 per level, see backdrop_downsample.wgsl)
 //! without any storage binding.
 //!
 //! One chain per pyramid: the workspace backdrop's, and the pyramid of every
@@ -39,7 +39,7 @@ use crate::workspace_backdrop::AtomeWorkspaceBackdrop;
 const BACKDROP_DOWNSAMPLE_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("5d0f1c64-37b2-4f0e-9a8e-2c6b7e41d913");
 /// The capture and the pyramid share this linear format (see `workspace_backdrop`).
-const PYRAMID_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
+pub(super) const PYRAMID_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 
 #[derive(Resource)]
 struct DownsamplePipeline {

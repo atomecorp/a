@@ -220,7 +220,8 @@ fn admit_request(
     })
 }
 
-fn block(db: &Connection, owner: &str, peer: &str) -> Result<JsonValue, String> {
+/// `block`: `owner` blocks `peer`, silently for the peer (the contacts' block, the CB sociale's too).
+pub(crate) fn block(db: &Connection, owner: &str, peer: &str) -> Result<JsonValue, String> {
     if owner.is_empty() || peer.is_empty() || owner == peer {
         return Err("contact_target_invalid".into());
     }

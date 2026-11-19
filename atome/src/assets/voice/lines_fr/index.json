@@ -27,6 +27,12 @@
    "phonemes": "^wi , kə vøty ?$",
    "sha256": "b77365e90bc07af39607590b286832e95b3b9593626c7f2933eb61b67e5af46f"
   },
+  "Tu as encore besoin de moi, ou je peux te laisser ?": {
+   "file": "404c77c59b8d859b.wav",
+   "samples": 51200,
+   "phonemes": "^ty a ɑ̃koʁ bəzwɛ̃ də mwa , u ʒə pø tə lɛse ?$",
+   "sha256": "41759507dcfa3858541b8084e98a08b66ea347194fead0c93fde84d3bb941a01"
+  },
   "Je te rappelle, comme tu me l’as demandé.": {
    "file": "c1e8b03b6dfbb4d1.wav",
    "samples": 54016,
@@ -657,11 +663,11 @@
    "phonemes": "^ʁepɔ̃mwa , u apɥi syʁ ta ʁepɔ̃s .$",
    "sha256": "fd20b7fddbc1b3823e7ffa14f768853155b1f5335f6ccdec2ff884b9f0dff7b4"
   },
-  "Dernière étape : l’abonnement est à douze euros par mois.": {
-   "file": "f87be688dca9ef66.wav",
-   "samples": 72192,
-   "phonemes": "^dɛʁnjɛʁ etap : labonəmɑ̃ ɛ ta duz œʁo paʁ mwa .$",
-   "sha256": "e718f954f9e4e896d5ce1f5005d3f10bebf60960e2d4e2f96a326633808d893e"
+  "Dernière étape : l’entrée est à douze euros, qui deviennent ton crédit.": {
+   "file": "bc18bc4a446a7eb7.wav",
+   "samples": 96256,
+   "phonemes": "^dɛʁnjɛʁ etap : lɑ̃tʁe ɛ ta duz œʁo , ki dəvjɛnɑ̃ tɔ̃ kʁedi .$",
+   "sha256": "981c44c9dd9ca10446c74c1a7c0b7312881d395363f493f27bd565a52472399d"
   },
   "Pour l’instant, rien ne sera débité : c’est une simulation.": {
    "file": "e5bb796ce9476798.wav",

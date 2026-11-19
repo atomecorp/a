@@ -203,7 +203,7 @@ Maquettes : `temp/watch_companion/out/w0_1_naviguer.png`, `w0_2_seance.png`, `w0
 `temp/watch_companion/mockups/build.mjs`, Apple Watch 45 mm, vrais jetons). **Validées par l'utilisateur, avec les sept
 recommandations :**
 
-1. **Fond noir** (pas le fond d'écran eVe) : écran OLED, séance longue.
+1. ~~**Fond noir** (pas le fond d'écran eVe) : écran OLED, séance longue.~~ Remplacé le 17 nov. 2026 (R-221 ; l'utilisateur : « le noir est trop sombre », et un fond d'écran doux comme sur atome iOS). Design unique validé le 18 nov., codé : `temp/watch_2026-11-17/mockups/out/4_design_unique.png`.
 2. **Bande du bas adaptée à la montre** (exception de la règle 13 propre à la montre) : le Retour tient un outil
    (pas un et demi) ; en séance il n'est que sur la page Contrôles (= Sortir, à côté de Pause) ; ailleurs l'Atome seul
    au coin bas-droit ; sur la page Disque, l'info suivante prend la place libre en bas à gauche.

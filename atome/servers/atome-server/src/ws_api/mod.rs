@@ -20,7 +20,7 @@ mod guest_adoption;
 mod identity;
 mod message_ops;
 mod news_ops;
-mod notification_ops;
+pub(crate) mod notification_ops;
 mod password_ops;
 mod phone_link_ops;
 mod projection_ops;
@@ -81,6 +81,7 @@ impl WsApi {
             central: self.sessions.central(),
             news: &self.social.news,
             push: &self.social.push,
+            router: &self.router,
         }
     }
 
@@ -412,6 +413,7 @@ async fn join(ws_api: Arc<WsApi>, client: WebSocket, network: String, opening: O
     crate::visio::closed(connection.live).await;
     let _ = to_client.send(ws::Message::Close(None)).await;
     seats::leave(&connection);
+    connection.ws_api.social.cb.closed(connection.live);
     live::close(connection.live);
     connection.providers.end();
     let _ = client_writer.await;

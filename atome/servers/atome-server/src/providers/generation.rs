@@ -12,7 +12,7 @@ use std::sync::Mutex;
 const JOB_TTL_MS: i64 = 24 * 3600 * 1000;
 
 pub fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 /// `Math.round`: halves go up.

@@ -5,9 +5,10 @@
 // PROJECTS what a lit « Visib. » shows into the shared base after every commit touching them.
 // Never a health value, a precise place or the person's notebook. For adults only, on both
 // sides; searching is not being findable. A report is recorded once per reporter; three
-// distinct ones hide the person, their case waiting in eVe's moderation queue.
+// distinct ones hide the person, their case waiting in eVe's moderation queue (moderation.rs).
 use super::directory::Directory;
-use super::news::db::{all, get, run, text};
+use super::moderation;
+use super::news::db::{all, run, text};
 use crate::vault_router::VaultRouter;
 use crate::vault_router::central::Central;
 use crate::vault_router::js;
@@ -17,8 +18,6 @@ use std::sync::Arc;
 const VISIBILITY_TYPE: &str = "objective_visibility";
 const NETWORK_TYPE: &str = "objective_network";
 const CASE_KIND: &str = "objective_network_person";
-const REPORTS_TO_HIDE: i64 = 3;
-const REPORT_REASONS: [&str; 4] = ["spam", "abuse", "fake", "other"];
 const MOMENTS: [&str; 3] = ["morning", "noon", "evening"];
 const PEOPLE_LIMIT: i64 = 200;
 
@@ -228,13 +227,8 @@ impl ObjectiveNetwork {
             let excluded = self
                 .central
                 .transaction(move |db| {
-                    let hidden = get(
-                        db,
-                        "SELECT hidden_at FROM moderation_cases WHERE kind = ? AND target_id = ? AND hidden_at IS NOT NULL",
-                        &[&CASE_KIND, &target],
-                    )?
-                    .is_some();
-                    Ok(hidden || super::relations::blocked_either_way(db, &me, &target)?)
+                    Ok(moderation::hidden_case(db, CASE_KIND, &target)?
+                        || super::relations::blocked_either_way(db, &me, &target)?)
                 })
                 .await?;
             if excluded {
@@ -304,37 +298,16 @@ impl ObjectiveNetwork {
         if target.is_empty() || target == viewer {
             return Ok(json!({ "ok": false, "error": "objective_network_report_target_invalid" }));
         }
-        let reason = if REPORT_REASONS.contains(&reason) {
-            reason
-        } else {
-            "other"
-        }
-        .to_string();
-        let (me, case_id) = (viewer.to_string(), uuid::Uuid::new_v4().to_string());
-        let now = chrono::Utc::now()
-            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-            .to_string();
+        let (me, reason) = (viewer.to_string(), moderation::reason(reason));
         self.central
             .transaction(move |db| {
-                run(
+                moderation::record(
                     db,
-                    "INSERT INTO objective_network_reports (target_id, reporter_id, reason) VALUES (?, ?, ?)
-                     ON CONFLICT(target_id, reporter_id) DO NOTHING",
-                    &[&target, &me, &reason],
-                )?;
-                let total = get(
-                    db,
-                    "SELECT COUNT(*) AS total FROM objective_network_reports WHERE target_id = ?",
-                    &[&target],
-                )?
-                .map_or(0, |row| js::number(row.get("total")) as i64);
-                let hidden = (total >= REPORTS_TO_HIDE).then_some(now);
-                run(
-                    db,
-                    "INSERT INTO moderation_cases (case_id, kind, target_id, reports, hidden_at) VALUES (?, ?, ?, ?, ?)
-                     ON CONFLICT(kind, target_id) DO UPDATE SET reports = excluded.reports, updated_at = datetime('now'),
-                     hidden_at = COALESCE(moderation_cases.hidden_at, excluded.hidden_at), status = 'open'",
-                    &[&case_id, &CASE_KIND, &target, &total, &hidden],
+                    "objective_network_reports",
+                    CASE_KIND,
+                    &target,
+                    &me,
+                    reason,
                 )
                 .map(drop)
             })

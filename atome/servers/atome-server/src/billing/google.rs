@@ -290,6 +290,13 @@ impl Google {
                     .map(js::string),
                 acknowledged: sub["acknowledgementState"] == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
                 purchase_token: Some(purchase.into()),
+                // A license tester's purchase carries `testPurchase`: never real money (R-193).
+                environment: if sub.get("testPurchase").is_some() {
+                    "test"
+                } else {
+                    "real"
+                }
+                .into(),
                 ..Purchase::default()
             });
         }
@@ -317,6 +324,13 @@ impl Google {
                 .map(js::string),
             acknowledged: item["consumptionState"] == json!(1),
             purchase_token: Some(purchase.into()),
+            // `purchaseType` 0 is a license tester's test purchase: never real money (R-193).
+            environment: if item.get("purchaseType") == Some(&json!(0)) {
+                "test"
+            } else {
+                "real"
+            }
+            .into(),
             ..Purchase::default()
         })
     }

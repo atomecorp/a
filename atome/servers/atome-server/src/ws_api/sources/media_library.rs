@@ -107,7 +107,7 @@ static ANSWERED: LazyLock<Mutex<IndexMap<String, (i64, Vec<String>)>>> =
     LazyLock::new(Mutex::default);
 
 fn now() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 // `answersInBudget`: every source's answer, or once SOURCE_BUDGET_MS has passed, those already in

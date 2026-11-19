@@ -35,6 +35,8 @@ was clean.
 ## Regression checks
 
 - `tests/eve/dashboard_basic_template_sync.test.mjs`: "deletes the extra copies
-  two racing syncs made of one slot".
+  two racing syncs made of one slot" (cause 2, `planTemplateInstanceSync`).
+- `cargo test -p atome-server --lib local::local_atome_sync_restart_tests::a_deleted_atome_leaves_the_listing_unless_tombstones_are_asked_for`
+  (cause 1, on the Rust local server that replaced the Swift and Tauri ones).
 - Device: `syncProjectTemplateInstances(home)` deleted 6 records; the home has
   18 cells.

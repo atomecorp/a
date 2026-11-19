@@ -27,12 +27,11 @@ const PRIVATE_NETWORK_VARY: &str = "Origin, Access-Control-Request-Headers, Acce
 const OPAQUE_SCHEMES: [&str; 3] = ["atome", "asset", "ipc"];
 // The last two are the iOS local server's own (atome_server::local): the opaque page
 // saves its recordings and reaches its AI providers there.
-const NATIVE_MEDIA_PREFIXES: [&str; 5] = [
+const NATIVE_MEDIA_PREFIXES: [&str; 4] = [
     "/api/uploads",
     "/api/recordings",
     "/api/extract-audio",
     "/api/user-recordings",
-    "/api/eve/ai/provider-completion",
 ];
 const OPAQUE_HEADERS: &str = "Content-Type, Authorization, Range, X-Filename, X-Original-Name, X-Atome-Id, X-Atome-Type, X-Mime-Type, X-File-Path, X-File-Name, X-User-Id, X-Username, X-Phone, X-Wallpaper-Inline";
 const OPAQUE_METHODS: &str = "GET, HEAD, POST, OPTIONS";

@@ -1,164 +1,67 @@
+// A local sync QA topology: one isolated server reachable on the LAN, two accounts each holding a project, and a
+// manifest (temp/sync-qa/<run>/topology.json, mode 600) that device tests read. The server is atome-server with its
+// Rust vault supervisor (tests/helpers/probe_server.mjs, PROBE_PREBUILT_SERVER=1 runs the binaries built); since
+// 6 Nov. 2026 a bare `node server/server.js` has no vaults (vault_supervisor_socket_missing).
+// SQUIRREL_SYNC_QA_PORT: the port (3011); SQUIRREL_SYNC_QA_HOLD=1 keeps the server until the probe is stopped.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import WebSocket from 'ws';
+import { commit, connectUser, startServer } from '../helpers/probe_server.mjs';
 
 const projectRoot = path.resolve(new URL('../..', import.meta.url).pathname);
 const port = Number(process.env.SQUIRREL_SYNC_QA_PORT || 3011);
 const runId = process.env.SQUIRREL_SYNC_QA_RUN_ID || String(Date.now());
 const runRoot = path.join(projectRoot, 'temp', 'sync-qa', runId);
-const dataRoot = path.join(runRoot, 'data');
-const databasePath = path.join(runRoot, 'orchestrator.db');
 const manifestPath = path.join(runRoot, 'topology.json');
-const password = 'Atome-QA-Local-42';
 
 const isLanAddress = (address) => address
     && address.family === 'IPv4'
     && !address.internal
     && !address.address.startsWith('169.254.');
-
-const lanAddress = Object.values(os.networkInterfaces())
-    .flat()
-    .find(isLanAddress)?.address;
-
+const lanAddress = Object.values(os.networkInterfaces()).flat().find(isLanAddress)?.address;
 if (!lanAddress) throw new Error('sync_qa_lan_address_unavailable');
-if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-    throw new Error('sync_qa_port_invalid');
-}
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('sync_qa_port_invalid');
 
-fs.mkdirSync(dataRoot, { recursive: true });
-
-const child = spawn(process.execPath, ['server/server.js'], {
-    cwd: projectRoot,
-    env: {
-        ...process.env,
-        HOST: '0.0.0.0',
-        PORT: String(port),
-        SQLITE_PATH: databasePath,
-        NODE_ENV: 'test',
-        JWT_SECRET: 'sync-qa-local-secret-long-enough-for-test-only',
-        GITHUB_AUTO_SYNC: 'false',
-        SQUIRREL_AUTH_TEST_MODE: '1',
-        SQUIRREL_AUTH_OTP_BYPASS: '1',
-        SQUIRREL_SYNC_REMOTE: '0',
-        SQUIRREL_VAULT_ROOT: path.join(dataRoot, 'vaults'),
-        SQUIRREL_UPLOADS_DIR: path.join(dataRoot, 'uploads'),
-        SQUIRREL_SHELL_USER_ROOT: path.join(dataRoot, 'users')
-    },
-    stdio: ['ignore', 'pipe', 'pipe']
-});
-
-const stop = () => {
-    if (!child.killed) child.kill('SIGTERM');
-};
-process.once('SIGINT', () => { stop(); process.exit(130); });
-process.once('SIGTERM', () => { stop(); process.exit(143); });
-
-const waitForServer = () => new Promise((resolve, reject) => {
-    let output = '';
-    const timer = setTimeout(() => reject(new Error(`sync_qa_start_timeout:${output}`)), 20_000);
-    const inspect = (chunk) => {
-        output += chunk.toString();
-        if (!output.includes('Fastify server')) return;
-        clearTimeout(timer);
-        resolve();
-    };
-    child.stdout.on('data', inspect);
-    child.stderr.on('data', inspect);
-    child.once('exit', (code) => {
-        clearTimeout(timer);
-        reject(new Error(`sync_qa_server_exit_${code}:${output}`));
-    });
-});
-
-const connect = () => new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/api`);
-    socket.once('open', () => resolve(socket));
-    socket.once('error', reject);
-});
-
-let requestCounter = 0;
-const request = (socket, payload) => new Promise((resolve, reject) => {
-    const requestId = `sync_qa_${++requestCounter}`;
-    const timer = setTimeout(() => reject(new Error(`sync_qa_request_timeout:${payload.action}`)), 8_000);
-    const receive = (raw) => {
-        const message = JSON.parse(raw.toString());
-        if ((message.requestId || message.request_id) !== requestId) return;
-        clearTimeout(timer);
-        socket.off('message', receive);
-        resolve(message);
-    };
-    socket.on('message', receive);
-    socket.send(JSON.stringify({ ...payload, requestId }));
-});
-
-const createPrincipalAndProject = async ({ suffix, username }) => {
-    const socket = await connect();
-    const phone = `+33991${String(suffix).padStart(5, '0')}`;
+const createPrincipalAndProject = async (server, { suffix, username }) => {
+    const user = await connectUser(server, { phone: `+33991${String(suffix).padStart(5, '0')}`, name: username });
     try {
-        const verification = await request(socket, {
-            type: 'auth', action: 'request-phone-verification', phone, purpose: 'enrollment'
-        });
-        assert.equal(verification.otpBypassed, true, JSON.stringify(verification));
-        const account = await request(socket, {
-            type: 'auth', action: 'bootstrap', phone, username, password, visibility: 'public'
-        });
-        assert.equal(account.success, true, JSON.stringify(account));
-        const principalId = account.user.id;
         const projectId = crypto.randomUUID();
-        const eventId = crypto.randomUUID();
-        const committed = await request(socket, {
-            type: 'events', action: 'commit', token: account.token,
-            event: {
-                id: eventId,
-                kind: 'set',
-                atome_id: projectId,
-                actor: { type: 'user', id: principalId },
-                payload: {
-                    props: {
-                        type: 'project', owner_id: principalId, creator_id: principalId,
-                        name: `${username} project`
-                    }
-                }
-            }
+        const committed = await commit(user, {
+            id: crypto.randomUUID(), kind: 'set', atome_id: projectId,
+            payload: { props: { type: 'project', owner_id: user.id, creator_id: user.id, name: `${username} project` } }
         });
         assert.equal(committed.success, true, JSON.stringify(committed));
-        return { principalId, projectId, token: account.token, username };
+        return { principalId: user.id, projectId, token: user.token, username };
     } finally {
-        socket.close();
+        user.close();
     }
 };
 
+const server = await startServer({ port });
+const stop = () => server.stop();
+process.once('SIGINT', async () => { await stop(); process.exit(130); });
+process.once('SIGTERM', async () => { await stop(); process.exit(143); });
 try {
-    await waitForServer();
     for (const host of ['127.0.0.1', lanAddress]) {
         const response = await fetch(`http://${host}:${port}/health`);
         assert.equal(response.ok, true, `health_failed:${host}`);
     }
-    const first = await createPrincipalAndProject({ suffix: 1, username: 'sync_qa_alice' });
-    const second = await createPrincipalAndProject({ suffix: 2, username: 'sync_qa_bob' });
+    const suffix = process.pid % 40000;
+    const first = await createPrincipalAndProject(server, { suffix, username: 'sync_qa_alice' });
+    const second = await createPrincipalAndProject(server, { suffix: suffix + 1, username: 'sync_qa_bob' });
     const httpBase = `http://${lanAddress}:${port}`;
     const manifest = {
-        runId,
-        runtime: 'local-test',
-        host: '0.0.0.0',
-        lanAddress,
-        port,
-        httpBase,
-        wsApi: `ws://${lanAddress}:${port}/ws/api`,
-        wsSync: `ws://${lanAddress}:${port}/ws/sync`,
-        databasePath,
-        dataRoot,
-        accounts: [first, second]
+        runId, runtime: 'local-test', host: '0.0.0.0', lanAddress, port, httpBase,
+        wsApi: `ws://${lanAddress}:${port}/ws/api`, wsSync: `ws://${lanAddress}:${port}/ws/sync`,
+        databasePath: path.join(server.dir, 'adole.db'), dataRoot: server.dir, accounts: [first, second]
     };
+    fs.mkdirSync(runRoot, { recursive: true });
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     console.log(`sync_qa_topology: PASS ${manifestPath}`);
     console.log(`sync_qa_endpoint: ${httpBase}`);
-    if (process.env.SQUIRREL_SYNC_QA_HOLD === '1') {
-        await new Promise((resolve) => child.once('exit', resolve));
-    }
+    if (process.env.SQUIRREL_SYNC_QA_HOLD === '1') await new Promise(() => {});
 } finally {
-    stop();
+    await stop();
 }

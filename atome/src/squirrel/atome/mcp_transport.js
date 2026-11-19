@@ -4,7 +4,7 @@
 // the device (architecture §6.1).
 //
 // transport = { source: { type, layer, ... }, actor: { actor_id | user_id, capabilities?, sandbox_profiles? } }
-//   ui      the person acting in this app (a panel, a gesture, the assistant's confirmation panel)
+//   ui      the person acting in this app (a panel, a gesture, a program's request panel)
 //   voice   a spoken request served by the assistant
 //   ai      the assistant acting on its own reasoning
 //   system  a scheduled duty of this device (an alarm)

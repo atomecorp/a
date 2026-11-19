@@ -58,6 +58,10 @@ export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm, rea
         return invoke('audio_direct_levels', {}).then(function (r) { return (r && r.levels) || []; });
     },
 
+    direct_readings() {
+        return invoke('audio_direct_readings', {}).then(function (r) { return (r && r.readings) || []; });
+    },
+
     direct_cut_tail(moduleId) {
         return invoke('audio_direct_cut_tail', { moduleId: moduleId });
     },

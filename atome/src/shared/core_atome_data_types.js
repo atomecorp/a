@@ -83,6 +83,9 @@ export const CORE_DATA_ATOME_TYPES = Object.freeze([
             // The agreement to eVe using the card's body weight and age (#eVe/domains/user/body_data_runtime.js).
             body_data_consent: { type: 'object', required: ['version', 'granted', 'date'], properties: {
                 version: { type: 'number', enum: [1] }, granted: { type: 'boolean' }, date: { type: 'string' } } },
+            // The acceptance of the CB sociale's recording notice, written by the server (atome-server social/cb/).
+            cb_notice_consent: { type: 'object', required: ['version', 'granted', 'date'], properties: {
+                version: { type: 'number' }, granted: { type: 'boolean' }, date: { type: 'string' } } },
             ...PROGRAM_ACTIVITY_RECORD_SCHEMAS,
             metadata: { type: 'object' },
             payload: { type: 'object' },

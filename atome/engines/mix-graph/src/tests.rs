@@ -199,6 +199,16 @@ fn mute_silences_the_strip_but_not_its_bus_siblings() {
 }
 
 #[test]
+fn a_muted_strip_still_feeds_its_sends() {
+    // R-179: muting a track that sends to a bus leaves the bus fed; only the track's own output goes silent.
+    let mut rig = rig(r#"{"strips":[
+        {"id":"a","muted":true,"chain":[{"id":"s","type":"send","params":{"level_db":-6.0206},"target":{"kind":"strip","id":"bus"}}],
+         "output":{"kind":"main"}},
+        {"id":"bus","output":{"kind":"main"}}]}"#);
+    close(rig.settle(&[("a", Frame::new(1.0, 1.0))]), 0.5, 0.5);
+}
+
+#[test]
 fn reverb_tail_drains_then_stops_and_a_cut_stops_at_once() {
     let json = r#"{"strips":[{"id":"a","chain":[{"id":"r","type":"dsp","effect":"reverb","params":{"mix":1.0,"decay_s":0.5}}],"output":{"kind":"main"}}]}"#;
     let mut rig = rig(json);
@@ -277,11 +287,12 @@ fn parallel_routes_are_latency_aligned() {
         {"id":"fast","output":{"kind":"main"}}]}"#,
     );
     let order = dependency_order(&routes).unwrap();
-    let delays = compensation(&routes, &order, &|module| {
+    let compensated = compensation(&routes, &order, &|module| {
         if module.id == "x" { 64 } else { 0 }
     })
     .unwrap();
-    assert_eq!(delays, vec![vec![0], vec![64]]);
+    assert_eq!(compensated.delays, vec![vec![0], vec![64]]);
+    assert_eq!(compensated.output_latency, 64);
 }
 
 #[test]

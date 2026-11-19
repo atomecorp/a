@@ -17,14 +17,53 @@ impl Visio {
         seat: &(String, String, u64, Router),
         input: &JsonValue,
     ) -> Result<JsonValue, String> {
-        let (room_id, peer_id, serial, _) = seat;
+        let (room_id, peer_id, serial, router) = seat;
         let transport = self.transport(seat, input)?;
         let kind: MediaKind = parsed(input.get("kind"))?;
+        // A CB room carries voices only: a channel's only with the floor (lot L3), an Appel's in duplex, without one
+        // (lot L5).
+        let call = self.cb_call_of(room_id);
+        if self.cb_room_of(room_id) {
+            if kind != MediaKind::Audio {
+                return Err("cb_audio_only".into());
+            }
+            let user = self
+                .with_peer(room_id, peer_id, *serial, |peer| peer.user.clone())
+                .unwrap_or_default();
+            if !call && !self.holds_floor(room_id, &user) {
+                return Err("cb_floor_required".into());
+            }
+        }
         let rtp_parameters = parsed(input.get("rtpParameters"))?;
         let producer = transport
             .produce(ProducerOptions::new(kind, rtp_parameters))
             .await
             .map_err(|e| e.to_string())?;
+        // A CB voice is recorded take by take by the server's own consumer (lot L4), or not produced at all; an Appel's
+        // as `RoomKind::Call` (lot L5), its takes cut at the channel's longest turn as well.
+        if self.cb_room_of(room_id) {
+            let handle = self
+                .with_peer(room_id, peer_id, *serial, |peer| peer.shown.clone())
+                .unwrap_or_default();
+            let cb = &self.social.cb;
+            let longest = cb.channels.limits().floor_ms.saturating_add(2_000);
+            let room_kind = if call {
+                crate::social::cb::live_translate::RoomKind::Call
+            } else {
+                crate::social::cb::live_translate::RoomKind::Cb
+            };
+            crate::social::cb::recordings::tap::attach(
+                cb.recordings.clone(),
+                router,
+                &producer,
+                room_id,
+                room_kind,
+                &handle,
+                longest,
+            )
+            .await
+            .map_err(|error| format!("cb_recording_unavailable:{error}"))?;
+        }
         let id = producer.id().to_string();
         let transport_id = transport.id().to_string();
         let user = self.with_peer(room_id, peer_id, *serial, |peer| {
@@ -35,7 +74,7 @@ impl Visio {
                     transport_id,
                 },
             );
-            peer.user.clone()
+            peer.shown.clone()
         });
         if let Some(user) = user {
             let data = json!({ "type": "newProducer", "producer_id": id, "kind": kind, "peer_user_id": user });
@@ -65,6 +104,10 @@ impl Visio {
             return Err("Cannot consume".into());
         };
         if !router.can_consume(&producer_id, &capabilities) {
+            return Err("Cannot consume".into());
+        }
+        // Two people kept apart (a block either way) never hear each other.
+        if self.apart_from_producer(room_id, peer_id, &js::string(&producer)) {
             return Err("Cannot consume".into());
         }
         let mut options = ConsumerOptions::new(producer_id, capabilities);
@@ -122,10 +165,18 @@ impl Visio {
             if action == "closeProducer" {
                 peer.producers.shift_remove(&id);
             }
-            producer.map(|producer| (producer, peer.user.clone()))
+            producer.map(|producer| (producer, peer.shown.clone(), peer.user.clone()))
         });
-        let (producer, user) = found.flatten().ok_or("Producer not found")?;
+        let (producer, user, account) = found.flatten().ok_or("Producer not found")?;
         let kind = producer.kind();
+        // Resumed in a CB room: only with the floor (lot L3), save in an Appel (lot L5).
+        if action == "resumeProducer"
+            && self.cb_room_of(room_id)
+            && !self.cb_call_of(room_id)
+            && !self.holds_floor(room_id, &account)
+        {
+            return Err("cb_floor_required".into());
+        }
         let data = match action {
             "closeProducer" => {
                 let paused = producer.paused();

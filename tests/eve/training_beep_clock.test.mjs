@@ -17,9 +17,13 @@ beforeAll(() => loadAudioKernels({
     moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
     binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
 }));
+// The reading of the other apps' audio (#music_playing.js) is imported lazily by the sound owner; its module graph (the music
+// sources, the Dashboard's tools) is loaded here once, so no test waits on that transform.
+beforeAll(() => import('../../eVe/domains/music/music_playing.js'), 120_000);
 afterEach(() => { Date.now = realDateNow; });
 
-const createDevice = ({ legs }) => {
+// `music`: whether the person's music plays (no music by default, as the probe answers before its first reading).
+const createDevice = ({ legs, music = async () => false }) => {
     let now = 1000, seed = 7;
     const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
     const win = { performance: { now: () => now }, setTimeout: () => 0, clearTimeout: () => {}, navigator: {} };
@@ -40,7 +44,7 @@ const createDevice = ({ legs }) => {
     executor.scheduleVoices = async (voices) => { scheduled.push(...voices); };
     // A session of `count` beeps, each handed over about a second ahead of its instant, as the session runtime does.
     const session = async (count, { ready = true } = {}) => {
-        const beeps = createTrainingBeeps(win), start = Math.ceil(now) + 2000, from = scheduled.length, moment = { key: `set-${start}`, zero: EPOCH + start };
+        const beeps = createTrainingBeeps(win, { music }), start = Math.ceil(now) + 2000, from = scheduled.length, moment = { key: `set-${start}`, zero: EPOCH + start };
         if (ready) await beeps.ready();
         for (let index = 0; index < count; index += 1) {
             const due = start + index * PERIOD;
@@ -49,7 +53,7 @@ const createDevice = ({ legs }) => {
         }
         return scheduled.slice(from).map((voice, index) => voice.startRenderFrame * 1000 / RATE - (start + index * PERIOD));
     };
-    return { win, session, advance: (ms) => { now += ms; }, frames: () => scheduled.map(voice => voice.startRenderFrame) };
+    return { win, music, session, scheduled, advance: (ms) => { now += ms; }, frames: () => scheduled.map(voice => voice.startRenderFrame) };
 };
 const symmetric = random => { const trip = 10 + random() * 450; return [trip / 2, trip / 2]; };
 const asymmetric = random => { const trip = 10 + random() * 450, toEngine = random() * trip; return [toEngine, trip - toEngine]; };
@@ -107,7 +111,7 @@ test('a moment chained on the previous one keeps its grid (a rest, then its set)
 // grid broke between the sets. While a moment runs, its placer reads the engine's clock at least every 2 s: it stays awake.
 test('a running moment keeps the engine awake: its clock is read at least every 2 s, none read without a moment', async () => {
     const device = createDevice({ legs: () => [1, 1] }), executor = getMediaPlaybackAudioExecutor(device.win);
-    const beeps = createTrainingBeeps(device.win), reads = [];
+    const beeps = createTrainingBeeps(device.win, { music: device.music }), reads = [];
     const read = executor.readRenderClock;
     executor.readRenderClock = async () => { reads.push(device.win.performance.now()); return read(); };
     await beeps.ready();
@@ -120,4 +124,70 @@ test('a running moment keeps the engine awake: its clock is read at least every 
     reads.length = 0;
     for (let tick = 0; tick < 20; tick += 1) { await beeps.place(null, []); device.advance(250); }
     assert.equal(reads.length, 0);
+});
+
+// User, 17 Nov. 2026: under the person's music the tones keep quiet (« on laisse la musique »), a spoken word still sounds;
+// tones already handed to the engine are withdrawn when the music starts, and sound again once it stops.
+test('under the music the tones keep quiet, a spoken word stays; the tones come back without it', async () => {
+    let music = true;
+    const device = createDevice({ legs: () => [1, 1], music: async () => music }), executor = getMediaPlaybackAudioExecutor(device.win);
+    const stopped = [];
+    executor.stopVoice = async voice => { stopped.push(voice); };
+    const beeps = createTrainingBeeps(device.win, { music: device.music });
+    await beeps.ready();
+    const at = Date.now() + 1000, moment = { key: 'rest', zero: Date.now() };
+    const word = { key: 'say:3', at, sound: { assetId: 'training_word_33', startSeconds: 0, seconds: 0.4 } };
+    await beeps.place(moment, [{ key: 'left:3', at, kind: 'short' }, word]);
+    assert.deepEqual(device.scheduled.map(voice => voice.assetId), ['training_word_33']);
+    music = false;
+    await beeps.place(moment, [{ key: 'left:2', at: at + 1000, kind: 'short' }]);
+    assert.deepEqual(device.scheduled.map(voice => voice.assetId), ['training_word_33', 'training_beep_short']);
+    // The music back: the tone still to come is withdrawn.
+    music = true;
+    await beeps.place(moment, [{ key: 'left:1', at: at + 2000, kind: 'short' }]);
+    assert.equal(stopped.length, 1);
+    assert.equal(device.scheduled.length, 2);
+});
+
+// User, 17 Nov. 2026: in the iOS app the music is lowered half a second before a spoken word and given back half a second
+// after its end, never cut short in between.
+// A spoken word on the iOS app's native engine, the other apps' audio playing or not (`otherPlaying`, AVAudioSession):
+// the duck commands it sent, each with its instant.
+const duckedWord = async ({ otherPlaying }) => {
+    const device = createDevice({ legs: () => [1, 1] }), core = getPlayRecordCore(device.win), calls = [], timers = [];
+    let serial = 0;
+    device.win.setTimeout = (run, ms) => { serial += 1; timers.push({ id: serial, run, due: Date.now() + ms }); return serial; };
+    device.win.clearTimeout = id => { const index = timers.findIndex(timer => timer.id === id); if (index >= 0) timers.splice(index, 1); };
+    core.runtime = () => ({ playback: 'ios_native_kira' });
+    core.invoke = () => async command => {
+        if (command === 'audio_other_playing') return { success: true, playing: otherPlaying };
+        calls.push([command, Date.now()]); return { success: true };
+    };
+    // The real reading of the other apps' audio (#music_playing.js), taken fresh by ready().
+    const beeps = createTrainingBeeps(device.win);
+    await beeps.ready();
+    const at = Date.now() + 1200;
+    await beeps.place({ key: 'rest', zero: Date.now() }, [{ key: 'say:3', at, sound: { assetId: 'training_word_33', startSeconds: 0, seconds: 0.4 } }]);
+    while (timers.length) {
+        timers.sort((a, b) => a.due - b.due);
+        const timer = timers.shift();
+        device.advance(Math.max(0, timer.due - Date.now()));
+        await timer.run();
+        await new Promise(resolve => setImmediate(resolve));
+    }
+    return { at, ducked: calls.filter(([command]) => command.startsWith('audio_duck')) };
+};
+
+// Each duck and release reconfigures the whole shared session (setCategory), which glitched the app's own sound (iPad, 17 Nov.
+// 2026): with no other app playing there is no music to lower, so nothing is sent.
+test('no other app playing: the shared audio session is never reconfigured for a word', async () => {
+    const { ducked } = await duckedWord({ otherPlaying: false });
+    assert.deepEqual(ducked, []);
+});
+
+test('the music is lowered 0.5 s before a spoken word and given back 0.5 s after its end', async () => {
+    const { at, ducked } = await duckedWord({ otherPlaying: true });
+    assert.deepEqual(ducked.map(([command]) => command), ['audio_duck_start', 'audio_duck_stop']);
+    assert.ok(Math.abs(ducked[0][1] - (at - 500)) <= 2, `lowered ${at - ducked[0][1]} ms before`);
+    assert.ok(Math.abs(ducked[1][1] - (at + 400 + 500)) <= 2, `given back ${ducked[1][1] - at - 400} ms after`);
 });

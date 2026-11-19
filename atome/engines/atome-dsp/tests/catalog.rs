@@ -43,7 +43,7 @@ fn every_kind_round_trips_its_key_and_builds() {
 #[test]
 fn assets_are_checked() {
     assert!(matches!(
-        ModuleKind::from_key("chorus"),
+        ModuleKind::from_key("wah_wah"),
         Err(CatalogError::UnknownKind(_))
     ));
     assert!(matches!(

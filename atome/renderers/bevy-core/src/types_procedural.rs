@@ -1,4 +1,48 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+
+/// How many Mystic plates one surface record carries (the shader's arrays, `procedural_sdf.wgsl`; the JS
+/// `MYSTIC_MAX_TILES`, `eVe/intuition/mystic/mystic_layout.js`). A grid page on an iPad lays 53 cells, plates and
+/// empty plates together; 24 cut the grid silently (user, 18 Nov. 2026, iPhone and iPad).
+pub const MYSTIC_MAX_TILES: usize = 64;
+
+/// The rows of one Mystic array, `MYSTIC_MAX_TILES` long. serde reads arrays of 32 at most: the rows come as a list,
+/// refused when longer than the shader holds (never cut), the rest left at zero.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MysticRows(pub [[f32; 4]; MYSTIC_MAX_TILES]);
+
+impl Default for MysticRows {
+    fn default() -> Self {
+        Self([[0.0; 4]; MYSTIC_MAX_TILES])
+    }
+}
+
+impl std::ops::Deref for MysticRows {
+    type Target = [[f32; 4]; MYSTIC_MAX_TILES];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for MysticRows {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for MysticRows {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let rows = Vec::<[f32; 4]>::deserialize(deserializer)?;
+        if rows.len() > MYSTIC_MAX_TILES {
+            return Err(serde::de::Error::custom(format!(
+                "mystic_tiles_capacity_exceeded:{}",
+                rows.len()
+            )));
+        }
+        let mut out = Self::default();
+        out.0[..rows.len()].copy_from_slice(&rows);
+        Ok(out)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 pub struct AtomeProceduralSdf {
@@ -82,14 +126,14 @@ pub struct AtomeProceduralSdf {
     // carries the geometry OWNED by each one — `[centerX, centerY, half side, corner
     // radius]` —, `mystic_tile_motion` its flip `[progress, axis, direction,
     // -]`, and `mystic_tile_colors` the family of the tile it reached
-    // `[R, G, B, dose]`. Three arrays rather than one of 48: for the same reason as
+    // `[R, G, B, dose]`. Three arrays rather than one of three times the plates: for the same reason as
     // the drops, the split states by itself what belongs to the tile alone.
     #[serde(default)]
-    pub mystic_tiles: [[f32; 4]; 24],
+    pub mystic_tiles: MysticRows,
     #[serde(default)]
-    pub mystic_tile_motion: [[f32; 4]; 24],
+    pub mystic_tile_motion: MysticRows,
     #[serde(default)]
-    pub mystic_tile_colors: [[f32; 4]; 24],
+    pub mystic_tile_colors: MysticRows,
     // `[tile count, hole dose, shadow blur, -]`. The hole is the menu plate laid
     // flat in the cell a turning tile leaves behind; the dose is how opaque it is.
     #[serde(default)]
@@ -197,18 +241,17 @@ impl AtomeProceduralSdf {
                 ]
             }),
             liquid_drop_count: finite_or(self.liquid_drop_count, 0.0).clamp(0.0, 24.0),
-            // One mystic tile: its box, its flip and its family. The cap
-            // is the same as the shader's, so an extra tile is ignored
-            // rather than written past the array.
-            mystic_tiles: self.mystic_tiles.map(|tile| {
+            // One mystic tile: its box, its flip and its family (a record longer than the
+            // shader's arrays is refused when read, `MysticRows`).
+            mystic_tiles: MysticRows(self.mystic_tiles.0.map(|tile| {
                 [
                     finite_or(tile[0], 0.0),
                     finite_or(tile[1], 0.0),
                     finite_or(tile[2], 0.0).max(0.0),
                     finite_or(tile[3], 0.0).max(0.0),
                 ]
-            }),
-            mystic_tile_motion: self.mystic_tile_motion.map(|motion| {
+            })),
+            mystic_tile_motion: MysticRows(self.mystic_tile_motion.0.map(|motion| {
                 [
                     finite_or(motion[0], 0.0).clamp(0.0, 1.0),
                     finite_or(motion[1], 0.0).clamp(0.0, 1.0),
@@ -219,17 +262,18 @@ impl AtomeProceduralSdf {
                     },
                     finite_or(motion[3], 0.0),
                 ]
-            }),
-            mystic_tile_colors: self.mystic_tile_colors.map(|color| {
+            })),
+            mystic_tile_colors: MysticRows(self.mystic_tile_colors.0.map(|color| {
                 [
                     finite_or(color[0], 0.0).clamp(0.0, 1.0),
                     finite_or(color[1], 0.0).clamp(0.0, 1.0),
                     finite_or(color[2], 0.0).clamp(0.0, 1.0),
-                    finite_or(color[3], 0.0).clamp(0.0, 1.0),
+                    // Above 1: a pressed-in (selected) plate, its family dose read as 1 by the shader.
+                    finite_or(color[3], 0.0).clamp(0.0, 2.0),
                 ]
-            }),
+            })),
             mystic_count: [
-                finite_or(self.mystic_count[0], 0.0).clamp(0.0, 24.0),
+                finite_or(self.mystic_count[0], 0.0).clamp(0.0, MYSTIC_MAX_TILES as f32),
                 finite_or(self.mystic_count[1], 0.0).clamp(0.0, 1.0),
                 finite_or(self.mystic_count[2], 0.0).clamp(0.0, 64.0),
                 finite_or(self.mystic_count[3], 0.0).max(0.0),

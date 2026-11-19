@@ -35,6 +35,7 @@ extension auv3Utils {
             if let eventList = realtimeEventListHead?.pointee {
                 strongSelf.processMIDIEvents(eventList)
             }
+            strongSelf.flushHostMIDIOutput()
 
             let bufferList = AudioBufferListWrapper(ptr: outputData)
             let renderStartFrame = strongSelf.audioDebugRenderFrameCursor
@@ -302,7 +303,8 @@ extension auv3Utils {
                         }
                     } else {
                         // A strip whose IN is the host plays it through its effects instead of the dry copy.
-                        strongSelf.routeHostInput(bufferList: bufferList, frameCount: frameCount, channels: outChannels,
+                        strongSelf.routeHostInput(bufferList: bufferList, hostTime: timestamp.pointee.mHostTime,
+                                                  frameCount: frameCount, channels: outChannels,
                                                   interleaved: outInterleaved, isFloat32: outIsFloat32)
                     }
                 } else {
@@ -429,7 +431,7 @@ extension auv3Utils {
             let currentTime = CACurrentMediaTime()
             if currentTime - strongSelf.lastTransportCheck >= 0.05 {
                 if strongSelf.shouldPollTransport() { // nouvelle condition unifiée
-                    strongSelf.checkHostTransport()
+                    strongSelf.checkHostTransport(hostTime: timestamp.pointee.mHostTime)
                 }
                 strongSelf.lastTransportCheck = currentTime
             }

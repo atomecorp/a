@@ -70,11 +70,12 @@ midir = "0.11"
 rusqlite.workspace = true
 # The one Atome store (schema, commit, projection, history, ACL, type gate).
 atome-store = { path = "../../atome/engines/atome-store" }
+# The clock and the date texts the store and the Web server write.
+atome-js-values = { path = "../../atome/engines/js-values" }
 # The server behaviour shared with the Web server (CORS, request id, static roots).
 atome-server = { path = "../../atome/servers/atome-server", default-features = false }
 bcrypt = "0.15"
 uuid = { version = "1.8", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
 jsonwebtoken = "9"
 rand = "0.8"
 sha2.workspace = true
@@ -96,6 +97,10 @@ dotenvy = "0.15"
 # and native/lib/android/<abi> (official vosk-android 0.3.75, packaged by gen/android/app/build.gradle.kts).
 [target.'cfg(not(target_os = "ios"))'.dependencies]
 atome-audio-engine = { path = "../../atome/engines/audio-engine", features = ["voice"] }
+
+# Windows: the engine offers the PC's ASIO drivers beside WASAPI exclusive (needs the ASIO SDK).
+[target.'cfg(target_os = "windows")'.dependencies]
+atome-audio-engine = { path = "../../atome/engines/audio-engine", features = ["asio"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3.7.0", features = ["OSX_10_15"] }

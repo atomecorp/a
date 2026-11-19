@@ -104,6 +104,9 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
             surface_height,
         )?;
         insert_video_external_texture_component_for_node(world, entity, &node);
+        if let Some(effects) = node.effects.as_deref() {
+            crate::media_fx::apply_media_effects(world, entity, effects)?;
+        }
         entity
     };
     world
@@ -329,6 +332,20 @@ pub fn spawn_node_with_texture_handle(
             } else {
                 insert_procedural_sdf(world, entity, [width, height], contract)?;
             }
+            entity
+        }
+        // A 3D scene: its camera renders into the image this quad shows (scene3d/).
+        "scene3d" => {
+            let entity = world
+                .spawn(node_base_components(
+                    &node,
+                    width,
+                    height,
+                    surface_width,
+                    surface_height,
+                ))
+                .id();
+            crate::scene3d::insert_scene3d(world, entity, &node, [width, height])?;
             entity
         }
         // The Sport card's ring around its disc (progress_ring.rs).

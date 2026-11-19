@@ -350,6 +350,14 @@ impl Hooks {
         }
     }
 
+    /// The job's id (an idempotency key's part).
+    pub fn job_id(&self) -> String {
+        self.job.lock().expect("social job")["id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    }
+
     fn remote(&self, remote: &JsonValue) -> JsonValue {
         delivery(&self.job, &self.destination, |delivery| {
             merged_remote(delivery, remote)

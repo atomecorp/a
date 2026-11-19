@@ -117,12 +117,19 @@ export const explainBevyUiNodeTarget = (page, { nodeId = '', treeId = '' } = {})
     };
 }, { expectedId: String(nodeId || ''), expectedTree: String(treeId || '') });
 
+// A tool is touched the way a person touches it: once it shows whole inside the rail's viewport. A sliver left
+// at the rail's edge is not a target (a touch there, while the rail still glides, only stops the glide, rule 12).
 const findContextualTool = async (page, ids) => {
+    const rail = await page.evaluate(async () => (await import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js'))
+        .getAtomeContextualEditApi()?.readState?.()?.railLayout || null);
     for (const nodeId of ids) {
         const target = await findBevyUiNodeTarget(page, {
             nodeId, treeId: 'eve_bevy_panel_atome_contextual_edit', step: 2
         });
-        if (target) return target;
+        const box = target?.hit?.box;
+        const whole = !rail || !box || (box.y >= rail.y - 0.5
+            && box.y + box.height <= rail.y + (rail.railHeight || rail.itemSize) + 0.5);
+        if (target && whole) return target;
     }
     return null;
 };
@@ -159,10 +166,12 @@ export const contextualTool = async (page, ids) => {
     }
     // A scrolled rail settles (snap) after the wheel: return the case once its
     // position holds, so the click lands where it is found.
-    for (let settle = 0; target && settle < 10; settle += 1) {
+    // Three still samples in a row: a glide's last pixels move less than one per sample.
+    let still = 0;
+    for (let settle = 0; target && settle < 20 && still < 3; settle += 1) {
         await wait(120);
         const again = await findContextualTool(page, ids);
-        if (again && Math.abs(again.x - target.x) < 1 && Math.abs(again.y - target.y) < 1) return again;
+        still = again && Math.abs(again.x - target.x) < 1 && Math.abs(again.y - target.y) < 1 ? still + 1 : 0;
         target = again;
     }
     return target;
@@ -243,7 +252,25 @@ export const selectListRow = async (page, id) => {
         await wait(350);
         target = await listNode(page, nodeId);
     }
-    assert(target, `list_select_target_missing:${id}`);
+    if (!target) {
+        // The row the state lists but the tree does not draw: the rows the renderer was sent and holds, to name the cause.
+        const seen = await page.evaluate(async () => {
+            const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+            const runtime = window.eveBevyUiRuntime;
+            const rowsOf = (root) => {
+                const names = [];
+                const walk = (node) => { if (!node) return; if (/^project_view_list_entry_\d+$/.test(String(node.id || ''))) names.push(node.id); (node.children || []).forEach(walk); };
+                walk(root);
+                return names;
+            };
+            const content = readProjectViewSurfaceState().content || {};
+            return { windowState: content.windowState || null, entries: (content.entries || []).length,
+                drawnRows: rowsOf(runtime?.state?.trees?.get('eve_bevy_ui_project_view')?.tree?.root),
+                renderPending: runtime?.state?.renderQueues?.has('eve_bevy_ui_project_view') === true,
+                scroll: runtime?.captureTreeScroll?.('eve_bevy_ui_project_view') || null };
+        });
+        throw new Error(`list_select_target_missing:${id}:index=${index}:${JSON.stringify(seen)}`);
+    }
     const before = await page.evaluate(async (expected) => {
         const [{ getAtomeContextualEditApi }, selection] = await Promise.all([
             import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js'),
@@ -326,6 +353,32 @@ export const moleculePlaybackState = (page, moleculeId) => page.evaluate(async (
     return { owner: '', playing: false, status: view.status, native };
 }, moleculeId);
 
+// A short Molecule (a few seconds) can start and end between two of the probe's polls on a loaded machine: the
+// probe records every state the transport publishes (PROJECT_VIEW_TRANSPORT_STATE_EVENT) from the click on and
+// judges the playback from that record, not from a sample taken whenever the page happens to answer.
+const traceTransport = (page) => page.evaluate(async () => {
+    const { PROJECT_VIEW_TRANSPORT_STATE_EVENT } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+    window.__probeTransportTrace?.stop?.();
+    const entries = [];
+    const listener = (event) => {
+        const detail = event.detail || {};
+        entries.push({ status: detail.status, playing: detail.playing === true, selectionIds: [...(detail.selectionIds || [])],
+            activeLeafIds: [...(detail.activeLeafIds || [])], position: Number(detail.positionSeconds || 0) });
+    };
+    window.addEventListener(PROJECT_VIEW_TRANSPORT_STATE_EVENT, listener);
+    window.__probeTransportTrace = { entries, stop: () => window.removeEventListener(PROJECT_VIEW_TRANSPORT_STATE_EVENT, listener) };
+});
+
+export const playbackTrace = (page, moleculeId, memberIds) => page.evaluate(({ id, members }) => {
+    const entries = window.__probeTransportTrace?.entries || [];
+    const playing = entries.filter((entry) => entry.playing && entry.selectionIds.includes(id)
+        && entry.activeLeafIds.some((leaf) => members.includes(leaf)));
+    const first = playing[0] || null;
+    return { started: first, progressed: first ? playing.find((entry) => entry.position > first.position) || null : null,
+        maxActiveLeaves: Math.max(0, ...playing.map((entry) => entry.activeLeafIds.length)),
+        playingStates: playing.length, publishedStates: entries.length };
+}, { id: moleculeId, members: memberIds });
+
 export const startMoleculePlayback = async (page, moleculeId, memberIds) => {
     const play = await moleculePlayTool(page);
     if (!play) {
@@ -341,6 +394,7 @@ export const startMoleculePlayback = async (page, moleculeId, memberIds) => {
         const hit = window.eveBevyUiRuntime?.hitTestAtClientPoint?.({ surface: document.getElementById('eve_surface_project'), clientX: x, clientY: y });
         return hit ? { nodeId: hit.nodeId, treeId: hit.treeId } : null;
     }, play);
+    await traceTransport(page);
     await clickCanvasTarget(page, play);
     const started = await waitFor(page, async ({ id, members }) => {
         const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
@@ -350,8 +404,10 @@ export const startMoleculePlayback = async (page, moleculeId, memberIds) => {
         const state = projectViewTransport.read();
         const native = ensureMoleculeEngine().getSession(`molecule_transport_${id}`);
         const nativePlaying = native?.getTransportState?.().playing === true && (native.getState().active_clips || []).length > 0;
-        return { ok: (state.playing && state.selectionIds.includes(id)
-            && state.activeLeafIds.some((item) => members.includes(item))) || nativePlaying, state, nativePlaying,
+        const traced = (window.__probeTransportTrace?.entries || []).find((entry) => entry.playing
+            && entry.selectionIds.includes(id) && entry.activeLeafIds.some((item) => members.includes(item))) || null;
+        const live = state.playing && state.selectionIds.includes(id) && state.activeLeafIds.some((item) => members.includes(item));
+        return { ok: live || Boolean(traced) || nativePlaying, state: live || !traced ? state : traced, nativePlaying,
             rail: { activeAtomeId: rail.activeAtomeId, activeKind: rail.activeKind, palette: rail.activePaletteKey, scroll: rail.railScrollOffset },
             failures: (window.__eveToolFailures || []).slice(-3),
             routing: (window.atome?.tools?.gatewayRoutingLog || []).slice(-4).map((entry) => JSON.stringify(entry).slice(0, 400)) };

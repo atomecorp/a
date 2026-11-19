@@ -136,6 +136,10 @@ extension WebViewManager {
                         WebViewManager.reportBootFailure(reason: reason)
                         return
                     }
+                    if action == "externalDisplay" {
+                        ExternalDisplayRelay.shared.receive(body)
+                        return
+                    }
                     if action == "bootPresentationReady" {
                         let version = (body["version"] as? NSNumber)?.intValue ?? 0
                         guard version == 1 else {
@@ -403,7 +407,13 @@ extension WebViewManager {
                     if action == "sendMidi" {
                         if let bytes = body["bytes"] as? [Int] {
                             let u8 = bytes.compactMap { UInt8(exactly: $0 & 0xFF) }
-                            WebViewManager.midiController?.sendRaw(bytes: u8)
+                            // In a host, Atome's MIDI goes out of the plugin's own MIDI output (the host routes it);
+                            // standalone, to the CoreMIDI destinations.
+                            if WebViewManager.runningInExtension, let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
+                                au.sendHostMIDIOutput(u8)
+                            } else {
+                                WebViewManager.midiController?.sendRaw(bytes: u8)
+                            }
                         }
                         return
                     }

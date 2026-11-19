@@ -715,9 +715,18 @@ test('BevyUI image hydration uses a three-texture frame budget in tree order', a
 
 test('BevyUI image hydration cannot stall when the host does not deliver animation frames', async () => {
     const surface = createSurface();
+    // The surface window's timers on a driven clock: the frames never come, so only the bounded fallback can release
+    // each wait, and the test sees it do so. A wall-clock bound (< 100 ms) measured the machine instead: on 17 Nov.
+    // 2026, under a load of ~600 on 8 cores, the same hydration took 13 ms most runs and up to 112 ms on others, its
+    // 5 ms timers firing 30-45 ms late while its own code ran 50 times slower.
+    const win = surface.ownerDocument.defaultView;
+    const pending = new Map();
+    let nextTimer = 0;
+    win.setTimeout = (callback, ms = 0) => { nextTimer += 1; pending.set(nextTimer, { callback, ms }); return nextTimer; };
+    win.clearTimeout = (id) => { pending.delete(id); };
     let requestedFrames = 0;
-    const startedAt = performance.now();
-    const hydrated = await hydrateImageTree({
+    let settled = false;
+    const hydration = hydrateImageTree({
         surface,
         imageResolverFactory: () => async () => ({
             width: 1,
@@ -739,11 +748,23 @@ test('BevyUI image hydration cannot stall when the host does not deliver animati
                 style: { size: [12, 12] }
             }))
         }
-    });
+    }).then((tree) => { settled = true; return tree; });
+
+    const fallbacks = [];
+    for (let turn = 0; turn < 50 && !settled; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (settled || pending.size === 0) continue;
+        const [id, timer] = [...pending][0];
+        pending.delete(id);
+        fallbacks.push(timer.ms);
+        timer.callback();
+    }
+    assert.equal(settled, true, 'the hydration ends without a single host frame');
+    const hydrated = await hydration;
 
     assert.equal(hydrated.children.length, 7);
     assert.equal(requestedFrames, 2, 'the normal frame pacing contract must remain active');
-    assert.equal(performance.now() - startedAt < 100, true, 'two suspended host frames must use the bounded fallback');
+    assert.deepEqual(fallbacks, [5, 5], 'two suspended host frames must use the bounded fallback');
 });
 
 test('BevyUI live image hydration resolves an already-mounted tree without frame-budget waits', async () => {

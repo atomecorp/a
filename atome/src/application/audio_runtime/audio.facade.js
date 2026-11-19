@@ -71,7 +71,7 @@ import './auv3_host_bridge.js';
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instances', 'set_voice_end', 'mix_apply', 'mix_levels', 'mix_cut_tail', 'mix_asset_load', 'mix_asset_unload', 'mix_module_state', 'mix_output_devices', 'mix_live_push', 'direct_apply', 'direct_levels', 'direct_cut_tail', 'direct_module_state', 'direct_measure_latency', 'instrument_sample_load', 'instrument', 'wake', 'hold']);
+  const immediateNames = new Set(['create_clip', 'probe_duration', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instances', 'set_voice_end', 'mix_apply', 'mix_levels', 'mix_readings', 'mix_cut_tail', 'mix_asset_load', 'mix_asset_unload', 'mix_module_state', 'mix_output_devices', 'mix_live_push', 'mix_record_start', 'mix_record_drain', 'mix_record_stop', 'mix_record_release', 'direct_apply', 'direct_levels', 'direct_readings', 'direct_cut_tail', 'direct_module_state', 'direct_measure_latency', 'instrument_sample_load', 'instrument', 'wake', 'hold']);
   const callBackendMethod = (name, arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       return false;
@@ -147,6 +147,7 @@ import './auv3_host_bridge.js';
   // Mixer graph: apply a compiled program, read strip meters, cut an effect tail.
   audio.mix_apply = proxyCall('mix_apply');
   audio.mix_levels = proxyCall('mix_levels');
+  audio.mix_readings = proxyCall('mix_readings');
   audio.mix_cut_tail = proxyCall('mix_cut_tail');
   audio.mix_asset_load = proxyCall('mix_asset_load');
   audio.mix_asset_unload = proxyCall('mix_asset_unload');
@@ -158,6 +159,7 @@ import './auv3_host_bridge.js';
   audio.instrument_sample_load = proxyCall('instrument_sample_load');
   audio.instrument = proxyCall('instrument');
   audio.direct_levels = proxyCall('direct_levels');
+  audio.direct_readings = proxyCall('direct_readings');
   audio.direct_cut_tail = proxyCall('direct_cut_tail');
   audio.direct_module_state = proxyCall('direct_module_state');
   audio.direct_measure_latency = proxyCall('direct_measure_latency');

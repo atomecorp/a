@@ -18,6 +18,7 @@ final class WatchLink: ObservableObject {
     @Published private(set) var reachable = false
     private(set) var pictures: [String: UIImage] = [:]
     private(set) var atom: UIImage?
+    private(set) var wallpaper: UIImage?
 
     var assistantOn: Bool { (model?.assistant ?? "closed") != "closed" }
 
@@ -104,8 +105,13 @@ final class WatchLink: ObservableObject {
         guard let url = Self.catalogURL, FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             let decoded = try JSONDecoder().decode(WatchCatalog.self, from: Data(contentsOf: url))
+            // The ground is part of the catalog: a wallpaper that does not read is a broken catalog, never a black screen instead.
+            guard let ground = Data(base64Encoded: decoded.wallpaper).flatMap(UIImage.init(data:)) else {
+                return Self.log.error("Watch catalog not read: its wallpaper does not decode")
+            }
             pictures = decoded.pictures.compactMapValues { Data(base64Encoded: $0).flatMap(UIImage.init(data:)) }
             atom = Data(base64Encoded: decoded.atom).flatMap(UIImage.init(data:))
+            wallpaper = ground
             catalog = decoded
         } catch {
             Self.log.error("Watch catalog not read: \(error.localizedDescription, privacy: .public)")

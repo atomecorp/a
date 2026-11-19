@@ -11,7 +11,7 @@ use atome_instrument::sampler::{PARAMS, POLYPHONY};
 use atome_instrument::zone::MAX_OUTPUTS;
 use atome_instrument::{
     Draw, Keymap, LoopMode, LoopSpec, Playback, SampleBank, SampleData, Sampler, Segment, Stack,
-    Switches, Zone, ZoneFilter,
+    Switches, Zone, ZoneEnvelope, ZoneFilter,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -29,7 +29,11 @@ pub struct InstrumentSpec {
     // Its stereo outputs (D-S2): each zone sounds on one, each strip may play one.
     #[serde(default = "one")]
     pub outputs: usize,
+    #[serde(default)]
     pub zones: Vec<ZoneSpec>,
+    // A synth instead of zones (instrument_synth.rs).
+    #[serde(default)]
+    pub synth: Option<crate::instrument_synth::SynthSpec>,
     // Keys that choose which switched zones sound (a bank's articulations).
     #[serde(default)]
     pub keyswitch: Option<KeyswitchSpec>,
@@ -90,6 +94,17 @@ pub struct ZoneSpec {
     pub switch: Option<u8>,
     #[serde(default)]
     pub filter: Option<FilterSpec>,
+    // Its own amplitude envelope (a bank region's); none: the instrument's params.
+    #[serde(default)]
+    pub envelope: Option<EnvelopeSpec>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct EnvelopeSpec {
+    pub attack_ms: f32,
+    pub decay_ms: f32,
+    pub sustain: f32,
+    pub release_ms: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -211,7 +226,7 @@ fn stack(spec: &StackSpec) -> Result<Stack, String> {
 }
 
 // The instrument's settings in the engine's units ("mode" is poly, mono or legato).
-fn param_values(spec: &InstrumentSpec) -> Result<[f32; PARAMS.len()], String> {
+pub(crate) fn param_values(spec: &InstrumentSpec) -> Result<[f32; PARAMS.len()], String> {
     let mut values = PARAMS.map(|param| param.default);
     for (name, value) in &spec.params {
         let param = PARAMS
@@ -337,6 +352,12 @@ pub fn build_sampler(
             built.one_shot = zone.one_shot;
             built.switch = zone.switch;
             built.filter = zone.filter.as_ref().map(filter).transpose()?;
+            built.envelope = zone.envelope.map(|own| ZoneEnvelope {
+                attack_ms: own.attack_ms,
+                decay_ms: own.decay_ms,
+                sustain: own.sustain,
+                release_ms: own.release_ms,
+            });
             built.composed = zone
                 .composed
                 .as_ref()

@@ -14,7 +14,7 @@ atome-dsp = { path = "../atome-dsp" }
 atome-instrument = { path = "../atome-instrument" }
 kira.workspace = true
 serde.workspace = true
-symphonia = { workspace = true, optional = true, features = ["aac", "isomp4"] }
+symphonia = { workspace = true, optional = true, features = ["aac", "isomp4", "aiff", "pcm"] }
 
 [features]
 # The clip decoder of the engines that load files (native and Web playback);

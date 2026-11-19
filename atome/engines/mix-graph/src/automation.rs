@@ -171,12 +171,12 @@ pub fn primary_param(kind: &str) -> Option<&'static str> {
     }
 }
 
-enum Slot {
+pub(crate) enum Slot {
     Value,
     Parameter(usize, &'static atome_dsp::ParamSpec),
 }
 
-fn slot_of(spec: &ModuleSpec, param: &str) -> Result<Slot, String> {
+pub(crate) fn slot_of(spec: &ModuleSpec, param: &str) -> Result<Slot, String> {
     if primary_param(&spec.kind) == Some(param) {
         return Ok(Slot::Value);
     }
@@ -190,7 +190,7 @@ fn slot_of(spec: &ModuleSpec, param: &str) -> Result<Slot, String> {
         return Ok(Slot::Parameter(index, entry));
     }
     Err(format!(
-        "mix automation {}#{param} names no parameter of the module",
+        "mix module {}#{param} names no parameter of the module",
         spec.id
     ))
 }
@@ -244,6 +244,10 @@ impl Automation {
     }
 
     // Render thread: every lane of a playing transport takes its value at `frame`.
+    pub fn is_empty(&self) -> bool {
+        self.lanes.is_empty()
+    }
+
     pub fn run(&self, frame: u64, sample_rate: f64) {
         for lane in &self.lanes {
             let Some(value) = lane

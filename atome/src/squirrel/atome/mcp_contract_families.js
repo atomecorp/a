@@ -1,7 +1,7 @@
 import { TV_COMMANDS, validateTvInput } from '../tv/contracts.js';
 import { YOUTUBE_COMMANDS, validateYoutubeInput } from '../youtube/contracts.js';
 import { PEERTUBE_COMMANDS, validatePeertubeInput } from '../peertube/contracts.js';
-import { SOCIAL_COMMANDS, validateSocialInput } from '../social/contracts.js';
+import { SOCIAL_CONFIRMED_COMMANDS, SOCIAL_MCP_COMMANDS, validateSocialInput } from '../social/contracts.js';
 import { APPLE_MUSIC_COMMANDS, validateAppleMusicInput } from '../apple_music/contracts.js';
 import { MUSIC_ASSISTANT_INSTRUCTIONS, MUSIC_COMMANDS, validateMusicInput } from '../music/contracts.js';
 import { GPS_ASSISTANT_INSTRUCTIONS, GPS_COMMANDS, validateGpsInput } from '../gps/contracts.js';
@@ -54,6 +54,7 @@ import { RESULTS_SEND_ASSISTANT_INSTRUCTIONS, RESULTS_SEND_COMMANDS, validateRes
 import { STRAVA_ASSISTANT_INSTRUCTIONS, STRAVA_COMMANDS, validateStravaInput } from '../strava/contracts.js';
 import { HEALTH_SYNC_ASSISTANT_INSTRUCTIONS, HEALTH_SYNC_COMMANDS, HEALTH_SYNC_CONFIRMED_COMMANDS, validateHealthSyncInput } from '../health/health_sync_contracts.js';
 import { MCP_ACCESS_ASSISTANT_INSTRUCTIONS, MCP_ACCESS_COMMANDS, MCP_ACCESS_CONFIRMED_COMMANDS, validateMcpAccessInput } from '../mcp_access/contracts.js';
+import { BILLING_ASSISTANT_INSTRUCTIONS, BILLING_COMMANDS, BILLING_CONFIRMED_COMMANDS, validateBillingInput } from '../billing/contracts.js';
 import { OBJECTIVE_NETWORK_ASSISTANT_INSTRUCTIONS, OBJECTIVE_NETWORK_COMMANDS, OBJECTIVE_NETWORK_CONFIRMED_COMMANDS, validateObjectiveNetworkInput } from '../objective_network/contracts.js';
 
 // The one list of the domain command families. Direct MCP handlers, the access policy, the
@@ -64,15 +65,16 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'tv', commands: TV_COMMANDS, validate: validateTvInput, noClient: 'NO_ACTIVE_CLIENT', preload: ['tv.open_channel'] },
     { id: 'youtube', commands: YOUTUBE_COMMANDS, validate: validateYoutubeInput, noClient: 'NO_ACTIVE_VIDEO', preload: ['youtube.play'] },
     { id: 'peertube', commands: PEERTUBE_COMMANDS, validate: validatePeertubeInput, noClient: 'NO_ACTIVE_VIDEO' },
-    { id: 'social', commands: SOCIAL_COMMANDS, validate: validateSocialInput, noClient: 'social_handoff_unavailable',
-        confirmed: ['social.connect', 'social.publish', 'social.disconnect'] },
+    // Social networks (R-190): the accounts, a publication, a reply to a received message (confirmed: it speaks for the person).
+    { id: 'social', commands: SOCIAL_MCP_COMMANDS, validate: validateSocialInput, noClient: 'social_handoff_unavailable',
+        confirmed: SOCIAL_CONFIRMED_COMMANDS },
     { id: 'apple_music', commands: APPLE_MUSIC_COMMANDS, validate: validateAppleMusicInput, noClient: 'HOST_UNSUPPORTED' },
     { id: 'music', commands: MUSIC_COMMANDS, validate: validateMusicInput, noClient: 'AUTH_REQUIRED',
         instructions: MUSIC_ASSISTANT_INSTRUCTIONS, preload: ['music.get_state', 'music.play', 'music.search'] },
     { id: 'gps', commands: GPS_COMMANDS, validate: validateGpsInput, noClient: 'HOST_UNSUPPORTED',
         instructions: GPS_ASSISTANT_INSTRUCTIONS, preload: ['gps.navigate_to', 'gps.stop_navigation'] },
     { id: 'training', commands: TRAINING_COMMANDS, validate: validateTrainingInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['training.schedule_week', 'training.take_ready_program', 'training.remove_media', 'training.remove_discipline', 'training.remove_activity'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['training.schedule_week', 'training.take_ready_program', 'training.remove_media', 'training.remove_discipline', 'training.remove_activity', 'training.remove_session'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
         preload: ['training.prepare_session', 'training.session_transition', 'training.get_session'] },
     { id: 'brick_session', commands: BRICK_SESSION_COMMANDS, validate: validateBrickSessionInput, noClient: 'AUTH_REQUIRED',
         instructions: BRICK_SESSION_ASSISTANT_INSTRUCTIONS, preload: ['brick_session.prepare', 'brick_session.transition', 'brick_session.get'] },
@@ -218,7 +220,10 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // The objectives network (R-104 D8): being findable, a report, a block, the end of a link and leaving are the user's to confirm.
     { id: 'objective_network', commands: OBJECTIVE_NETWORK_COMMANDS, validate: validateObjectiveNetworkInput, noClient: 'AUTH_REQUIRED',
         confirmed: OBJECTIVE_NETWORK_CONFIRMED_COMMANDS, instructions: OBJECTIVE_NETWORK_ASSISTANT_INSTRUCTIONS,
-        preload: ['objective_network.people_open', 'objective_network.visibility_set', 'objective_network.network_set'] }
+        preload: ['objective_network.people_open', 'objective_network.visibility_set', 'objective_network.network_set'] },
+    // The money screens (R-193): a payment, a withdrawal and every administrator's change are the user's to confirm.
+    { id: 'billing', commands: BILLING_COMMANDS, validate: validateBillingInput, noClient: 'AUTH_REQUIRED',
+        confirmed: BILLING_CONFIRMED_COMMANDS, instructions: BILLING_ASSISTANT_INSTRUCTIONS, preload: ['billing.wallet', 'billing.open'] }
 ].map(family => Object.freeze({ confirmed: [], preload: [], instructions: '', ...family, layer: `atome_mcp_${family.id}` })));
 
 export const MCP_CONTRACT_COMMANDS = Object.freeze(MCP_CONTRACT_FAMILIES.flatMap(family => family.commands));

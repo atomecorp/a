@@ -1,0 +1,18 @@
+[package]
+name = "atome-usd-wasm"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The browser's OpenUSD reader for the scene3d atome, its own WASM module loaded when a 3D scene is first shown or imported: a file's scene encoded for the renderer, and its report"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+atome-usd = { path = "../../../atome/engines/atome-usd", features = ["reader"] }
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

@@ -13,7 +13,12 @@ window.eveBevyUiRuntime = {
     unmountTree: async ({ id }) => { projectedTrees.delete(id); return { ok: true }; },
     updateTreeMotion: async () => ({ ok: true })
 };
+// A fresh device: no phone login, no account stored here, no pairing or recovery under way
+// (first_launch_auth_flow.js#resume reads all four before the login choice).
 window.AdoleAPI.auth.getPendingPhoneLogin = async () => null;
+window.AdoleAPI.auth.listLocalAccounts = async () => [];
+window.AdoleAPI.auth.getPendingPairing = async () => null;
+window.AdoleAPI.auth.getPendingRecovery = async () => null;
 const authView = document.getElementById('view') || document.createElement('div'); authView.id = 'view'; document.body.appendChild(authView);
 
 
@@ -84,13 +89,13 @@ assert.equal(isTerminalWorkspaceBootFailure({ error: 'bevy_surface_not_ready' })
 const kickstartSource = readFileSync(new URL('../../atome/src/squirrel/kickstart.js', import.meta.url), 'utf8');
 const intuitionSource = readFileSync(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
 const productRuntimeSource = readFileSync(new URL('../../eVe/intuition/ribbon/bevy_ui_product_runtime.js', import.meta.url), 'utf8');
-const mysticContextItemsSource = readFileSync(new URL('../../eVe/intuition/runtime/eve_intuition/mystic_context_items_runtime.js', import.meta.url), 'utf8');
 
 assert.match(kickstartSource, /background:\s*'transparent'/, '#view must stay transparent during boot and cannot emit the gray #272727 frame');
 assert.doesNotMatch(kickstartSource, /background:\s*'#272727'/, '#view must not restore the boot gray background');
 assert.match(productRuntimeSource, /createBevyUiMainMenuRuntime\(\{[\s\S]*?open:\s*false/, 'BevyUI main menu must be created closed so no toolbox frame appears before login choice');
-assert.match(mysticContextItemsSource, /toggleWorkspaceDashboardAndMainMenu\(\{\s*source:\s*'modern_mystic_dashboard'\s*\}\)/, 'the BevyUI Atome tool must use the workspace Dashboard toggle');
-assert.match(mysticContextItemsSource, /import\('\.\.\/\.\.\/tools\/user_workspace_surface_runtime\.js'\)[\s\S]*?toggleWorkspaceDashboardAndMainMenu/, 'the canonical Dashboard toggle must stay owned by the workspace surface runtime');
+// The Dashboard toggle and the Pro-home branches were retired on 2026-10-20 (FRAMEWORK_STATE « Dashboard style: eVe
+// Basic and eVe Pro only »): the product menu's Dashboard tool opens the Dashboard through the workspace surface runtime.
+assert.match(productRuntimeSource, /openDashboard\s*=\s*async[^\n]*import\('\.\.\/tools\/user_workspace_surface_runtime\.js'\)\)\.openWorkspaceDashboardAndMainMenu\(/, 'the product menu must open the Dashboard through the workspace surface runtime');
 assert.doesNotMatch(intuitionSource, /void\s+toggleDashboardRuntime\(\)/, 'main handle must not call the low-level dashboard toggle directly');
 
 const runtime = createMainMenuAuthRuntime({
@@ -115,10 +120,16 @@ assert.equal((await import('../../eVe/domains/user/first_launch_runtime.js')).ge
 assert.equal(loginMountedEventCount, 1, 'login choice must publish a mounted event for early hidden warmups');
 assert.equal(loginVisibleEventCount, 0, 'boot readiness must not depend on the removed CSS-animation route');
 assert.deepEqual(menuUpdates.at(-1)?.toolbox?.children, [], 'disconnected boot must keep toolbox content empty before workspace');
-assert.equal(menuHiddenCount, 1, 'disconnected boot must hide the main menu before the user enters a workspace');
+// Hidden by the auth sync, then suspended by the first-launch presentation (workspace_main_menu_visibility.js): an
+// idempotent hide, so the contract is « hidden and not projected », not a count.
+assert.ok(menuHiddenCount >= 1, 'disconnected boot must hide the main menu before the user enters a workspace');
+assert.equal(projectedTrees.has('eve_bevy_ui_main_menu'), false, 'the main menu tree must not be projected over the login choice');
 
 await (await import('../../eVe/domains/user/first_launch_runtime.js')).getFirstLaunchRuntime().close();
 authView.remove();delete window.__eveWorkspaceMode;
+// The cases below run « before auth state catches up »: a finished check with no session means no workspace
+// (main_menu_auth_runtime.js#isWorkspaceActiveForMainMenu).
+window.__authCheckComplete = false;
 const visibleProjectLayer = document.createElement('div');
 visibleProjectLayer.id = 'project_view_visible_project';
 visibleProjectLayer.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1200, height: 800 });
@@ -161,7 +172,6 @@ dashboardLayer.remove();
 delete window.__eveWorkspaceMode;
 
 const workspaceOpenCalls = [];
-const readinessCalls = [];
 const activitiesWarmupCalls = [];
 const homeWarmupCalls = [];
 const deferredOwnerCalls = [];
@@ -238,10 +248,6 @@ installEveIntuitionBootRuntime({
     ensureLayerPanelModule() {},
     ensureMatrixModule() {},
     ensureMoleculeMediaRuntime() {},
-    ensureProjectBootstrapReady: async () => {
-        readinessCalls.push('ready');
-        return 'boot_project_valid';
-    },
     ensurePastePanelModule() {},
     ensureSizePanelModule() {},
     ensureTimelinePanelModule() {},
@@ -270,8 +276,8 @@ installEveIntuitionBootRuntime({
         workspaceOpenCalls.push(payload);
         workspaceOpenAttempts += 1;
         if (workspaceOpenAttempts === 1) return { ok: false, error: 'bevy_surface_not_ready' };
-        const projectId = await payload.ensureProjectReady();
-        return { ok: true, projectId, route: 'project' };
+        // The open owns the project bootstrap since Authentication V1 (user_workspace_runtime.js → project_bootstrap.js).
+        return { ok: true, projectId: 'boot_project_valid', route: 'project' };
     },
     panelSurfaceDefinitions: {},
     publishAtomeContextualRailSelection() {},
@@ -303,11 +309,14 @@ installEveIntuitionBootRuntime({
     syncToolLatchedState() {},
     warmupToolGatewayRuntime() {}
 });
-await new Promise((resolve) => setTimeout(resolve, 120));
+// Retry (80 ms), the presentation's animation frame and the warmups' next task: wait for the warmups themselves,
+// bounded, rather than a fixed delay that sits on the edge of that chain.
+for (const started = Date.now(); !activitiesWarmupCalls.length && Date.now() - started < 3000;) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+}
 assert.equal(workspaceOpenCalls.length, 2, 'a transient Dashboard/main-menu readiness failure must retry within the bounded boot window');
 assert.equal(workspaceOpenCalls[0]?.source, 'boot_workspace');
 assert.equal(workspaceOpenCalls[1]?.source, 'boot_workspace');
-assert.deepEqual(readinessCalls, ['ready'], 'only the successful retry must prepare the project through canonical bootstrap');
 assert.deepEqual(activitiesWarmupCalls, ['activities'], 'workspace warmup must load contextual Activity before Molecule selection events');
 assert.deepEqual(homeWarmupCalls, ['home'], 'workspace warmup must make Home actionable before the first click');
 assert.equal(
@@ -366,3 +375,5 @@ assert.equal(getAtomeContextualEditApi().hasContext('missing'), false);
 assert.equal(getAtomeContextualEditApi().isEditing('missing'), false);
 
 console.log('user_login_boot_order_contract.test: PASS');
+// The installed runtime keeps its own timers (voice warmup, launch settle): the probe ends once its checks pass.
+process.exit(0);

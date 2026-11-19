@@ -23,6 +23,8 @@ public class MIDIController: NSObject {
 
     private var midiClient: MIDIClientRef = 0
     private var inputPort: MIDIPortRef = 0
+    // MIDISend needs an output port: an input port is refused (kMIDIWrongPortType), so nothing ever left.
+    private var outputPort: MIDIPortRef = 0
     private let includesHostInput: Bool
 
     private let logger = Logger(subsystem: "com.atomecorp.atome", category: "MIDI")
@@ -74,7 +76,13 @@ public class MIDIController: NSObject {
             inputPort = 0
             return false
         }
-        logger.info("MIDI input port created")
+        let outputStatus = MIDIOutputPortCreate(midiClient, "AtomeMIDIOutput" as CFString, &outputPort)
+        guard outputStatus == noErr else {
+            logger.error("Failed to create MIDI output port: \(outputStatus)")
+            outputPort = 0
+            return false
+        }
+        logger.info("MIDI input and output ports created")
         return true
     }
 
@@ -223,6 +231,10 @@ public class MIDIController: NSObject {
             MIDIPortDispose(inputPort)
             inputPort = 0
         }
+        if outputPort != 0 {
+            MIDIPortDispose(outputPort)
+            outputPort = 0
+        }
         if midiClient != 0 {
             MIDIClientDispose(midiClient)
             midiClient = 0
@@ -266,20 +278,20 @@ public class MIDIController: NSObject {
 
     /// Send MIDI Note On message to host
     public func sendNoteOn(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
-        outputSender.sendNoteOn(note: note, velocity: velocity, channel: channel, port: inputPort)
+        outputSender.sendNoteOn(note: note, velocity: velocity, channel: channel, port: outputPort)
     }
 
     /// Send MIDI Note Off message to host
     public func sendNoteOff(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
-        outputSender.sendNoteOff(note: note, velocity: velocity, channel: channel, port: inputPort)
+        outputSender.sendNoteOff(note: note, velocity: velocity, channel: channel, port: outputPort)
     }
 
     /// Send MIDI Control Change message to host
     public func sendControlChange(controller: UInt8, value: UInt8, channel: UInt8 = 0) {
-        outputSender.sendControlChange(controller: controller, value: value, channel: channel, port: inputPort)
+        outputSender.sendControlChange(controller: controller, value: value, channel: channel, port: outputPort)
     }
 
     public func sendRaw(bytes: [UInt8]) {
-        outputSender.sendRaw(bytes: bytes, port: inputPort)
+        outputSender.sendRaw(bytes: bytes, port: outputPort)
     }
 }

@@ -12,7 +12,7 @@
  * - API programmatique complète
  */
 
-import { $, define } from '../squirrel.js';
+import '../squirrel.js';
 
 // === CODEMIRROR IMPORTS (from local bundle) ===
 import {
@@ -24,9 +24,6 @@ import {
     drawSelection,
     EditorState,
     Compartment,
-    javascript,
-    StreamLanguage,
-    ruby,
     oneDark,
     defaultKeymap,
     history,
@@ -43,16 +40,8 @@ import {
     bracketMatching
 } from '../../js/codemirror.bundle.js';
 
-import { editorTemplates, languageExtensions, languageLabels } from './editor_builder_config.js';
-import {
-    loadAdoleApi,
-    isAdoleAuthenticated,
-    collectAdoleAtomes,
-    extractAdoleAtome,
-    listCodeFileAtomes
-} from './editor_builder_adole.js';
-import { runEditorCode } from './editor_builder_run.js';
-import { showEditorLoadDialog } from './editor_builder_load_dialog.js';
+import { editorTemplates, languageExtensions } from './editor_builder_config.js';
+import { runEditorCode, runEditorScript, saveEditorScript } from './editor_builder_run.js';
 import { buildEditorDom } from './editor_builder_dom.js';
 import { setupEditorInteractions } from './editor_builder_interactions.js';
 import { makeEditorActions } from './editor_builder_actions.js';
@@ -86,7 +75,8 @@ const createEditor = (config = {}) => {
         onError,
         // The commit options of the file's write (the host tool names itself: `{ source, tool_id }`).
         commitOptions = {},
-        ...otherProps
+        // A document script's editing (eVe/domains/script/script_editor.js): `{ save(code, language), run(code, language) }`.
+        script = null
     } = config;
 
     // Generate unique ID
@@ -129,15 +119,16 @@ const createEditor = (config = {}) => {
             languageCompartment.of(getLanguageExtension(state.language)),
             oneDark,
             syntaxHighlighting(defaultHighlightStyle),
+            // The editor's own keys first: CodeMirror's defaultKeymap binds Mod-Enter (insertBlankLine) and would take it.
             keymap.of([
-                ...closeBracketsKeymap,
-                ...defaultKeymap,
-                ...historyKeymap,
-                ...searchKeymap,
                 { key: 'Mod-s', run: () => { saveContent(); return true; } },
                 { key: 'Mod-Shift-s', run: () => { validateContent(); return true; } },
                 { key: 'Mod-w', run: () => { closeEditor(); return true; } },
-                { key: 'Mod-Enter', run: () => { if (state.runCode) state.runCode(); return true; } }
+                { key: 'Mod-Enter', run: () => { if (state.runCode) state.runCode(); return true; } },
+                ...closeBracketsKeymap,
+                ...defaultKeymap,
+                ...historyKeymap,
+                ...searchKeymap
             ]),
             EditorView.updateListener.of(update => {
                 if (update.docChanged) {
@@ -227,7 +218,10 @@ const createEditor = (config = {}) => {
         }
     }
 
-    const { saveContent, validateContent } = makeEditorActions({ state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator, commitOptions });
+    const actions = makeEditorActions({ state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator, commitOptions });
+    const { saveContent } = actions;
+    // A document script is validated on its text (script.save), not as a code file.
+    const validateContent = script ? () => saveEditorScript(state, script, { updateStatus, updateDirtyIndicator }) : actions.validateContent;
     function loadFile(file) {
         const props = file.properties || file.data || {};
 
@@ -295,7 +289,7 @@ const createEditor = (config = {}) => {
         // Remove from localStorage
         try {
             localStorage.removeItem(`editor_autosave_${editorId}`);
-        } catch (e) { }
+        } catch { }
 
         onClose?.(editorId);
     }
@@ -306,7 +300,7 @@ const createEditor = (config = {}) => {
         state, editorId, themeConfig, position, size, draggable, resizable, onError,
         changeLanguage, closeEditor, loadFile, updateStatus, validateContent
     });
-    state.runCode = () => runEditorCode(state, container);
+    state.runCode = () => (script ? runEditorScript(state, container, script) : runEditorCode(state, container));
 
     container.appendChild(header);
     container.appendChild(editorArea);
@@ -380,8 +374,8 @@ const createEditor = (config = {}) => {
             state.editorView?.requestMeasure();
         },
         getPosition: () => ({
-            x: parseInt(container.style.left),
-            y: parseInt(container.style.top)
+            x: parseInt(container.style.left, 10),
+            y: parseInt(container.style.top, 10)
         }),
         getSize: () => ({
             width: container.offsetWidth,
@@ -410,44 +404,6 @@ createEditor.getAll = () => Array.from(editorRegistry.values()).map(e => e.api);
 createEditor.getById = (id) => editorRegistry.get(id)?.api;
 createEditor.closeAll = () => {
     editorRegistry.forEach(e => e.api?.close());
-};
-
-createEditor.loadFile = async (options = {}) => {
-    const { fileId, fileName } = options;
-
-    try {
-        const adoleApi = await loadAdoleApi();
-
-        let file;
-        if (fileId) {
-            file = extractAdoleAtome(await adoleApi.atomes.get(fileId));
-        } else if (fileName) {
-            const files = await listCodeFileAtomes(adoleApi);
-            file = files.find(f => (f.properties?.fileName || f.data?.fileName) === fileName);
-        }
-
-        if (file) {
-            const props = file.properties || file.data || {};
-            return createEditor({
-                content: props.content || '',
-                fileName: props.fileName || 'loaded_file',
-                language: props.language || 'javascript',
-                fileId: file.id
-            });
-        }
-    } catch (error) {
-    }
-
-    return null;
-};
-
-createEditor.listFiles = async (options = {}) => {
-    try {
-        const adoleApi = await loadAdoleApi();
-        return listCodeFileAtomes(adoleApi, { kind: 'code_file', ...options });
-    } catch (error) {
-        return [];
-    }
 };
 
 // === EXPORTS ===

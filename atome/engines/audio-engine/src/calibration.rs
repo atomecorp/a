@@ -6,9 +6,13 @@
 // take placed by `placeExactTake` still carries, i.e. the input calibration.
 
 use super::playback;
-use super::scheduled_backend::{self, CaptureClock, note_capture_start};
+#[cfg(not(target_os = "windows"))]
+use super::scheduled_backend::note_capture_start;
+use super::scheduled_backend::{self, CaptureClock};
 use atome_mix_graph::voice::VoiceSound;
+#[cfg(not(target_os = "windows"))]
 use cpal::traits::{DeviceTrait, StreamTrait};
+#[cfg(not(target_os = "windows"))]
 use cpal::{FromSample, Sample, SizedSample};
 use kira::Frame;
 use kira::sound::static_sound::StaticSoundData;
@@ -50,6 +54,7 @@ fn impulse_sound(sample_rate: u32) -> VoiceSound {
         data,
         envelope: None,
         control: None,
+        warp: None,
     }
 }
 
@@ -58,6 +63,90 @@ struct Capture {
     clock: Mutex<Option<CaptureClock>>,
 }
 
+impl Capture {
+    // An input period's first channel, kept within the room reserved (never grows in a callback).
+    fn push(&self, data: &[f32], channels: usize) {
+        let Ok(mut samples) = self.samples.try_lock() else {
+            return;
+        };
+        let room = samples.capacity() - samples.len();
+        samples.extend(
+            data.chunks(channels.max(1))
+                .take(room)
+                .map(|frame| frame[0]),
+        );
+    }
+}
+
+// The chosen input captured on the engine's host clock. On Windows the driver's own thread reads
+// it (windows_driver.rs: WASAPI exclusive or ASIO hold the interface), through a take's tap.
+#[cfg(target_os = "windows")]
+struct Tapped(Option<String>, u64);
+
+#[cfg(target_os = "windows")]
+impl Drop for Tapped {
+    fn drop(&mut self) {
+        let _ = super::windows_driver::untap(self.0.as_deref(), self.1);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn open_capture(
+    device: Option<&str>,
+    channels: usize,
+    capture: &Arc<Capture>,
+) -> Result<Tapped, String> {
+    let capture = Arc::clone(capture);
+    let id = super::windows_driver::tap(
+        device,
+        Arc::new(move |data: &[f32], host_ns: i64| {
+            scheduled_backend::note_capture_start_at(&capture.clock, host_ns);
+            capture.push(data, channels);
+        }),
+    )?;
+    Ok(Tapped(device.map(str::to_string), id))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn open_capture(
+    device: Option<&str>,
+    channels: usize,
+    capture: &Arc<Capture>,
+) -> Result<cpal::Stream, String> {
+    let device = super::recorder::input_device(device)?;
+    let config = device
+        .default_input_config()
+        .map_err(|error| format!("calibration_input_config: {error}"))?;
+    let error = |error| eprintln!("[audio_engine::calibration] input error: {error}");
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => device.build_input_stream(
+            config.config(),
+            capture_callback::<f32>(channels, Arc::clone(capture)),
+            error,
+            None,
+        ),
+        cpal::SampleFormat::I16 => device.build_input_stream(
+            config.config(),
+            capture_callback::<i16>(channels, Arc::clone(capture)),
+            error,
+            None,
+        ),
+        cpal::SampleFormat::U16 => device.build_input_stream(
+            config.config(),
+            capture_callback::<u16>(channels, Arc::clone(capture)),
+            error,
+            None,
+        ),
+        other => return Err(format!("calibration_sample_format_unsupported: {other:?}")),
+    }
+    .map_err(|error| format!("calibration_input_stream: {error}"))?;
+    stream
+        .play()
+        .map_err(|error| format!("calibration_input_play: {error}"))?;
+    Ok(stream)
+}
+
+#[cfg(not(target_os = "windows"))]
 fn capture_callback<T>(
     channels: usize,
     capture: Arc<Capture>,
@@ -66,17 +155,17 @@ where
     T: Sample + SizedSample,
     f32: FromSample<T>,
 {
+    let mut converted = Vec::<f32>::with_capacity(16_384 * channels.max(1));
     move |data: &[T], info| {
         note_capture_start(&capture.clock, info);
-        let Ok(mut samples) = capture.samples.try_lock() else {
-            return;
-        };
-        let room = samples.capacity() - samples.len();
-        samples.extend(
-            data.chunks(channels.max(1))
+        converted.clear();
+        let room = converted.capacity();
+        converted.extend(
+            data.iter()
                 .take(room)
-                .map(|frame| f32::from_sample(frame[0])),
+                .map(|sample| f32::from_sample(*sample)),
         );
+        capture.push(&converted, channels);
     }
 }
 
@@ -119,43 +208,13 @@ pub fn measure_input_latency(device_name: Option<&str>) -> Result<InputCalibrati
         std::thread::sleep(Duration::from_millis(10));
     };
     let rate = clock.sample_rate;
-    let device = super::recorder::input_device(device_name)?;
-    let config = device
-        .default_input_config()
-        .map_err(|error| format!("calibration_input_config: {error}"))?;
-    let input_rate = config.sample_rate();
     let spacing = u64::from(rate) / 2;
+    let (input_rate, channels) = super::recorder_capture::input_format(device_name)?;
     let capture = Arc::new(Capture {
         samples: Mutex::new(Vec::with_capacity(input_rate as usize * 4)),
         clock: Mutex::new(None),
     });
-    let channels = usize::from(config.channels());
-    let error = |error| eprintln!("[audio_engine::calibration] input error: {error}");
-    let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => device.build_input_stream(
-            config.config(),
-            capture_callback::<f32>(channels, Arc::clone(&capture)),
-            error,
-            None,
-        ),
-        cpal::SampleFormat::I16 => device.build_input_stream(
-            config.config(),
-            capture_callback::<i16>(channels, Arc::clone(&capture)),
-            error,
-            None,
-        ),
-        cpal::SampleFormat::U16 => device.build_input_stream(
-            config.config(),
-            capture_callback::<u16>(channels, Arc::clone(&capture)),
-            error,
-            None,
-        ),
-        other => return Err(format!("calibration_sample_format_unsupported: {other:?}")),
-    }
-    .map_err(|error| format!("calibration_input_stream: {error}"))?;
-    stream
-        .play()
-        .map_err(|error| format!("calibration_input_play: {error}"))?;
+    let stream = open_capture(device_name, usize::from(channels), &capture)?;
     // The input opens first: the impulses are played once it captures.
     std::thread::sleep(Duration::from_millis(250));
     let first = scheduled_backend::render_clock()

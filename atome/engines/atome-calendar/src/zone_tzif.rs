@@ -1,6 +1,6 @@
 // The zones of a native host (zone.rs): an IANA zone read from the system's TZif files (v2+ 64-bit
 // data, the POSIX TZ footer past the table), as `Intl.DateTimeFormat({ timeZone })` reads it in
-// Node, and the local zone (`TZ`) through chrono.
+// Node, and the local zone (`TZ`) through atome_js_values::dates.
 use crate::ical_time::date_utc;
 use std::path::{Path, PathBuf};
 
@@ -328,12 +328,7 @@ impl NamedZone {
 
 /// The server's local offset at `seconds` (as `new Date(…)` reads it, through `TZ`).
 pub fn local_offset(seconds: i64) -> Result<i64, String> {
-    use chrono::{Offset, TimeZone};
-    let utc = chrono::DateTime::from_timestamp(seconds, 0).ok_or("instant_out_of_range")?;
-    Ok(i64::from(
-        chrono::Local
-            .offset_from_utc_datetime(&utc.naive_utc())
-            .fix()
-            .local_minus_utc(),
-    ))
+    atome_js_values::dates::local_offset(seconds)
+        .map(i64::from)
+        .ok_or_else(|| "instant_out_of_range".into())
 }

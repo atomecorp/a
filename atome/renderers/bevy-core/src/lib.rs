@@ -3,6 +3,8 @@ pub mod backdrop_surface;
 pub mod background;
 pub mod browser_texture;
 #[cfg(target_arch = "wasm32")]
+mod browser_texture_refresh;
+#[cfg(target_arch = "wasm32")]
 mod browser_texture_web;
 pub mod clip;
 mod clip_fade;
@@ -12,6 +14,7 @@ pub mod frame_demand;
 pub mod linear_lens;
 pub mod linear_lens_band;
 mod login_light;
+pub mod media_fx;
 pub mod media_window;
 pub mod mystic_capture;
 pub mod node_texture;
@@ -24,6 +27,7 @@ pub mod render_math;
 pub mod render_ops;
 mod render_style_ops;
 pub mod resource_ops;
+pub mod scene3d;
 pub mod scroll_area;
 pub mod scroll_motion;
 pub mod selection_overlay;

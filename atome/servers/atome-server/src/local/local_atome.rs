@@ -10,7 +10,6 @@ use super::local_atome_sync_worker::{
 };
 use crate::local::broadcast_sync_event;
 pub(crate) use atome_store::*;
-use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};

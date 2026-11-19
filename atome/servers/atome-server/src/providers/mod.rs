@@ -7,11 +7,15 @@
 // The dispatch itself is dispatch.rs; what it asks of the connection is `Link`.
 mod audio;
 mod catalog;
+mod chat;
+mod chat_dispatch;
 mod credentials;
 mod dispatch;
 mod generation;
 mod hosted;
 pub(crate) mod http;
+pub mod live_translate;
+mod model_router;
 mod models;
 mod music;
 mod oauth;
@@ -19,9 +23,10 @@ mod openai;
 mod params;
 mod realtime;
 mod shared_grant;
-mod social;
+pub(crate) mod social;
 mod speech;
 mod strava;
+mod translate;
 mod video;
 
 pub use dispatch::answer;
@@ -66,8 +71,13 @@ pub struct Relay {
 /// The process's providers.
 pub struct Providers {
     router: Arc<VaultRouter>,
+    // The central database the translation reads a bottle's message from, and the bottles' clean copies (lot L2b).
+    central: Central,
+    bottle_media: PathBuf,
     vault_root: PathBuf,
     shared: shared_grant::SharedGrant,
+    // The model of a `chat` answer, chosen by Not Diamond (R-120).
+    model_router: model_router::ModelRouter,
     everyone: Arc<realtime::Everyone>,
     audio: audio::Audio,
     video: video::Video,
@@ -90,10 +100,14 @@ impl Providers {
         central: Central,
     ) -> Result<Self, String> {
         let social = social::config(settings, project_root)?;
+        openai::configure(settings);
         Ok(Self {
             router,
+            central: central.clone(),
+            bottle_media: crate::social::cb::bottles::media_dir_of(&storage.uploads_tmp),
             vault_root,
             shared: shared_grant::SharedGrant::load(settings, central.clone()),
+            model_router: model_router::ModelRouter::load(settings),
             everyone: Arc::default(),
             audio: audio::Audio::load(settings),
             video: video::Video::load(settings, project_root, storage, central),
@@ -109,6 +123,28 @@ impl Providers {
     /// redirect, and the pull URL of Instagram's and TikTok's photos; none for another path.
     pub async fn route(&self, path: &str, query: Option<&str>) -> Option<axum::response::Response> {
         self.social.route(&self.oauth, path, query).await
+    }
+
+    /// `GET|POST /api/social/webhook/meta` (R-190): the Meta webhook, its signature checked first.
+    pub async fn social_webhook(
+        &self,
+        notifier: &crate::social::live::Notifier,
+        method: &axum::http::Method,
+        headers: &axum::http::HeaderMap,
+        query: Option<&str>,
+        body: &[u8],
+    ) -> axum::response::Response {
+        let call = (method, headers, query, body);
+        self.social
+            .webhook(&self.router, &self.vault_root, notifier, call)
+            .await
+    }
+
+    /// The 60 s polling of the linked network accounts (R-190), forever.
+    pub async fn social_poll(&self, notifier: &crate::social::live::Notifier) {
+        self.social
+            .poll(&self.router, &self.vault_root, notifier)
+            .await;
     }
 
     /// `handleSocialAction` in `principal`'s name, for what the server sends itself (a

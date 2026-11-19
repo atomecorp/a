@@ -43,6 +43,21 @@ pub(crate) fn browser_texture_image(
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use crate::browser_texture_web::{
-    BrowserTexturePlugin, release_unclaimed_browser_texture_sources, stage_browser_images,
+pub use crate::{
+    browser_texture_refresh::{
+        browser_texture_refreshes, queue_browser_texture_refresh, set_browser_texture_frame_hook,
+        take_gone_browser_textures,
+    },
+    browser_texture_web::{
+        BrowserTexturePlugin, release_unclaimed_browser_texture_sources, stage_browser_images,
+    },
 };
+
+/// An atome left the scene (its entity despawned): a browser texture refreshed for it stops (wasm32 only; native
+/// renderers have no browser textures).
+pub(crate) fn atome_left_scene(id: &str) {
+    #[cfg(target_arch = "wasm32")]
+    crate::browser_texture_refresh::forget_atome(id);
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = id;
+}

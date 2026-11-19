@@ -6,6 +6,7 @@ use bevy::{
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         render_resource::{Extent3d, PrimitiveTopology, TextureDimension, TextureFormat},
+        sync_component::SyncComponent,
     },
 };
 
@@ -14,7 +15,7 @@ use crate::types::{
     normalize_uv_rect,
 };
 
-#[derive(Clone, Debug, Component, ExtractComponent)]
+#[derive(Clone, Debug, Component)]
 pub struct AtomeVideoExternalTexture {
     pub id: String,
     pub layer: i32,
@@ -27,6 +28,38 @@ pub struct AtomeVideoExternalTexture {
     /// recopiee : c'est donc le fragment shader qui echantillonne cette
     /// texture-la et compose l'alpha sur le GPU. `None` = pas de masque.
     pub mask_texture: Option<Handle<Image>>,
+}
+
+/// What the media effects of a video read in the render world, extracted with
+/// it each frame: the chain its entity carries (`media_fx::AtomeMediaFx`, kept
+/// across resource updates of the video) and the size it is displayed at. A
+/// video without a logical size (the wallpaper's) carries no chain.
+#[derive(Clone, Debug, Component)]
+pub struct AtomeVideoFxFrame {
+    pub fx: Option<(crate::media_fx::MediaFxStack, [f32; 2])>,
+}
+
+impl SyncComponent for AtomeVideoExternalTexture {
+    type Target = (Self, AtomeVideoFxFrame);
+}
+
+impl ExtractComponent for AtomeVideoExternalTexture {
+    type QueryData = (
+        &'static Self,
+        Option<&'static crate::types::AtomeLogicalSize>,
+        Option<&'static crate::media_fx::AtomeMediaFx>,
+    );
+    type QueryFilter = ();
+    type Out = (Self, AtomeVideoFxFrame);
+
+    fn extract_component(
+        (video, size, fx): bevy::ecs::query::QueryItem<'_, '_, Self::QueryData>,
+    ) -> Option<Self::Out> {
+        let fx = fx
+            .zip(size)
+            .map(|(fx, size)| (fx.0.clone(), [size.width, size.height]));
+        Some((video.clone(), AtomeVideoFxFrame { fx }))
+    }
 }
 
 pub struct AtomeVideoExternalTexturePlugin;

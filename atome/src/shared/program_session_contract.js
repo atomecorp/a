@@ -26,7 +26,7 @@ export const PROGRAM_SESSION_TRANSITION_SCHEMA = { type: 'object', additionalPro
         source: { type: 'string', enum: ['manual', 'health'] },
         note: { type: 'string', maxLength: 4000 }, use_in_followup: { type: 'boolean' }
     } };
-export const PROGRAM_SESSION_OPERATIONS = Object.freeze(['session_read', 'session_prepare', 'session_transition']);
+export const PROGRAM_SESSION_OPERATIONS = Object.freeze(['session_read', 'session_prepare', 'session_transition', 'session_remove']);
 export const PROGRAM_SESSION_INPUT_PROPERTIES = Object.freeze({
     session_id: { type: 'string', minLength: 1 }, session_steps: PROGRAM_SESSION_SCHEMA.properties.steps,
     base_revision: { type: 'number', minimum: 0 },

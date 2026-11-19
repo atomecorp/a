@@ -24,6 +24,13 @@ export function createHealthFeeling({ store, actor, now = () => Date.now(), crea
         const id = actor();
         return id ? healthFeelingState(await readRecord(healthFeelingId(id, day), day)) : NOT_SET;
     };
+    /** Every entry of a civil day, oldest first, each with its moment and session (the Sport log ties them to its sessions,
+     *  #training_session_feeling.js); none without a principal. */
+    const entries = async (day) => {
+        if (!healthAccessAllowedNow()) throw failed('health_access_denied_for_actor');
+        const id = actor();
+        return id ? (await readRecord(healthFeelingId(id, day), day)).entries : [];
+    };
 
     // `answers`: { form?, strength?, mood? }, each { level? | moods?, note? }: one entry per aspect answered, one event.
     // An aspect left out keeps its value; nothing answered is not a write.
@@ -68,5 +75,5 @@ export function createHealthFeeling({ store, actor, now = () => Date.now(), crea
     };
 
     const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener); };
-    return Object.freeze({ read, set, clear, subscribe });
+    return Object.freeze({ read, entries, set, clear, subscribe });
 }

@@ -114,6 +114,23 @@ pub fn counts() -> (usize, usize) {
     (live.all.len(), live.users.len())
 }
 
+/// A frame to the one connection `id` (a live translation's piece to the listener who asked, social/cb/live_translate/):
+/// whether it took it.
+pub async fn tell_connection(id: u64, payload: &JsonValue) -> bool {
+    let sender = registry()
+        .all
+        .get(&id)
+        .and_then(Weak::upgrade)
+        .map(|connection| connection.sender());
+    match sender {
+        Some(sender) => sender
+            .send(Message::text(payload.to_string()))
+            .await
+            .is_ok(),
+        None => false,
+    }
+}
+
 /// The connection closed: it leaves every set.
 pub fn close(id: u64) {
     let mut live = registry();

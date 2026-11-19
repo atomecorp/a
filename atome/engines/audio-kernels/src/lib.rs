@@ -1,7 +1,7 @@
 // eVe's offline audio kernels: the work a page does on whole sounds, off the
 // audio thread — the waveform of a clip, the attacks a Slice cuts at, the loop
 // that joins best, an edit's render, the takes of an auto-sampling, the WAV and
-// FLAC files a sample is kept in, and the cue tones of the Sport session and the
+// FLAC files a sample is kept in, the slice Motif compiled to an edit's pieces, and the cue tones of the Sport session and the
 // metronome. The Web reaches them through squirrel-audio-wasm (src/kernels.rs);
 // the JS keeps only the glue (step 7 of the Rust-first study: each kernel
 // measured faster here than the JS it replaced, temp/step7_compute/).
@@ -9,6 +9,7 @@
 
 pub mod analysis;
 pub mod flac;
+pub mod motif;
 pub mod onsets;
 pub mod peaks;
 pub mod render;

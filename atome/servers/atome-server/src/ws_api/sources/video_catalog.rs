@@ -12,7 +12,6 @@ use super::public_source::RateLimit;
 use super::video_titles::{Failure, Kept, SERVICES, Spec, entries_of, key, read};
 use crate::providers::http;
 use crate::vault_router::js;
-use chrono::{Datelike, TimeZone};
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashSet;
 use std::sync::LazyLock;
@@ -89,27 +88,28 @@ fn day(ms: f64) -> String {
 
 // `since.setFullYear(since.getFullYear() - years)` in the server's local time, a day past its
 // month's end overflowing into the next.
-fn years_before(now: f64, years: i32) -> f64 {
-    let Some(local) = chrono::Local.timestamp_millis_opt(now as i64).single() else {
+pub(crate) fn years_before(now: f64, years: i32) -> f64 {
+    use atome_js_values::dates::{self, Instant};
+    let Some((wall, _)) = Instant::from_millis(now as i64).and_then(dates::local_wall) else {
         return now;
     };
-    let wall = local.naive_local();
-    let shifted = chrono::NaiveDate::from_ymd_opt(wall.year() - years, wall.month(), 1)
-        .and_then(|first| first.checked_add_days(chrono::Days::new(u64::from(wall.day() - 1))))
-        .map(|date| date.and_time(wall.time()));
-    let Some(shifted) = shifted else {
+    let f = wall.fields();
+    let Some(first) = dates::date_days(f.year - i64::from(years), f.month, 1) else {
         return now;
+    };
+    let shifted = Instant {
+        seconds: (first + f.day - 1) * 86_400 + wall.seconds.rem_euclid(86_400),
+        nanos: wall.nanos,
     };
     // A local time a clock change skips is the one an hour later.
-    let at = chrono::Local
-        .from_local_datetime(&shifted)
-        .earliest()
-        .or_else(|| {
-            chrono::Local
-                .from_local_datetime(&(shifted + chrono::TimeDelta::hours(1)))
-                .earliest()
-        });
-    at.map_or(now, |at| at.timestamp_millis() as f64)
+    let at = dates::local(shifted).first().or_else(|| {
+        dates::local(Instant {
+            seconds: shifted.seconds + 3600,
+            ..shifted
+        })
+        .first()
+    });
+    at.map_or(now, |at| at.millis() as f64)
 }
 
 // The newest titles of `media` on the declared services; `free`: the most watched of the last

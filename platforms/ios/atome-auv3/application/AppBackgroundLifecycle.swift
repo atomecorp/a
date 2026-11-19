@@ -104,9 +104,26 @@ final class AppBackgroundLifecycle {
     private var nextUnit: Int64 = 0
     private var unitTimes: [Int64: Assertion] = [:]
 
+    // A vault unit that iOS gave no background time to (about 30 s after the app went to the background): refused,
+    // except while the car holds a conversation, which keeps the app running (background audio). Without
+    // it every request of the car's assistant through the local server failed once the phone's screen
+    // went black (user, 18 Nov. 2026). Unit 0 is that unit: it has no assertion to end.
+    private var unitsWithoutTime = 0
+    private var unitsWithoutTimeReportedAt = Date.distantPast
+
     fileprivate func beginUnitTime() -> Int64 {
         let assertion = Assertion()
-        guard assertion.begin() else { return -1 }
+        guard assertion.begin() else {
+            let live = CarPlayAssistantLink.carVoiceLive
+            unitLock.lock()
+            unitsWithoutTime += 1
+            let count = unitsWithoutTime
+            let report = Date().timeIntervalSince(unitsWithoutTimeReportedAt) > 10
+            if report { unitsWithoutTimeReportedAt = Date(); unitsWithoutTime = 0 }
+            unitLock.unlock()
+            if report { CarPlayJournal.shared.write("vault", live ? "units_without_background_time" : "units_refused", ["count": count]) }
+            return live ? 0 : -1
+        }
         unitLock.lock()
         defer { unitLock.unlock() }
         nextUnit += 1
@@ -129,12 +146,14 @@ final class AppBackgroundLifecycle {
     }
 
     // A page is booted in the foreground only: booting it in background time would
-    // compete with the suspension it is about to undergo.
+    // compete with the suspension it is about to undergo. The car (CarPlay) is the exception:
+    // its assistant lives in this page behind a locked phone, and the app is not suspended then.
     private func reloadTerminatedPage() {
         dispatchPrecondition(condition: .onQueue(.main))
+        CarPlayJournal.shared.write("page", "web_content_terminated", ["backgrounded": isBackgrounded])
         if let last = lastAutomaticReload, Date().timeIntervalSince(last) < Self.reloadLoopWindow {
             WebViewManager.reportBootFailure(reason: "web_content_terminated")
-        } else if isBackgrounded {
+        } else if isBackgrounded && !CarPlayAssistantLink.shared.isConnected {
             pageReloadPending = true
         } else {
             reloadReclaimedPage()
@@ -144,6 +163,7 @@ final class AppBackgroundLifecycle {
     private func reloadReclaimedPage() {
         lastAutomaticReload = Date()
         WebViewManager.reloadMainPage(reason: "reclaimed_page_reload")
+        CarPlayAssistantLink.shared.pageReloaded()
     }
 }
 

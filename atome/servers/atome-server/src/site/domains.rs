@@ -3,23 +3,29 @@
 // - A domain the user already has is connected by proof (a TXT record) and a CNAME to atome;
 //   once its DNS answers and its certificate is issued (ATOME_SITE_CERT_COMMAND, the
 //   production's certbot step), its host serves the site.
-// - Buying, transferring, DNS records, renewals and mail boxes go through a SIMULATED provider:
-//   nothing is bought, nothing is charged, and every answer says so. Each charge is still
-//   written to a ledger keeping the provider's cost, atome's share (3 % at least, rounded up to
-//   the cent, included in the price, never shown apart) and the tax apart.
+// - Searching, quoting and buying go to the real registrar, OVHcloud (ovh_registrar.rs,
+//   domain_orders.rs; R-193), when its order keys are set: the money is reserved, the name
+//   ordered, and bought only once OVH has delivered it; answers say `simulated: false`.
+// - Without those keys (none of them set), the registry is SIMULATED, as it always was: nothing
+//   is bought, nothing is charged, and every answer says `simulated: true`; each charge is still
+//   written to a ledger keeping the provider's cost, the price all taxes included, atome's 3 %
+//   added on top for the buyer and the VAT the total holds. Transfers, DNS records, renewals and
+//   mail boxes stay simulated in both cases.
 // The hosting summary (Q15) is included in the subscription.
+use super::domain_offers::held_quote;
+use super::domain_orders::Order;
 use super::{Site, fail, now_ms};
 use crate::vault_router::js;
 use base64::Engine;
 use serde_json::{Value as JsonValue, json};
 use sha2::{Digest, Sha256};
 
-const TLDS: [&str; 6] = ["fr", "com", "shop", "net", "eu", "org"];
+pub(super) const TLDS: [&str; 6] = ["fr", "com", "shop", "net", "eu", "org"];
 const HOUR: i64 = 3_600_000;
-const QUOTE_HOLD_MS: i64 = 15 * 60_000;
+pub(super) const QUOTE_HOLD_MS: i64 = 15 * 60_000;
 pub const SITE_CNAME_TARGET: &str = "sites.atome.one";
 
-fn provider_cents(tld: &str) -> Option<i64> {
+pub(super) fn provider_cents(tld: &str) -> Option<i64> {
     match tld {
         "fr" => Some(699),
         "com" | "org" => Some(1099),
@@ -31,16 +37,16 @@ fn provider_cents(tld: &str) -> Option<i64> {
     }
 }
 
-fn renew_cents(tld: &str) -> Option<i64> {
+pub(super) fn renew_cents(tld: &str) -> Option<i64> {
     matches!(tld, "shop" | "site").then_some(2499)
 }
 
-fn tld_of(domain: &str) -> &str {
+pub(super) fn tld_of(domain: &str) -> &str {
     domain.rsplit('.').next().unwrap_or("")
 }
 
 // `/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/`.
-fn label_shaped(label: &str) -> bool {
+pub(super) fn label_shaped(label: &str) -> bool {
     let bytes = label.as_bytes();
     let edge = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
     (1..=63).contains(&bytes.len())
@@ -74,19 +80,24 @@ pub(super) fn normalized(value: Option<&JsonValue>) -> String {
 
 /// `domainPrice`: the price the user sees, the provider's cost with atome's share included,
 /// then the tax.
-fn domain_price(provider: i64) -> JsonValue {
-    let price = provider + (provider as f64 * 0.03).ceil() as i64;
-    let tax = (price as f64 * 0.2 + 0.5).floor() as i64;
-    json!({ "provider_cents": provider, "price_cents": price, "commission_cents": price - provider,
-        "tax_cents": tax, "total_cents": price + tax })
+pub(super) fn domain_price(provider: i64) -> JsonValue {
+    // R-193: the registrar's price all taxes included, atome's 3 % added on top for the buyer
+    // (half rounded up), its VAT within; the VAT the total holds is shown, never added again.
+    let supplier = provider + (provider as f64 * 0.2 + 0.5).floor() as i64;
+    let commission = crate::billing::pricing::commission(supplier);
+    let total = supplier + commission;
+    let tax = total - (total as f64 / 1.2 + 0.5).floor() as i64;
+    json!({ "provider_cents": provider, "price_cents": supplier, "commission_cents": commission,
+        "tax_cents": tax, "total_cents": total })
 }
 
-// What the user is shown of a price: never the provider's cost.
-fn shown(price: &JsonValue) -> JsonValue {
-    json!({ "price_cents": price["price_cents"], "tax_cents": price["tax_cents"], "total_cents": price["total_cents"] })
+// What the user is shown of a price: the registrar's price (taxes included), atome's 3 %, the total.
+pub(super) fn shown(price: &JsonValue) -> JsonValue {
+    json!({ "price_cents": price["price_cents"], "commission_cents": price["commission_cents"],
+        "tax_cents": price["tax_cents"], "total_cents": price["total_cents"] })
 }
 
-fn shown_into(target: &mut serde_json::Map<String, JsonValue>, price: &JsonValue) {
+pub(super) fn shown_into(target: &mut serde_json::Map<String, JsonValue>, price: &JsonValue) {
     if let JsonValue::Object(fields) = shown(price) {
         target.extend(fields);
     }
@@ -94,7 +105,7 @@ fn shown_into(target: &mut serde_json::Map<String, JsonValue>, price: &JsonValue
 
 // The simulated registry: a name is taken when its hash says so (stable, so a search answers
 // the same twice).
-fn taken_in_simulation(domain: &str) -> bool {
+pub(super) fn taken_in_simulation(domain: &str) -> bool {
     Sha256::digest(domain.as_bytes())[0] % 4 == 0
 }
 
@@ -106,7 +117,7 @@ pub(super) fn records_of(row: &JsonValue, key: &str) -> Vec<JsonValue> {
         .unwrap_or_default()
 }
 
-fn managed_records() -> JsonValue {
+pub(super) fn managed_records() -> JsonValue {
     json!([{ "type": "A", "name": "@", "value": "atome", "managed": true },
         { "type": "CNAME", "name": "www", "value": SITE_CNAME_TARGET, "managed": true },
         { "type": "MX", "name": "@", "value": "mail.atome.one", "priority": 10, "managed": true },
@@ -122,7 +133,7 @@ pub(super) fn raw(value: Option<&JsonValue>) -> String {
 }
 
 impl Site {
-    async fn known(&self, domain: &str) -> Result<Option<JsonValue>, String> {
+    pub(super) async fn known(&self, domain: &str) -> Result<Option<JsonValue>, String> {
         self.store
             .central
             .get(
@@ -179,73 +190,36 @@ impl Site {
             .await
     }
 
-    fn year_later() -> String {
+    pub(super) fn year_later() -> String {
         js::iso(now_ms() + 365 * 24 * HOUR)
-    }
-
-    async fn search(&self, data: &JsonValue) -> Result<JsonValue, String> {
-        let name = normalized(data.get("name"));
-        let label = name.split('.').next().unwrap_or("");
-        if !label_shaped(label) {
-            return Ok(fail("DOMAIN_INVALID"));
-        }
-        let mut results = Vec::new();
-        for tld in TLDS {
-            let domain = format!("{label}.{tld}");
-            let known = self.known(&domain).await?.is_some();
-            let mut result = serde_json::Map::new();
-            result.insert("domain".into(), json!(domain));
-            result.insert(
-                "free".into(),
-                json!(!known && !taken_in_simulation(&domain)),
-            );
-            shown_into(
-                &mut result,
-                &domain_price(provider_cents(tld).unwrap_or_default()),
-            );
-            result.insert("first_year".into(), json!(renew_cents(tld).is_some()));
-            results.push(JsonValue::Object(result));
-        }
-        Ok(json!({ "ok": true, "simulated": true, "results": results }))
-    }
-
-    async fn quote(&self, data: &JsonValue) -> Result<JsonValue, String> {
-        let domain = normalized(data.get("domain"));
-        let Some(provider) = provider_cents(tld_of(&domain)).filter(|_| domain_shaped(&domain))
-        else {
-            return Ok(fail("DOMAIN_INVALID"));
-        };
-        if taken_in_simulation(&domain) || self.known(&domain).await?.is_some() {
-            return Ok(fail("DOMAIN_TAKEN"));
-        }
-        let renew = domain_price(renew_cents(tld_of(&domain)).unwrap_or(provider));
-        let held_until = js::iso(now_ms() + QUOTE_HOLD_MS);
-        let entry = js::with(
-            &domain_price(provider),
-            [("renew", renew.clone()), ("held_until", json!(held_until))],
-        );
-        self.quotes
-            .lock()
-            .expect("quotes")
-            .insert(domain.clone(), entry.clone());
-        let mut quote = serde_json::Map::new();
-        quote.insert("domain".into(), json!(domain));
-        quote.insert("years".into(), json!(1));
-        shown_into(&mut quote, &entry);
-        quote.insert("renew".into(), shown(&renew));
-        quote.insert("held_until".into(), json!(held_until));
-        quote.insert("simulated".into(), json!(true));
-        Ok(json!({ "ok": true, "quote": quote }))
     }
 
     async fn buy(&self, owner: &str, data: &JsonValue) -> Result<JsonValue, String> {
         let domain = normalized(data.get("domain"));
-        let held = self.quotes.lock().expect("quotes").get(&domain).cloned();
-        let Some(held) = held
-            .filter(|held| js::date(held.get("held_until")).is_some_and(|until| until >= now_ms()))
-        else {
+        // A quote is the account's own: another account's quote of the same name is not held.
+        let key = (owner.to_string(), domain.clone());
+        let held = held_quote(&self.quotes.lock().expect("quotes"), &key, now_ms());
+        let Some(held) = held else {
             return Ok(fail("QUOTE_EXPIRED"));
         };
+        let registrar = match self.registrar() {
+            Ok(registrar) => registrar,
+            Err(failure) => return Ok(failure),
+        };
+        if let Some(registrar) = registrar {
+            self.quotes.lock().expect("quotes").remove(&key);
+            let order = Order {
+                owner: owner.to_string(),
+                hold: format!("domain:{owner}:{domain}:{}", js::text(held.get("quote_id"))),
+                domain,
+                site_id: raw(data.get("site_id")),
+                auto_renew: data.get("renew") != Some(&JsonValue::Bool(false)),
+                quote: held,
+                expires_at: Self::year_later(),
+                records: managed_records().to_string(),
+            };
+            return self.order_at(registrar, order).await;
+        }
         if self.known(&domain).await?.is_some() {
             return Ok(fail("DOMAIN_TAKEN"));
         }
@@ -258,7 +232,7 @@ impl Site {
                 vec![json!(domain), json!(owner), json!(Self::year_later()), json!(i64::from(renew)), json!(managed_records().to_string())],
             )
             .await?;
-        self.quotes.lock().expect("quotes").remove(&domain);
+        self.quotes.lock().expect("quotes").remove(&key);
         let site_id = raw(data.get("site_id"));
         let attached = if site_id.is_empty() {
             None
@@ -310,13 +284,25 @@ impl Site {
     }
 
     async fn domain_records(&self, owner: &str, data: &JsonValue) -> Result<JsonValue, String> {
-        let Some(row) = self.owned_domain(owner, data).await? else {
+        let Some(mut row) = self.owned_domain(owner, data).await? else {
             return Ok(fail("NOT_FOUND"));
         };
         let domain = js::text(row.get("domain"));
+        // A name ordered at the registrar and not yet delivered: OVH is asked again.
+        if let (Ok(Some(registrar)), true) = (self.registrar(), row["state"] == json!("pending")) {
+            self.confirm(registrar, owner, &domain).await?;
+            let Some(again) = self.owned_domain(owner, data).await? else {
+                return Ok(fail("NOT_FOUND"));
+            };
+            row = again;
+        }
+        let renew = match self.ordered_renewal(&domain).await? {
+            Some(provider) => shown(&domain_price(provider)),
+            None => Self::renewal_price(&domain),
+        };
         Ok(
-            json!({ "ok": true, "simulated": true, "domain": domain, "state": row["state"], "expires_at": row["expires_at"],
-            "auto_renew": row["auto_renew"] == json!(1), "renew": Self::renewal_price(&domain), "records": records_of(&row, "records_json") }),
+            json!({ "ok": true, "simulated": self.simulated(), "domain": domain, "state": row["state"], "expires_at": row["expires_at"],
+            "auto_renew": row["auto_renew"] == json!(1), "renew": renew, "records": records_of(&row, "records_json") }),
         )
     }
 
@@ -401,16 +387,25 @@ impl Site {
     ) -> Result<Option<JsonValue>, String> {
         Ok(Some(match action {
             "domain_search" => self.search(data).await?,
-            "domain_quote" => self.quote(data).await?,
+            "domain_quote" => self.quote(user, data).await?,
             "hosting" => self.hosting(user).await?,
             "domain_buy" => self.buy(user, data).await?,
+            "domain_confirm" => match self.registrar() {
+                Ok(Some(registrar)) => {
+                    self.confirm(registrar, user, &normalized(data.get("domain")))
+                        .await?
+                }
+                Ok(None) => fail("NOT_FOUND"),
+                Err(failure) => failure,
+            },
             "domain_connect" => {
                 let domain = normalized(data.get("domain"));
                 if !domain_shaped(&domain) {
                     return Ok(Some(fail("DOMAIN_INVALID")));
                 }
                 // A domain of « Mes domaines » (bought here, R-157) is active at once: atome holds its DNS.
-                let state = if self.owned_domain(user, data).await?.is_some() {
+                let owned = self.owned_domain(user, data).await?;
+                let state = if owned.is_some_and(|row| row["state"] == json!("active")) {
                     "active"
                 } else {
                     "pending"

@@ -5,6 +5,11 @@
 // runs the output and the inputs on one thread. A device that refuses the exclusive mode is an
 // explicit error, never a shared stream in its place.
 
+#![allow(
+    unsafe_code,
+    reason = "WASAPI is a COM API: every call and device buffer goes through the windows crate's unsafe bindings"
+)]
+
 use windows::Win32::Devices::Properties::DEVPKEY_Device_FriendlyName;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, RPC_E_CHANGED_MODE, WAIT_OBJECT_0};
 use windows::Win32::Media::Audio::{
@@ -75,35 +80,46 @@ impl ExclusiveFormat {
     }
 
     // Sample `index` of an interleaved device buffer, as f32.
+    /// # Safety
+    /// `data` holds at least `index + 1` samples of this format.
     pub unsafe fn read(&self, data: *const u8, index: usize) -> f32 {
-        let at = data.add(index * self.bytes());
-        match (self.container, self.float) {
-            (32, true) => (at as *const f32).read_unaligned(),
-            (32, false) => (at as *const i32).read_unaligned() as f32 / 2_147_483_648.0,
-            (24, _) => {
-                ((i32::from(*at) | i32::from(*at.add(1)) << 8 | i32::from(*at.add(2)) << 16) << 8
-                    >> 8) as f32
-                    / 8_388_608.0
+        // SAFETY: the caller's buffer holds sample `index` (see above).
+        unsafe {
+            let at = data.add(index * self.bytes());
+            match (self.container, self.float) {
+                (32, true) => (at as *const f32).read_unaligned(),
+                (32, false) => (at as *const i32).read_unaligned() as f32 / 2_147_483_648.0,
+                (24, _) => {
+                    ((i32::from(*at) | i32::from(*at.add(1)) << 8 | i32::from(*at.add(2)) << 16)
+                        << 8
+                        >> 8) as f32
+                        / 8_388_608.0
+                }
+                _ => (at as *const i16).read_unaligned() as f32 / 32_768.0,
             }
-            _ => (at as *const i16).read_unaligned() as f32 / 32_768.0,
         }
     }
 
+    /// # Safety
+    /// `data` holds at least `index + 1` samples of this format.
     pub unsafe fn write(&self, data: *mut u8, index: usize, value: f32) {
-        let at = data.add(index * self.bytes());
-        let value = value.clamp(-1.0, 1.0);
-        match (self.container, self.float) {
-            (32, true) => (at as *mut f32).write_unaligned(value),
-            (32, false) => {
-                (at as *mut i32).write_unaligned((f64::from(value) * 2_147_483_647.0) as i32)
+        // SAFETY: the caller's buffer holds sample `index` (see above).
+        unsafe {
+            let at = data.add(index * self.bytes());
+            let value = value.clamp(-1.0, 1.0);
+            match (self.container, self.float) {
+                (32, true) => (at as *mut f32).write_unaligned(value),
+                (32, false) => {
+                    (at as *mut i32).write_unaligned((f64::from(value) * 2_147_483_647.0) as i32)
+                }
+                (24, _) => {
+                    let sample = (value * 8_388_607.0) as i32;
+                    *at = sample as u8;
+                    *at.add(1) = (sample >> 8) as u8;
+                    *at.add(2) = (sample >> 16) as u8;
+                }
+                _ => (at as *mut i16).write_unaligned((value * 32_767.0) as i16),
             }
-            (24, _) => {
-                let sample = (value * 8_388_607.0) as i32;
-                *at = sample as u8;
-                *at.add(1) = (sample >> 8) as u8;
-                *at.add(2) = (sample >> 16) as u8;
-            }
-            _ => (at as *mut i16).write_unaligned((value * 32_767.0) as i16),
         }
     }
 }

@@ -138,8 +138,12 @@ export const installCanonicalFixture = (page, projectId, mediaAtomeIds = {}) => 
             sourceIds.set(`fixture_atome_${key}`, mediaAtomeIds[key]);
             continue;
         }
+        // The Timeline cues its audio clips as soon as it is shown: an audio Atome with no media fails that load
+        // with the canonical `play_record_facade_load_failed` error, so the fixture's sound carries the shipped
+        // audio (as the drop fixtures do, molecule_ui_drop_core.mjs).
         const created = await window.eveToolBase.createAtome({
             kind, type: kind, name: `Fixture ${key}`, projectId: pid,
+            ...(key === 'audio' ? { src: '/atome/src/assets/audios/riff.m4a', mime_type: 'audio/mp4' } : {}),
             text: kind === 'text' ? `Fixture ${key}` : undefined,
             left: `${40 + index * 12}px`, top: `${40 + index * 8}px`, width: '160px', height: '90px'
         }, { render: false });

@@ -19,7 +19,7 @@ impl Rate {
     }
 
     pub fn allowed(&self, key: &str) -> bool {
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         let mut hits = self.hits.lock().expect("rate");
         let mut list: Vec<i64> = hits.get(key).cloned().unwrap_or_default();
         list.retain(|at| now - at < self.window_ms);

@@ -167,6 +167,16 @@ CREATE INDEX IF NOT EXISTS idx_events_atome_ts ON events(atome_id, ts);
 CREATE INDEX IF NOT EXISTS idx_events_tx ON events(tx_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence ON events(stream_id, sequence);
 
+-- A delivered `set` that changed nothing records no event; its receipt alone lets a resend of
+-- the same event id (its acknowledgement lost) be recognised and ignored, never applied again
+-- over a later change. Outside the history: never replayed, synced nor projected.
+CREATE TABLE IF NOT EXISTS event_receipts (
+    event_id TEXT PRIMARY KEY,
+    atome_id TEXT,
+    intent_hash TEXT NOT NULL,
+    received_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sync_streams (
     stream_id TEXT PRIMARY KEY,
     scope_key TEXT NOT NULL UNIQUE,

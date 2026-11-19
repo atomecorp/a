@@ -67,7 +67,8 @@ impl Apns {
         };
         let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
         header.kid = Some(self.key_id.clone());
-        let claims = json!({ "iss": self.team_id, "iat": chrono::Utc::now().timestamp() });
+        let claims =
+            json!({ "iss": self.team_id, "iat": atome_js_values::dates::Instant::now().seconds });
         let bearer = jsonwebtoken::EncodingKey::from_ec_pem(&key)
             .and_then(|key| jsonwebtoken::encode(&header, &claims, &key))
             .map_err(|_| "apns_configuration_required".to_string());

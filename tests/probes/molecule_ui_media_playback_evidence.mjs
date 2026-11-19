@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, diffPng, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
+import { assert, clickCanvasTarget, diffPng, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
 import { screenshot, switchView } from "./molecule_ui_drop_core.mjs";
 import { chooseMoleculePlaybackMode, contextualTool, disarmMemberPlayback, expandCanonicalListMolecule, memberPlayTool, moleculePlayTool, playbackSnapshot, selectListRow, waitForContextualTarget, waitForPlaybackEnd } from "./molecule_ui_drop_playback_support.mjs";
 
@@ -352,12 +352,17 @@ export const applyDepth = async ({ page, projectId, memberId, action, measure = 
         `atome_contextual_tool_z_order_z_order_${action}`,
         `atome_contextual_tool_z_order_${action}`
     ];
-    await waitFor(page, (expectedIds) => {
+    await waitFor(page, async ({ expectedIds, clicked }) => {
         const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
             .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
         const ids = (tree?.interactiveNodes || []).map((entry) => String(entry.id || entry));
-        return { ok: expectedIds.some((id) => ids.includes(id)), ids };
-    }, actionNodeIds);
+        const rail = (await import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js'))
+            .getAtomeContextualEditApi()?.readState?.() || {};
+        // On a timeout, the rail's own account: was the palette opened, and where did the click land.
+        return { ok: expectedIds.some((id) => ids.includes(id)), palette: rail.activePaletteKey ?? null,
+            atome: rail.activeAtomeId ?? null, suspended: rail.suspended ?? null, clicked,
+            zOrder: ids.filter((id) => id.includes('z_order')) };
+    }, { expectedIds: actionNodeIds, clicked: zOrder });
     const actionTool = await contextualTool(page, actionNodeIds);
     assert(actionTool, `layered_z_order_action_missing:${action}`);
     const beforeStack = await page.evaluate(async (id) => {

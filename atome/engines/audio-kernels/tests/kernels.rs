@@ -222,13 +222,41 @@ fn peaks_render_takes_and_tones() {
     let beep = tones::tone(1320.0, 0.12, 48000.0, 0.008, 0.5);
     assert_eq!(beep.len(), 5760);
     assert!(beep[0] == 0.0 && beep.iter().all(|v| v.abs() <= 0.5));
-    let bar = tones::click_bar(&tones::ClickBar {
-        rate: 48000.0,
-        bpm: 120.0,
-        beats: 4,
-        click_seconds: 0.03,
-        accent_hz: 1760.0,
-        beat_hz: 1320.0,
-    });
+    let bar_of = |voice, accent| {
+        tones::click_bar(&tones::ClickBar {
+            rate: 48000.0,
+            bpm: 120.0,
+            beats: 4,
+            click_seconds: 0.03,
+            accent_hz: 1760.0,
+            beat_hz: 1320.0,
+            voice,
+            accent,
+        })
+    };
+    let bar = bar_of(tones::ClickVoice::Beep, true);
     assert_eq!(bar.len(), 96000);
+    // Every voice sounds on each beat, within full scale, and is silent between its clicks.
+    for index in 0..4 {
+        let voice = tones::ClickVoice::from_index(index).unwrap();
+        let pcm = bar_of(voice, true);
+        assert_eq!(pcm.len(), 96000);
+        assert!(pcm.iter().all(|v| v.abs() <= 1.0));
+        for beat in 0..4 {
+            let at = beat * 24000;
+            assert!(
+                pcm[at..at + 400].iter().any(|v| v.abs() > 0.05),
+                "{voice:?} beat {beat}"
+            );
+            assert!(
+                pcm[at + 20000..at + 23999].iter().all(|v| v.abs() < 1e-3),
+                "{voice:?} rests after beat {beat}"
+            );
+        }
+    }
+    assert!(tones::ClickVoice::from_index(4).is_none());
+    // Without the accent the first beat is the others' pitch: the bar is the same click four times.
+    let even = bar_of(tones::ClickVoice::Beep, false);
+    assert_eq!(&even[0..1440], &even[24000..25440]);
+    assert_ne!(&bar[0..1440], &bar[24000..25440]);
 }

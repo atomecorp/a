@@ -4,7 +4,6 @@
 # exact version locked in Cargo.lock, then wasm-opt.
 
 WASM_WEB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-WASM_WEB_TARGET_DIR="${CARGO_TARGET_DIR:-$WASM_WEB_ROOT/target}"
 
 # wasm_web_build <package> <profile> <wasm file stem> <out dir> <out name> [wasm-opt args...]
 wasm_web_build() {
@@ -32,8 +31,16 @@ wasm_web_build() {
         return 1
     fi
 
-    (cd "$WASM_WEB_ROOT" && cargo build -p "$package" --lib --target wasm32-unknown-unknown --profile "$profile") || return 1
-    local wasm="$WASM_WEB_TARGET_DIR/wasm32-unknown-unknown/$profile/$stem.wasm"
+    # The target directory is read at each call, never when this file is sourced: a CARGO_TARGET_DIR given to
+    # the call alone once built into it while wasm-bindgen read the root target's older artifact (R-189,
+    # 18 Nov. 2026). Made absolute and handed to cargo itself, so the build and the read are one directory.
+    local target_dir="${CARGO_TARGET_DIR:-$WASM_WEB_ROOT/target}"
+    case "$target_dir" in
+        /*) ;;
+        *) target_dir="$PWD/$target_dir" ;;
+    esac
+    (cd "$WASM_WEB_ROOT" && cargo build -p "$package" --lib --target wasm32-unknown-unknown --profile "$profile" --target-dir "$target_dir") || return 1
+    local wasm="$target_dir/wasm32-unknown-unknown/$profile/$stem.wasm"
     wasm-bindgen "$wasm" --target web --out-dir "$out_dir" --out-name "$out_name" || return 1
     if [ "$#" -gt 0 ]; then
         wasm-opt "$out_dir/${out_name}_bg.wasm" -o "$out_dir/${out_name}_bg.wasm" "$@" || return 1

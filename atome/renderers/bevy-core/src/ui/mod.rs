@@ -523,6 +523,7 @@ fn unmount_tree(world: &mut World, id: &str) -> Result<(), String> {
     let mut table = world.resource_mut::<AtomeUiEntityTable>();
     for id in stale_ids {
         table.by_id.remove(&id);
+        crate::browser_texture::atome_left_scene(&id);
     }
     Ok(())
 }

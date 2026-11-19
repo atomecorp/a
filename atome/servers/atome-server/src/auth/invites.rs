@@ -120,6 +120,16 @@ fn header_text(value: Option<&JsonValue>, maximum: usize) -> Result<String, Stri
 /// (the invitation atome's id on the inviting device) makes a resend after a lost answer harmless:
 /// it is mailed once. Mail is network I/O: sent after the commit; an invitation that never left is
 /// withdrawn.
+// The domain an invitation opens eVe on (R-192, eVe/domains/dashboard/dashboard_domain.js): none (the whole eVe) or
+// `music`, its link then `/music#invite=…`, the account made from it opening on that domain on every device.
+fn invite_domain(value: Option<&JsonValue>) -> Result<&'static str, String> {
+    match value {
+        None | Some(JsonValue::Null) => Ok(""),
+        Some(JsonValue::String(domain)) if domain == "music" => Ok("music"),
+        Some(_) => Err("auth_request_invalid".into()),
+    }
+}
+
 pub async fn create(
     sessions: Arc<Sessions>,
     mail: &Mail,
@@ -153,6 +163,8 @@ pub async fn create(
     if text.encode_utf16().count() > 4000 || text.matches(LINK).count() != 1 {
         return Err("auth_request_invalid".into());
     }
+    let domain = invite_domain(input.get("domain"))?;
+    let terms = crate::billing::admin::invite_terms(input.get("activation"))?;
     let token = proof.random_handle();
     let (worker, hash, address) = (sessions.clone(), digest(&token), email.clone());
     let (invite, expires, duplicate) = sessions
@@ -199,6 +211,9 @@ pub async fn create(
             )
             .map_err(|e| e.to_string())?;
             proof.audit(db, "invite_created", Some(principal), Some(&invite), now)?;
+            if let Some(terms) = &terms {
+                crate::billing::admin::record_invite_terms(db, &invite, terms, principal, now)?;
+            }
             Ok((invite, now + INVITE_TTL_MS, false))
         })
         .await?;
@@ -206,7 +221,7 @@ pub async fn create(
     if duplicate {
         return Ok(answer);
     }
-    let link = format!("{}/#invite={token}", mail.origin());
+    let link = format!("{}/{domain}#invite={token}", mail.origin());
     if let Err(error) = mail
         .send_system(&email, &from_name, &subject, &text.replacen(LINK, &link, 1))
         .await

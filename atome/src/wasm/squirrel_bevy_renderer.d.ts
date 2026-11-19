@@ -79,6 +79,8 @@ export function press_atome_bevy_scroll(tree_id: string, area: string, y: number
 
 export function queue_atome_bevy_ui_events(events: any): void;
 
+export function read_atome_bevy_browser_texture_diagnostics(): any;
+
 export function read_atome_bevy_ui_diagnostics(): any;
 
 export function read_atome_bevy_video_backend_capabilities(): any;
@@ -90,11 +92,23 @@ export function read_atome_bevy_web_diagnostics(): any;
 export function rebase_atome_bevy_linear_lens(tree_id: string, delta: number): void;
 
 /**
+ * Gives `bitmap` (an `ImageBitmap` of the image's own size) to the image the atome `id` shows: called from the frame
+ * hook, it is shown in that frame.
+ */
+export function refresh_atome_bevy_browser_texture(id: string, bitmap: any): void;
+
+/**
  * The band's records described again at rest: each tool's records with their new rest boxes.
  */
 export function refresh_atome_bevy_linear_lens(tree_id: string, records: any): void;
 
 export function register_atome_bevy_font(weight: number, bytes: Uint8Array): void;
+
+/**
+ * Makes an encoded scene (the USD module's `read_usd_scene`, `atome_usd::codec`) the scene of every scene3d node
+ * whose `source` is `source` (bevy-core scene3d/).
+ */
+export function register_atome_bevy_scene3d_source(source: string, scene_bytes: Uint8Array): void;
 
 export function release_atome_bevy_scroll(tree_id: string, area: string, at: number): void;
 
@@ -109,6 +123,17 @@ export function rest_atome_bevy_linear_lens(tree_id: string): void;
 export function run_atome_bevy_preview_renderer(canvas_selector: string, width: number, height: number, surface_metrics: any, initial_scene: any): void;
 
 export function run_atome_bevy_renderer(canvas_selector: string, width: number, height: number, surface_metrics: any, initial_scene: any): void;
+
+/**
+ * `hook` (a function, or `null`) is called at the start of each renderer frame: a Lottie player draws its frame there,
+ * so the bitmap it refreshes is shown in that same frame.
+ */
+export function set_atome_bevy_frame_hook(hook: any): void;
+
+/**
+ * The atomes despawned since the last call while a frame hook was set: the glue frees what it kept for them.
+ */
+export function take_atome_bevy_gone_browser_textures(): string[];
 
 export function wheel_atome_bevy_scroll(tree_id: string, area: string, delta: number): void;
 
@@ -146,35 +171,40 @@ export interface InitOutput {
     readonly poll_atome_bevy_scroll: (a: number, b: number, c: number) => void;
     readonly press_atome_bevy_scroll: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly queue_atome_bevy_ui_events: (a: number, b: number) => void;
+    readonly read_atome_bevy_browser_texture_diagnostics: (a: number) => void;
     readonly read_atome_bevy_ui_diagnostics: (a: number) => void;
     readonly read_atome_bevy_video_backend_capabilities: (a: number) => void;
     readonly read_atome_bevy_video_copy_diagnostics: (a: number) => void;
     readonly read_atome_bevy_web_diagnostics: (a: number) => void;
     readonly rebase_atome_bevy_linear_lens: (a: number, b: number, c: number, d: number) => void;
+    readonly refresh_atome_bevy_browser_texture: (a: number, b: number, c: number, d: number) => void;
     readonly refresh_atome_bevy_linear_lens: (a: number, b: number, c: number, d: number) => void;
     readonly register_atome_bevy_font: (a: number, b: number, c: number) => void;
+    readonly register_atome_bevy_scene3d_source: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly release_atome_bevy_scroll: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly request_atome_bevy_redraw: () => void;
     readonly reset_atome_bevy_video_copy_diagnostics: (a: number) => void;
     readonly reset_atome_bevy_web_diagnostics: (a: number) => void;
     readonly rest_atome_bevy_linear_lens: (a: number, b: number, c: number) => void;
     readonly run_atome_bevy_preview_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly set_atome_bevy_frame_hook: (a: number, b: number) => void;
+    readonly take_atome_bevy_gone_browser_textures: (a: number) => void;
     readonly wheel_atome_bevy_scroll: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly run_atome_bevy_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-    readonly __wasm_bindgen_func_elem_145338: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_13684: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_70869: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_131279: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_5: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_6: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_7: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_70869_8: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_9: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_10: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_11: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13683_12: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_13682: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_146787: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_15106: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_72295: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_132726: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_5: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_6: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_7: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_72295_8: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_9: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_10: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_11: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15105_12: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15104: (a: number, b: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

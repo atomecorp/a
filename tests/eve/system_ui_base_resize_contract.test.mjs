@@ -20,6 +20,8 @@ const OFF_GRID_SENTINEL_PX = 999;
 // Owners exempt from the ratio rule because they hold that sentinel; each is
 // asserted on its own instead of being silently dropped from the measurement.
 const OFF_GRID_OWNERS = new Set(['commonRadiusPill']);
+// The tool badge (bevy_ui_tools_band.js#toolBadgeNode) lays whole pixels: it follows the base within a pixel.
+const PIXEL_SNAPPED_OWNERS = new Set(['notificationBadge', 'notificationBadgeFont', 'notificationRadius']);
 
 const PROBE = `
 import { SYSTEM_UI_METRICS, SYSTEM_UI_PANEL_CHROME_METRICS } from './eVe/elements/system_ui_tokens.js';
@@ -38,7 +40,7 @@ const row = projectViewRowGeometry(760);
 // in base units: the probe measures the framework, never its own constants.
 const notification = buildMainMenuNotificationNodes({
     itemSize: EVE_TOOL_SKIN_TOKENS.metrics.toolboxSquareSizePx,
-    width: EVE_TOOL_SKIN_TOKENS.metrics.toolboxSquareSizePx * (200 / 60),
+    width: EVE_TOOL_SKIN_TOKENS.metrics.toolboxSquareSizePx,
     iconOffsetX: 0,
     summary: 'unread',
     count: 3
@@ -94,9 +96,9 @@ console.log(JSON.stringify({
         toolboxRowRadius: EVE_TOOL_SKIN_TOKENS.toolbox.rowRadiusPx,
         subtoolBorderRadius: EVE_TOOL_SKIN_TOKENS.metrics.subtoolBorderRadiusPx,
         dashboardContentRadius: DASHBOARD_VISUAL_TOKENS.metrics.contentRadius,
-        notificationBadge: notification[2].style.size[0],
-        notificationBadgeFont: notification[2].style.font_size,
-        notificationRadius: notification[2].style.radius
+        notificationBadge: notification[0].style.size[0],
+        notificationBadgeFont: notification[0].children[0].style.font_size,
+        notificationRadius: notification[0].style.radius
     }
 }));
 `;
@@ -131,7 +133,7 @@ const scale = (value) => (value * ALTERNATE_BASE) / AUTHORED_BASE;
 describe('System UI base resize contract', () => {
     it('resizes every measured owner by exactly the base ratio', () => {
         for (const [name, authored] of Object.entries(authoredLengths)) {
-            if (OFF_GRID_OWNERS.has(name)) continue;
+            if (OFF_GRID_OWNERS.has(name) || PIXEL_SNAPPED_OWNERS.has(name)) continue;
             expect(alternate.lengths[name], `${name} must follow the base`).toBeCloseTo(scale(authored), 6);
         }
     });
@@ -163,9 +165,9 @@ describe('System UI base resize contract', () => {
     });
 
     it('resizes the ribbon notification badge with its glyph and corner', () => {
-        expect(alternate.lengths.notificationBadge).toBeCloseTo(scale(authoredLengths.notificationBadge), 6);
-        expect(alternate.lengths.notificationBadgeFont).toBeCloseTo(scale(authoredLengths.notificationBadgeFont), 6);
-        expect(alternate.lengths.notificationRadius).toBeCloseTo(scale(authoredLengths.notificationRadius), 6);
+        for (const name of PIXEL_SNAPPED_OWNERS) {
+            expect(Math.abs(alternate.lengths[name] - scale(authoredLengths[name])), `${name} must follow the base`).toBeLessThanOrEqual(1);
+        }
     });
 
     it('keeps the one declared off-grid sentinel off the base', () => {

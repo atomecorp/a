@@ -49,9 +49,11 @@ export const subscribeAuv3HostMessages = (action, listener) => {
     return () => listenersByAction.get(key)?.delete(listener);
 };
 
-// `{ positionSeconds, tempo, playing }` — the host playhead, as the host plays it.
+// `{ positionSeconds, anchorHostNs, tempo, playing }` — the host playhead, as the host plays it:
+// `positionSeconds` is where the host was at host instant `anchorHostNs` (mach ns, a render quantum's first frame).
 const normalizeClock = (payload = {}) => ({
     positionSeconds: Math.max(0, Number(payload.positionSeconds) || 0),
+    anchorHostNs: Math.max(0, Number(payload.anchorHostNs) || 0),
     tempo: Number(payload.tempo) > 0 ? Number(payload.tempo) : 120,
     playing: payload.playing === true,
     receivedAt: Date.now()

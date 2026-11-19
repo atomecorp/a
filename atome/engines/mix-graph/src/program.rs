@@ -5,12 +5,48 @@ use crate::automation::{AutomationLane, TransportSpec};
 use serde::Deserialize;
 use std::collections::HashMap;
 
+// `channels` (R-191): the destination channel of each channel of the signal,
+// in order; without it the widths must match, or the signal is mono (copied
+// to every channel). A wider signal never folds into a narrower one unless
+// the map says how.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Target {
-    Main,
-    Strip { id: String },
-    Device { channel: u16 },
+    // `mono`: the signal summed to one channel of the pair (0 left, 1 right).
+    Main {
+        #[serde(default)]
+        mono: Option<u8>,
+        #[serde(default)]
+        channels: Option<Vec<u16>>,
+    },
+    Strip {
+        id: String,
+        #[serde(default)]
+        channels: Option<Vec<u16>>,
+    },
+    Device {
+        channel: u16,
+        #[serde(default)]
+        mono: Option<u8>,
+        #[serde(default)]
+        channels: Option<Vec<u16>>,
+    },
+    // Physical output channels one by one (0 and 1 the main pair), one per
+    // channel of the signal (a mono signal may list several).
+    Outputs {
+        channels: Vec<u16>,
+    },
+}
+
+impl Target {
+    pub fn channel_map(&self) -> Option<&[u16]> {
+        match self {
+            Self::Main { channels, .. }
+            | Self::Strip { channels, .. }
+            | Self::Device { channels, .. } => channels.as_deref(),
+            Self::Outputs { channels } => Some(channels),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -89,6 +125,23 @@ pub struct ModuleSpec {
     // Curves its parameters follow while the strip's transport plays (automation.rs).
     #[serde(default)]
     pub automation: Vec<AutomationLane>,
+    // A modulator's targets (R-191): parameters of any module its control moves.
+    #[serde(default)]
+    pub modulations: Vec<ModulationRoute>,
+    // 2 or 4: the module runs at that multiple of the rate (none: as built).
+    #[serde(default)]
+    pub oversample: Option<u8>,
+}
+
+// One target of a modulator: `depth` × its control is added to the parameter
+// in the parameter's unit (a frequency in octaves), then saturated to its range.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ModulationRoute {
+    pub module_id: String,
+    pub param: String,
+    pub depth: f64,
+    #[serde(default)]
+    pub output: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -108,10 +161,17 @@ pub struct StripSpec {
     // The transport its modules' automation follows (a Molecule's).
     #[serde(default)]
     pub transport: Option<String>,
+    // Its width (R-191): 1, 2, 4 or 8 channels; a strip is stereo unless told.
+    #[serde(default = "stereo")]
+    pub channels: u8,
 }
 
 fn enabled() -> bool {
     true
+}
+
+fn stereo() -> u8 {
+    2
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]

@@ -245,7 +245,7 @@ pub(super) fn build(event: &JsonValue) -> Result<Ics, String> {
     let end_reference = active_reference(event, "end")?;
     let stamp = match js::first(event, &["updatedAt", "updated_at"]) {
         Some(value) => js_date::canonical(Some(value))?,
-        None => Some(chrono::Utc::now().timestamp_millis() as f64),
+        None => Some(js::dates::now_ms() as f64),
     };
     lines.push(built(
         "DTSTAMP",

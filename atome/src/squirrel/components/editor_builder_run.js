@@ -2,6 +2,56 @@
 // Ruby via dynamically-loaded Opal) and renders captured console output into the editor's
 // output panel. Depends only on the shared `state` + the editor `container` element.
 import { sealHealthAccessForUntrustedCode } from '../health/index.js';
+
+const LINE_COLORS = Object.freeze({ error: '#f87171', warn: '#fbbf24', info: '#60a5fa', log: '#d4d4d4' });
+// The output panel opened and `logs` ([{ type, message }]) written in it, one line each.
+const renderOutputLines = (outputContent, logs) => logs.forEach(({ type, message }) => {
+    const line = document.createElement('div');
+    line.style.padding = '2px 0';
+    line.style.color = LINE_COLORS[type] || LINE_COLORS.log;
+    line.textContent = message;
+    outputContent.appendChild(line);
+});
+const openOutput = (container) => {
+    const outputPanel = container.querySelector('.sq-editor-output'), outputContent = container.querySelector('.sq-editor-output-content');
+    if (!outputPanel || !outputContent) return null;
+    outputPanel.style.display = 'flex';
+    outputContent.innerHTML = '';
+    return outputContent;
+};
+
+// A document script (eVe/domains/script/script_editor.js): never run here. `script.run(code, language)` saves it and runs
+// it apart, in its locked worker (script_sandbox.js); what it wrote, refused and logged is shown in the output panel.
+export async function runEditorScript(state, container, script) {
+    const code = state.editorView?.state.doc.toString() || '';
+    const outputContent = code.trim() ? openOutput(container) : null;
+    if (!outputContent) return;
+    const ran = await script.run(code, state.language);
+    const lines = (ran?.log || []).map(message => ({ type: 'log', message: String(message) }));
+    (ran?.writes || []).forEach(write => lines.push({ type: 'info', message: `${write.label || write.id} = ${write.text}` }));
+    (ran?.rejected || []).forEach(refused => lines.push({ type: 'warn', message: `${refused.target}: ${refused.reason}` }));
+    if (ran?.ok === false) lines.push({ type: 'error', message: `${ran.error || 'SCRIPT_FAILED'}${ran.detail ? `: ${ran.detail}` : ''}` });
+    state.lastValidatedContent = code;
+    renderOutputLines(outputContent, lines);
+}
+// A document script validated: written on its text through `script.save(code, language)`.
+export async function saveEditorScript(state, script, { updateStatus, updateDirtyIndicator }) {
+    if (!state.editorView || state.isSaving) return;
+    state.isSaving = true;
+    updateStatus('Saving...');
+    const content = state.editorView.state.doc.toString();
+    try {
+        const saved = await script.save(content, state.language);
+        if (saved?.ok !== true) { updateStatus(`✗ Save failed: ${saved?.error || 'script_save_failed'}`); return; }
+        state.lastValidatedContent = content;
+        state.isDirty = false;
+        updateDirtyIndicator(false);
+        updateStatus('✓ Saved');
+    } finally {
+        state.isSaving = false;
+    }
+}
+
 export function runEditorCode(state, container) {
         const code = state.editorView?.state.doc.toString() || '';
         if (!code.trim()) return;
@@ -23,7 +73,7 @@ export function runEditorCode(state, container) {
             if (typeof arg === 'object') {
                 try {
                     return JSON.stringify(arg, null, 2);
-                } catch (error) {
+                } catch {
                     return String(arg);
                 }
             }
@@ -44,26 +94,7 @@ export function runEditorCode(state, container) {
             info: (...args) => captureLog('info', ...args)
         };
 
-        const displayOutput = () => {
-            logs.forEach(({ type, message }) => {
-                const line = document.createElement('div');
-                line.style.padding = '2px 0';
-
-                if (type === 'error') {
-                    line.style.color = '#f87171';
-                } else if (type === 'warn') {
-                    line.style.color = '#fbbf24';
-                } else if (type === 'info') {
-                    line.style.color = '#60a5fa';
-                } else {
-                    line.style.color = '#d4d4d4';
-                }
-
-                line.textContent = message;
-                outputContent.appendChild(line);
-            });
-
-        };
+        const displayOutput = () => renderOutputLines(outputContent, logs);
 
         const displayError = (error) => {
             logs.push({ type: 'error', message: `❌ ${error.name}: ${error.message}` });

@@ -6,56 +6,19 @@
 // draws into a canvas nor creates a video element; dispose releases it.
 //   node tests/probes/molecule_session_audio_only_contract.probe.mjs
 import assert from 'node:assert/strict';
-import { createServer } from 'node:net';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+// The isolated server every probe starts (atome-server and its vaults, built binaries, its own port and base).
+import { startServer } from '../helpers/probe_server.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const media = (name) => path.join(ROOT, 'tests/fixtures/media', name);
-const workRoot = mkdtempSync(path.join(os.tmpdir(), 'eve-molecule-session-contract-'));
 
-const availablePort = () => new Promise((resolve, reject) => {
-    const listener = createServer();
-    listener.once('error', reject);
-    listener.listen(0, '127.0.0.1', () => {
-        const address = listener.address();
-        listener.close((error) => (error ? reject(error) : resolve(address.port)));
-    });
-});
-
-const waitForServer = (child) => new Promise((resolve, reject) => {
-    let output = '';
-    const timer = setTimeout(() => reject(new Error(`molecule_contract_server_start_timeout:${output.slice(-600)}`)), 30_000);
-    const inspect = (chunk) => {
-        output += chunk.toString();
-        if (!output.includes('Fastify server')) return;
-        clearTimeout(timer);
-        resolve();
-    };
-    child.stdout.on('data', inspect);
-    child.stderr.on('data', inspect);
-    child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`molecule_contract_server_exit_${code}:${output.slice(-600)}`)); });
-});
-
-const port = await availablePort();
-const child = spawn(process.execPath, ['server/server.js'], {
-    cwd: ROOT,
-    env: {
-        ...process.env,
-        HOST: '127.0.0.1', PORT: String(port), SQLITE_PATH: path.join(workRoot, 'adole.db'),
-        JWT_SECRET: 'molecule-session-contract-secret-long-enough', GITHUB_AUTO_SYNC: 'false',
-        SYNC_REMOTE_ENABLED: 'false', SERVER_INFO_ENABLED: 'false',
-        SQUIRREL_VAULT_ROOT: path.join(workRoot, 'vaults')
-    },
-    stdio: ['ignore', 'pipe', 'pipe']
-});
+const server = await startServer({ env: { GITHUB_AUTO_SYNC: 'false', SYNC_REMOTE_ENABLED: 'false', SERVER_INFO_ENABLED: 'false' } });
+const port = server.port;
 
 let browser = null;
 try {
-    await waitForServer(child);
     browser = await chromium.launch({ headless: process.env.HEADLESS !== '0', args: ['--autoplay-policy=no-user-gesture-required'] });
     const page = await (await browser.newContext()).newPage();
     await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
@@ -118,6 +81,5 @@ try {
     console.log('molecule_session_audio_only_contract: PASS');
 } finally {
     if (browser) await browser.close();
-    child.kill('SIGTERM');
-    rmSync(workRoot, { recursive: true, force: true });
+    await server.stop();
 }

@@ -40,6 +40,8 @@ impl Plugin for AtomeBevyRendererPlugin {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
             .add_plugins(AtomeMediaWindowPlugin)
+            .add_plugins(crate::media_fx::AtomeMediaFxPlugin)
+            .add_plugins(crate::scene3d::Scene3dPlugin)
             .add_plugins(ProceduralSdfPlugin)
             .add_plugins(ProgressRingPlugin)
             .add_plugins(BackdropSurfacePlugin)

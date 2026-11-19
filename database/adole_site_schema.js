@@ -89,4 +89,23 @@ export async function ensureSiteTables(query) {
         total_cents INTEGER NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
+    // A domain ordered at the real registrar (R-193): its money hold, its OVH order and the prices it was quoted
+    // (atome-server central_schema/service_tables.rs, the same text).
+    await query('run', `CREATE TABLE IF NOT EXISTS site_domain_orders (
+        hold_ref TEXT PRIMARY KEY,
+        domain TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        order_id INTEGER,
+        state TEXT NOT NULL CHECK(state IN ('ordering', 'pending', 'delivered', 'cancelled', 'failed', 'uncertain')),
+        site_id TEXT NOT NULL DEFAULT '',
+        auto_renew INTEGER NOT NULL DEFAULT 1,
+        provider_cents INTEGER NOT NULL,
+        renew_provider_cents INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        commission_cents INTEGER NOT NULL,
+        total_cents INTEGER NOT NULL,
+        created_ms INTEGER NOT NULL,
+        closed_ms INTEGER
+    )`);
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_site_domain_orders_domain ON site_domain_orders(domain, state)');
 }

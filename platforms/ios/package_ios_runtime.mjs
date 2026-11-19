@@ -36,6 +36,9 @@ const RAW_SCRIPT_PATHS = new Set([
     'src/js/gsap.min.js',
     'src/wasm/squirrel_audio_wasm.js',
     'src/wasm/squirrel_bevy_renderer.js',
+    'src/wasm/atome_usd_wasm.js',
+    'src/wasm/atome_lottie_wasm.js',
+    'src/wasm/atome_script_wasm.js',
     'src/wasm/renderer_version.mjs',
     'src/wasm/gps_navigation_engine.js',
     // ONNX Runtime Web imports its wasm factory by URL at runtime (local TTS and wake workers).
@@ -43,8 +46,10 @@ const RAW_SCRIPT_PATHS = new Set([
     // Loaded by URL at runtime, never bundled: calls (visio_call_runtime) and Audio to MIDI.
     'src/assets/vendor/mediasoup-client/mediasoup_client.bundle.js',
     'src/assets/vendor/basic-pitch/basic_pitch.bundle.js',
-    // A document script's worker is CLASSIC (no imports): copied raw, it loads Opal by importScripts before locking
-    // its scope (eVe/domains/script/script_worker.js); Opal itself is loaded by URL, never bundled.
+    // pdf.js runs its parser in this worker, named by URL from the vendor folder (eVe/domains/books/pdf_document.js).
+    'src/assets/vendor/pdfjs/pdf.worker.bundle.js',
+    // A document script's worker is CLASSIC: copied raw, it loads Opal (the Ruby compiler) by importScripts and the
+    // script engine (src/wasm/atome_script_wasm.js) by URL (eVe/domains/script/script_worker.js), never bundled.
     'eVe/domains/script/script_worker.js',
     'src/js/opal.min.js',
     'src/js/opal-parser.min.js'
@@ -56,7 +61,10 @@ const SKIP_RUNTIME_PATHS = new Set([
     // The browser's copy of the Vosk model (vosk-browser loads archives); the app reads the unpacked one.
     'src/assets/voice/vosk/vosk-model-small-fr-0.22.tar.gz',
     'src/wasm/squirrel_bevy_renderer_bg.wasm.br',
-    'src/wasm/squirrel_bevy_renderer_bg.wasm.gz'
+    'src/wasm/squirrel_bevy_renderer_bg.wasm.gz',
+    'src/wasm/atome_usd_wasm_bg.wasm.br', 'src/wasm/atome_usd_wasm_bg.wasm.gz',
+    'src/wasm/atome_lottie_wasm_bg.wasm.br', 'src/wasm/atome_lottie_wasm_bg.wasm.gz',
+    'src/wasm/atome_script_wasm_bg.wasm.br', 'src/wasm/atome_script_wasm_bg.wasm.gz'
 ]);
 
 const walk = async (root, visit, relative = '') => {
@@ -185,6 +193,8 @@ const virtualEntrySources = new Map([
 const iosRuntimeEntryPlugin = {
     name: 'atome-ios-runtime-entry',
     setup(buildContext) {
+        // The page serves eVe at /eVe/: a module importing it by that absolute URL (first_paint.js) bundles its file.
+        buildContext.onResolve({ filter: /^\/eVe\// }, (args) => ({ path: path.join(eveRoot, args.path.slice('/eVe/'.length)) }));
         buildContext.onResolve({ filter: /^atome-ios:/ }, (args) => (
             virtualEntrySources.has(args.path)
                 ? { path: args.path, namespace: IOS_RUNTIME_ENTRY_NAMESPACE }
@@ -198,6 +208,36 @@ const iosRuntimeEntryPlugin = {
     }
 };
 
+// A module reaching a file by `new URL('./file', import.meta.url)` (a worker, a worklet, data, a vendor folder) lands in
+// chunks/shared/, where that relative URL points nowhere. Each such URL is rewritten to the file's served path (atome/src
+// at /src/, eVe at /eVe/, the layout copyRuntimeFiles keeps), and each script it names is packaged at that path below.
+const RELATIVE_MODULE_URL = /new URL\(\s*(['"])(\.{1,2}\/[^'"]*)\1\s*,\s*import\.meta\.url\s*\)/g;
+const servedPath = (absolutePath) => {
+    for (const [root, prefix] of [[eveRoot, '/eVe/'], [sourceRoot, '/src/']]) {
+        const relative = path.relative(root, absolutePath);
+        if (!relative.startsWith('..') && !path.isAbsolute(relative)) return prefix + relative.split(path.sep).join('/');
+    }
+    throw new Error(`ios_module_url_outside_runtime:${absolutePath}`);
+};
+const urlScripts = new Set();
+const moduleUrlPlugin = {
+    name: 'atome-ios-module-url',
+    setup(buildContext) {
+        buildContext.onLoad({ filter: /\.m?js$/ }, async (args) => {
+            if (args.path.includes(`${path.sep}assets${path.sep}vendor${path.sep}`)) return null;
+            const source = await readFile(args.path, 'utf8');
+            if (!source.includes('import.meta.url')) return null;
+            const contents = source.replace(RELATIVE_MODULE_URL, (_match, quote, relative) => {
+                const target = path.resolve(path.dirname(args.path), relative);
+                const served = servedPath(target) + (relative.endsWith('/') ? '/' : '');
+                if (/\.m?js$/.test(target)) urlScripts.add(target);
+                return `new URL(${quote}${served}${quote}, import.meta.url)`;
+            });
+            return { contents, loader: 'js', resolveDir: path.dirname(args.path) };
+        });
+    }
+};
+
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
 // Critical entry points keep stable URLs while optional and feature code stays
@@ -206,6 +246,8 @@ await mkdir(outputRoot, { recursive: true });
 const runtimeBuild = await build({
     entryPoints: {
         'src/squirrel/spark': SPARK_ENTRY_ID,
+        // index.html loads it before spark.js so the page has its ground from the first paint.
+        'src/squirrel/first_paint': path.join(sourceRoot, 'squirrel/first_paint.js'),
         'chunks/optional-integrations': OPTIONAL_INTEGRATIONS_ENTRY_ID,
         ...Object.fromEntries(eveCriticalDescriptors.map(([moduleId, target]) => [
             `chunks/eve/${criticalEntryNameByModuleId.get(moduleId)}`,
@@ -229,11 +271,17 @@ const runtimeBuild = await build({
     outdir: outputRoot,
     entryNames: '[dir]/[name]',
     chunkNames: 'chunks/shared/[name]-[hash]',
-    plugins: [iosRuntimeEntryPlugin],
+    plugins: [iosRuntimeEntryPlugin, moduleUrlPlugin],
     logLevel: 'warning',
     metafile: true,
     write: true
 });
+
+// App Review 2.5.2 (R-192): the iOS app runs only the code it ships. An import of a remote module (esbuild leaves a URL
+// external) would download and run application code: the packaging refuses it, naming the importing file.
+const remoteImports = Object.entries(runtimeBuild.metafile.inputs).flatMap(([input, { imports }]) =>
+    imports.filter(({ path: target, external }) => external && /^(https?:)?\/\//.test(target)).map(({ path: target }) => `${input} -> ${target}`));
+if (remoteImports.length) throw new Error(`ios_remote_code_import:\n${remoteImports.join('\n')}`);
 
 const singletonOwnerPaths = [
     'eVe/domains/rendering/project_view_mode_state.js',
@@ -280,17 +328,23 @@ await writeFile(
     }, null, 2)
 );
 
-// Module workers are loaded by URL, outside the shared graph: each is bundled whole.
-for (const worker of ['squirrel/voice/local_tts_worker.js', 'squirrel/voice/wake_detector_worker.js']) {
+// Module workers and worklets are loaded by URL, outside the shared graph: each is bundled whole at its served path
+// (the voice workers by their absolute URL, the others by the module URLs rewritten above).
+const urlScriptPaths = [
+    ...['squirrel/voice/local_tts_worker.js', 'squirrel/voice/wake_detector_worker.js'].map((worker) => path.join(sourceRoot, worker)),
+    ...urlScripts
+];
+for (const script of urlScriptPaths) {
     await build({
-        entryPoints: [path.join(sourceRoot, worker)],
+        entryPoints: [script],
         bundle: true,
         format: 'esm',
         platform: 'browser',
         target: ['safari16.4'],
         minifySyntax: true,
         minifyWhitespace: true,
-        outfile: path.join(outputRoot, 'src', worker),
+        outfile: path.join(outputRoot, servedPath(script).slice(1)),
+        plugins: [moduleUrlPlugin],
         logLevel: 'warning'
     });
 }

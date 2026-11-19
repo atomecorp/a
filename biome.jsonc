@@ -18,7 +18,12 @@
       // Third-party bundles and generated glue are not ours to lint.
       "!atome/src/js",
       "!atome/src/wasm",
-      "!atome/src/assets/vendor"
+      "!atome/src/assets/vendor",
+      // AUv3 bench probes are function-body fragments that run.sh concatenates
+      // and evaluates in the plugin page (top-level return, shared globals).
+      "!tests/ios/auv3_aum",
+      // A link to research outputs kept outside the repository (Documents/Codex): Biome panics on paths out of its root.
+      "!eVe/R&D/fonds-simulation-20261008"
     ]
   },
   "formatter": { "enabled": false },

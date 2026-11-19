@@ -51,12 +51,19 @@ Three faults, found together:
   (`trash::KEEP`, `FILE_TRASH_KEEP_MS`). The cloud also keeps a file another live atome
   of the vault names (`vault_router#file_held_elsewhere`, vault `files:described`).
 
+- A `set` that changes nothing (every key, its type and parent included, equal to what the
+  atome holds) records no event in either engine, only a delivery receipt, so a resent
+  partial set can neither recreate nor overwrite anything (R-189, 2026-11-16; details in
+  [ios-outbox-backlog-unchanged-import-origins](../ios-outbox-backlog-unchanged-import-origins/README.md)).
+
 ## Regression
 
 - `npx vitest run tests/eve/ghost_atome_guard.test.mjs` (cloud engine and browser
   workspace, shared file).
 - `cargo test -p atome-store` (`gate_follows_the_generated_types`, commit parity case
   `set_target_missing` in `tests/fixtures/atome_store/commit_cases.*`).
+- `cargo test -p atome-store unchanged_receipts` and `node --test tests/server/event_receipts.test.mjs`
+  (an unchanged set: no event, a receipt; its resend never overwrites a later change).
 - `cargo test -p atome-server --lib` (`a_file_another_live_atome_holds_stays` with its undo,
   `an_unreadable_media_file_is_retried_and_old_failures_go_back_to_the_queue`,
   `media::trash` tests).

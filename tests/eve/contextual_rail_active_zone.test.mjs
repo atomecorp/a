@@ -912,7 +912,9 @@ test('a slide from a rail hold tool opens its options, while a tap keeps the too
         emitUiEvents: (events) => events.forEach((event) => {
             pointerState.handlers.get(`${event.tree_id}:${event.node_id}:${event.event}`)?.(event);
         }),
-        scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
+        scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false },
+        // A frame after the hold's delay (pointer_rest_timer.js).
+        frame: (callback) => setTimeout(callback, 16)
     });
 
     // 1. A tap runs the tool itself and never opens the options.

@@ -1,5 +1,6 @@
 import { eveCssPx } from '../../../../eVe/elements/system_ui_tokens.js';
 import { eveT } from '../../../../eVe/i18n/i18n.js';
+import { DOCUMENT_ACCEPT } from '../../../../eVe/domains/document/import/document_import.js';
 const NATIVE_ANY_SOURCE_TYPE = '*';
 
 const isNativeImportBridgeAvailable = () => {
@@ -60,18 +61,25 @@ const decodeBase64ToUint8Array = (value = '') => {
 // la bibliothèque Musique pour un son. L'hôte natif ne choisit plus à la place
 // de la personne : il montre ces sources, libellées par l'i18n.
 const IMPORT_KINDS = Object.freeze(['image', 'video', 'audio']);
+// A caller that converts documents too (its `accept` names the document import's extensions) asks the native picker
+// for them as the « document » kind, beside its media kinds.
+const DOCUMENT_EXTENSIONS = new Set(DOCUMENT_ACCEPT.split(','));
+const namesDocuments = accept => String(accept || '').toLowerCase().split(',').some(type => DOCUMENT_EXTENSIONS.has(type.trim()));
+const withDocuments = (kinds, accept) => (namesDocuments(accept) ? [...kinds, 'document'] : kinds);
 const resolveImportKinds = ({ kinds = null, accept = '' } = {}) => {
     const explicit = (Array.isArray(kinds) ? kinds : [])
         .map((kind) => String(kind || '').trim().toLowerCase())
         .map((kind) => (kind === 'sound' ? 'audio' : kind))
         .filter((kind) => IMPORT_KINDS.includes(kind));
     if ((Array.isArray(kinds) ? kinds : []).includes('file')) return [];
-    if (explicit.length) return [...new Set(explicit)];
+    if (explicit.length) return withDocuments([...new Set(explicit)], accept);
     const requested = String(accept || '').trim().toLowerCase();
     if (!requested || requested === NATIVE_ANY_SOURCE_TYPE) return [...IMPORT_KINDS];
     const fromAccept = requested.split(',').map((type) => type.trim().split('/')[0])
         .filter((kind) => IMPORT_KINDS.includes(kind));
-    return fromAccept.length ? [...new Set(fromAccept)] : [...IMPORT_KINDS];
+    // Documents alone (a protocol, a received result): the picker offers what the document import reads, never the media.
+    if (!fromAccept.length) return namesDocuments(accept) ? ['document'] : [...IMPORT_KINDS];
+    return withDocuments([...new Set(fromAccept)], accept);
 };
 const resolveNativeImportSources = (kinds = []) => {
     const sources = ['files'];
@@ -120,7 +128,34 @@ const buildFileFromNativeEntry = (entry = {}, index = 0) => {
     return blob;
 };
 
-const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, multiple = true, source = '' } = {}) => {
+// A file the iOS host staged on disk (ImportStagingPicker.swift: `{ name, relative_path, path }`, no base64): streamed
+// from `/file/<path>` into the page's private storage, so a bundle of a gigabyte is a disk-backed File, never held in
+// memory; `relativePath` keeps its path inside the folder chosen, as a dropped folder's files carry it.
+const fileFromStagedEntry = async (folder, entry, index) => {
+    const relative = String(entry.relative_path || entry.name);
+    const response = await fetch(`/file/${String(entry.path).split('/').map(encodeURIComponent).join('/')}`);
+    if (!response.ok || !response.body) throw new Error(`import_staged_file_unreadable:${relative}`);
+    const handle = await folder.getFileHandle(`${index}_${String(entry.name)}`, { create: true });
+    await response.body.pipeTo(await handle.createWritable());
+    const stored = await handle.getFile();
+    const file = new File([stored], String(entry.name), { type: inferMimeTypeFromName(entry.name) });
+    Object.defineProperty(file, 'relativePath', { configurable: true, enumerable: true, value: relative });
+    return file;
+};
+
+const filesFromStagedEntries = async (entries) => {
+    const root = await globalThis.navigator?.storage?.getDirectory?.();
+    if (!root) throw new Error('import_private_storage_unavailable');
+    const imports = await root.getDirectoryHandle('imports', { create: true });
+    // The previous picks are read long since: only this one stays.
+    for await (const name of imports.keys()) await imports.removeEntry(name, { recursive: true });
+    const folder = await imports.getDirectoryHandle(String(Date.now()), { create: true });
+    const files = [];
+    for (const [index, entry] of entries.entries()) files.push(await fileFromStagedEntry(folder, entry, index));
+    return files;
+};
+
+const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, multiple = true, source = '', folders = false } = {}) => {
     if (typeof window === 'undefined') return { ok: false, error: 'no_window', files: [] };
     if (!isNativeImportBridgeAvailable()) return { ok: false, error: 'native_bridge_unavailable', files: [] };
     const importKinds = resolveImportKinds({ kinds, accept });
@@ -131,7 +166,8 @@ const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, m
     const options = {
         sources: source ? [source] : resolveNativeImportSources(importKinds),
         kinds: importKinds,
-        labels: resolveNativeImportLabels()
+        labels: resolveNativeImportLabels(),
+        folders: folders === true
     };
     const fileTypes = importKinds.length ? [NATIVE_ANY_SOURCE_TYPE]
         : String(accept).replaceAll('.', '').split(',').map(value => value.trim()).filter(Boolean);
@@ -158,6 +194,11 @@ const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, m
             }
             // Contacts: the photos are already in the library, the Media panel lists them.
             if (resp.data?.source === 'contacts') return finalize({ ok: true, source: 'contacts', files: [] });
+            if (rawFiles.some(entry => entry?.path)) {
+                filesFromStagedEntries(rawFiles).then(files => finalize({ ok: true, files }),
+                    error => finalize({ ok: false, error: String(error?.message || error), files: [] }));
+                return;
+            }
             finalize({ ok: true, files: rawFiles.map((entry, index) => buildFileFromNativeEntry(entry, index)) });
         };
         try {
@@ -181,7 +222,13 @@ const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, m
     });
 };
 
-const requestImportFilesFromInput = async (hostEnv = '', { accept = '', multiple = true } = {}) => {
+// The desktop app's window (Tauri on macOS: wry's NSOpenPanel takes files and folders together once a folder is allowed,
+// wkwebview/class/wry_web_view_ui_delegate.rs) chooses a file or a folder, what is chosen deciding (R-205). A browser's
+// window takes one or the other, never both: there, a folder comes by a drop.
+const takesFilesAndFolders = () => typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
+    && /Macintosh|Mac OS X/.test(String(window.navigator?.userAgent || ''));
+
+const requestImportFilesFromInput = async (hostEnv = '', { accept = '', multiple = true, folders = false } = {}) => {
     if (typeof document === 'undefined') return { ok: false, error: 'no_document', files: [] };
     return new Promise((resolve) => {
         const input = document.createElement('input');
@@ -221,6 +268,7 @@ const requestImportFilesFromInput = async (hostEnv = '', { accept = '', multiple
         input.type = 'file';
         input.accept = String(accept || '');
         input.multiple = multiple === true;
+        if (folders && takesFilesAndFolders()) input.webkitdirectory = true;
         input.tabIndex = -1;
         input.setAttribute('aria-hidden', 'true');
         Object.assign(input.style, {
@@ -267,20 +315,22 @@ const requestImportFilesFromInput = async (hostEnv = '', { accept = '', multiple
 
 // Shared system selection for the Media panel and explicit text-file intake.
 // `source` (files, photos, camera) is honoured by the native host; a browser
-// has only its file window, which covers files and the camera roll.
-const requestProjectImportFiles = async ({ accept = '', kinds = null, multiple = true, source = '' } = {}) => {
+// has only its file window, which covers files and the camera roll. `folders`: a
+// folder may be chosen as well as a file (the import panel's Ouvrir, R-205): its
+// files come with their path inside it (`relativePath`, `webkitRelativePath`).
+const requestProjectImportFiles = async ({ accept = '', kinds = null, multiple = true, source = '', folders = false } = {}) => {
     if (typeof window === 'undefined') return { ok: false, error: 'no_window', files: [] };
     const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
     if (isNativeImportBridgeAvailable()) {
-        const nativeSelection = await requestImportFilesFromNativeBridge({ accept, kinds, multiple, source });
+        const nativeSelection = await requestImportFilesFromNativeBridge({ accept, kinds, multiple, source, folders });
         return nativeSelection?.ok === true && multiple !== true
             ? { ...nativeSelection, files: nativeSelection.files.slice(0, 1) } : nativeSelection;
     }
-    return requestImportFilesFromInput(hostEnv, { accept, multiple });
+    return requestImportFilesFromInput(hostEnv, { accept, multiple, folders });
 };
 
 
-export { availableMediaSources, isNativeImportBridgeAvailable, requestProjectImportFiles, inferMimeTypeFromName };
+export { availableMediaSources, isNativeImportBridgeAvailable, requestProjectImportFiles, inferMimeTypeFromName, filesFromStagedEntries };
 
 /** Explicit text-file intake. Desktop file bytes belong exclusively to Axum. */
 export async function requestTextFile({ extension, maxBytes = 32 * 1024 * 1024 } = {}) {

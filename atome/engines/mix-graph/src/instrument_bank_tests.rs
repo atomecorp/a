@@ -1,4 +1,4 @@
-// The zone fields a bank brings (one-shot, keyswitch, filter), as the eVe
+// The zone fields a bank brings (one-shot, keyswitch, filter, envelope), as the eVe
 // kernel writes them (instrument_schema.js), built into the sampler.
 
 use crate::SampleData;
@@ -72,4 +72,31 @@ fn a_zone_switch_without_its_range_or_an_unknown_filter_is_refused() {
         r#""one_shot":false,"switch":null,"filter":{"kind":"peak","cutoff_hz":800,"q":1,"key_track_cents":0,"key_center":60,"velocity_track_cents":0}"#,
     );
     assert!(build_sampler(&spec(&filtered, "null"), &samples(), 48_000).is_err());
+}
+
+#[test]
+fn a_zone_envelope_builds_onto_its_zone_and_a_null_one_leaves_the_params() {
+    let zones = format!(
+        "{},{}",
+        zone(
+            "slow",
+            r#""envelope":{"attack_ms":20,"decay_ms":1,"sustain":0.5,"release_ms":1200}"#
+        ),
+        zone("plain", r#""envelope":null"#)
+    );
+    let (sampler, _, _) = build_sampler(&spec(&zones, "null"), &samples(), 48_000).unwrap();
+    let keymap = sampler.keymap();
+    assert_eq!(
+        keymap
+            .zone(0)
+            .envelope
+            .map(|own| (own.attack_ms, own.sustain, own.release_ms)),
+        Some((20.0, 0.5, 1200.0))
+    );
+    assert_eq!(keymap.zone(1).envelope, None);
+    let outside = zone(
+        "slow",
+        r#""envelope":{"attack_ms":20,"decay_ms":1,"sustain":2,"release_ms":1200}"#,
+    );
+    assert!(build_sampler(&spec(&outside, "null"), &samples(), 48_000).is_err());
 }

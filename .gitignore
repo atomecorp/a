@@ -70,6 +70,7 @@ tests/database/*
 !tests/server/
 tests/server/*
 !tests/server/durable_event_retry.test.mjs
+!tests/server/event_receipts.test.mjs
 !tests/server/communication_priority.test.mjs
 !tests/server/ws_communication_corrections.test.mjs
 !tests/server/auth_phone_fixture.mjs
@@ -503,3 +504,14 @@ tests/squirrel/*
 !tests/music/**
 !tests/governance/aos_builder.test.mjs
 !tests/governance/aos_installation.test.mjs
+
+# Music and Timeline test journey (tests/parcours_musique) and its probes
+!tests/parcours_musique/
+!tests/helpers/
+tests/helpers/*
+!tests/helpers/ws_api_client.mjs
+!tests/helpers/probe_app.mjs
+!tests/helpers/probe_app_session.mjs
+!tests/helpers/probe_home.mjs
+!tests/helpers/probe_server.mjs
+!tests/ios/auv3_aum/

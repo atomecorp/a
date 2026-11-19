@@ -21,6 +21,11 @@ struct VideoParams {
 @group(2) @binding(3) var mask_texture: texture_2d<f32>;
 @group(2) @binding(4) var mask_sampler: sampler;
 
+// The strip's media effects (media_fx_stack.wgsl, joined after this file) and
+// the LUT their `lut` slot reads (a 2x2x2 identity until the chain has one).
+@group(2) @binding(5) var<uniform> media_fx: MediaFx;
+@group(2) @binding(6) var media_fx_lut: texture_3d<f32>;
+
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
     @location(0) position: vec3<f32>,
@@ -127,14 +132,23 @@ fn apply_transition(uv_in: vec2<f32>, t: vec4<f32>) -> TransitionResult {
     return out;
 }
 
+// The frame as the media effects read it: its own CSS filters applied, opaque.
+fn media_sample(uv: vec2<f32>) -> vec4<f32> {
+    let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, uv);
+    return vec4<f32>(apply_color_filters(frame.rgb, video_params.base, video_params.filters), 1.0);
+}
+
+fn media_fx_lut_sample(coord: vec3<f32>) -> vec3<f32> {
+    return textureSampleLevel(media_fx_lut, video_sampler, coord, 0.0).rgb;
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    let transition = apply_transition(in.uv, video_params.transition);
-    let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, transition.uv);
-    let filtered = apply_color_filters(frame.rgb, video_params.base, video_params.filters);
     // Le masque ne coupe que la COUVERTURE : la video continue de se lire
     // derriere la silhouette, elle n'est jamais arretee ni recopiee.
-    let mask_alpha = clamp(textureSample(mask_texture, mask_sampler, in.uv).a, 0.0, 1.0);
-    let opacity = clamp(video_params.base.x, 0.0, 1.0) * transition.alpha * mask_alpha;
-    return vec4<f32>(srgb_to_linear(filtered), opacity);
+    let mask_alpha = clamp(textureSampleLevel(mask_texture, mask_sampler, in.uv, 0.0).a, 0.0, 1.0);
+    let transition = apply_transition(in.uv, video_params.transition);
+    let shaded = media_fx_apply(transition.uv);
+    let opacity = clamp(video_params.base.x, 0.0, 1.0) * transition.alpha * mask_alpha * shaded.a;
+    return vec4<f32>(srgb_to_linear(shaded.rgb), opacity);
 }

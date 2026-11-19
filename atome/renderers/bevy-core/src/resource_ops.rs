@@ -132,6 +132,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             playback_progress: None,
             selected: None,
             filters: current_filters,
+            effects: None,
             transition: current_transition,
             procedural: None,
             progress_ring: None,

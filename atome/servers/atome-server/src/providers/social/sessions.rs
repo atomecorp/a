@@ -1,116 +1,68 @@
-// A person's social sessions (server/social/social_sessions.js, ported): the tokens only in the
-// person's vault (`social.<network>`), the public view built here, a refresh only here.
-use super::net::{Sd, Se};
-use super::{Config, facebook, instagram, tiktok};
+// A person's social sessions (server/social/social_sessions.js, ported; several accounts per
+// network since R-190): the tokens only in the person's vault (`social.<network>`), the public
+// view built here, a refresh only here.
+use super::accounts;
+use super::linked::Entry;
+use super::net::{self, Sd, Se};
+use super::network::{NETWORKS, Network};
+use super::ops::Env;
+use super::{Config, bluesky_auth, discord, facebook, kept, mastodon, telegram};
 use crate::providers::credentials::Credentials;
 use crate::providers::generation::now_ms;
-use crate::providers::oauth::{Complete, Current, OAuth};
+use crate::providers::oauth::{self, Complete, Current, OAuth};
 use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::sync::Arc;
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum Network {
-    TikTok,
-    Instagram,
-    Facebook,
-}
-
-pub const NETWORKS: [Network; 3] = [Network::TikTok, Network::Instagram, Network::Facebook];
-
-impl Network {
-    pub fn of(name: &str) -> Sd<Self> {
-        match name {
-            "tiktok" => Ok(Self::TikTok),
-            "instagram" => Ok(Self::Instagram),
-            "facebook" => Ok(Self::Facebook),
-            _ => Err(Se::new("social_request_invalid")),
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::TikTok => "tiktok",
-            Self::Instagram => "instagram",
-            Self::Facebook => "facebook",
-        }
-    }
-
-    fn record(self) -> String {
-        format!("social.{}", self.name())
-    }
-
-    fn adapter_configured(self, config: &Config) -> bool {
-        match self {
-            Self::TikTok => tiktok::configured(config),
-            Self::Instagram => instagram::configured(config),
-            Self::Facebook => facebook::configured(config),
-        }
-    }
-
-    fn configured(self, config: &Config) -> bool {
-        self.adapter_configured(config)
-            && config.get("SOCIAL_PUBLIC_BASE_URL").starts_with("https://")
-    }
-
-    fn needs_refresh(self, record: &JsonValue, now: i64) -> bool {
-        match self {
-            Self::TikTok => tiktok::needs_refresh(record, now),
-            Self::Instagram => instagram::needs_refresh(record, now),
-            // No refresh grant exists for a user token: an expired session reconnects.
-            Self::Facebook => false,
-        }
-    }
-
-    async fn refresh(self, config: &Config, record: &JsonValue, now: i64) -> Sd<JsonValue> {
-        match self {
-            Self::TikTok => tiktok::refresh(config, record, now).await,
-            Self::Instagram => instagram::refresh(record, now).await,
-            Self::Facebook => Err(Se::new("social_session_expired")),
-        }
-    }
-
-    async fn describe(self, config: &Config, record: &JsonValue) -> Sd<JsonValue> {
-        match self {
-            Self::TikTok => tiktok::describe(config, record).await,
-            Self::Instagram => Ok(instagram::describe(config)),
-            Self::Facebook => Ok(json!({})),
-        }
-    }
-}
-
-/// A session as one call found it: its record and state (`connected`, `expired`, `disconnected`).
+/// An account as one call found it: its record and state (`connected`, `expired`, `disabled`,
+/// `disconnected`).
 pub struct Session {
     pub network: Network,
+    pub account: String,
     pub record: Option<JsonValue>,
     pub state: &'static str,
     pub error: Option<String>,
 }
 
-/// `loadSocialSession`: a usable session or the reason there is none; an access token about to
-/// expire is refreshed and stored here.
-pub async fn load(network: Network, vault: &Credentials, config: &Config) -> Sd<Session> {
+fn state_of(account: &JsonValue, now: i64) -> &'static str {
+    if !accounts::enabled(account) {
+        return "disabled";
+    }
+    let expires = js::truthy(account.get("expires_at"))
+        && now as f64 >= js::number(account.get("expires_at"));
+    if expires { "expired" } else { "connected" }
+}
+
+/// The account refreshed when its token is about to expire, the refresh stored.
+async fn settled(
+    network: Network,
+    account: JsonValue,
+    vault: &Credentials,
+    config: &Config,
+) -> Sd<Session> {
     let now = now_ms();
-    let Some(mut record) = vault.read_record(&network.record()).await? else {
-        return Ok(Session {
-            network,
-            record: None,
-            state: "disconnected",
-            error: None,
-        });
-    };
-    if network.needs_refresh(&record, now) {
-        match network.refresh(config, &record, now).await {
+    let id = net::text(account.get("account"));
+    let mut account = account;
+    if accounts::enabled(&account) && network.needs_refresh(&account, now) {
+        match network.refresh(config, &account, now).await {
             Ok(refreshed) => {
-                record = refreshed;
-                vault
-                    .store_record(&network.record(), record.clone())
-                    .await?;
+                let fresh = refreshed.as_object().cloned().unwrap_or_default();
+                let stored = fresh.clone();
+                accounts::update(vault, network, &id, move |known| {
+                    if let Some(known) = known.as_object_mut() {
+                        known.extend(stored);
+                    }
+                })
+                .await?;
+                if let Some(known) = account.as_object_mut() {
+                    known.extend(fresh);
+                }
             }
             Err(failure) if failure.code == "social_session_expired" => {
                 return Ok(Session {
                     network,
-                    record: Some(record),
+                    account: id,
+                    record: Some(account),
                     state: "expired",
                     error: None,
                 });
@@ -118,15 +70,56 @@ pub async fn load(network: Network, vault: &Credentials, config: &Config) -> Sd<
             Err(failure) => return Err(failure),
         }
     }
-    let expires =
-        js::truthy(record.get("expires_at")) && now as f64 >= js::number(record.get("expires_at"));
-    let state = if expires { "expired" } else { "connected" };
     Ok(Session {
         network,
-        record: Some(record),
-        state,
+        state: state_of(&account, now),
+        account: id,
+        record: Some(account),
         error: None,
     })
+}
+
+/// `loadSocialSession`: the account `wanted` names (else the first enabled one), usable or the
+/// reason it is not.
+pub async fn load(
+    network: Network,
+    wanted: Option<&str>,
+    vault: &Credentials,
+    config: &Config,
+) -> Sd<Session> {
+    let record = vault.read_record(&network.record()).await?;
+    let all = accounts::list(network, record.as_ref());
+    match accounts::pick(&all, wanted) {
+        Some(account) => settled(network, account, vault, config).await,
+        None if wanted.is_some() => Err(Se::new("social_account_not_found")),
+        None => Ok(Session {
+            network,
+            account: String::new(),
+            record: None,
+            state: "disconnected",
+            error: None,
+        }),
+    }
+}
+
+/// The Facebook account administering `page`.
+pub async fn page_session(page: &str, env: &Env) -> Sd<Session> {
+    let record = env.vault.read_record(&Network::Facebook.record()).await?;
+    let holder = accounts::list(Network::Facebook, record.as_ref())
+        .into_iter()
+        .find(|account| facebook::page_of(account, page).is_ok())
+        .ok_or_else(|| Se::new("social_destination_invalid"))?;
+    let session = settled(Network::Facebook, holder, &env.vault, &env.config).await?;
+    connected_only(session)
+}
+
+/// The session when it may act, else why it may not.
+pub fn connected_only(session: Session) -> Sd<Session> {
+    match session.state {
+        "connected" => Ok(session),
+        "expired" => Err(Se::new("social_session_expired")),
+        _ => Err(Se::new("social_not_connected")),
+    }
 }
 
 /// `describeSocialSession`: what the provider says of a connected account.
@@ -150,90 +143,145 @@ pub async fn describe(session: &mut Session, config: &Config) -> JsonValue {
     }
 }
 
-/// `socialAccountView`.
-pub async fn account_view(network: Network, vault: &Credentials, config: &Config) -> JsonValue {
-    if !network.configured(config) {
-        return json!({ "network": network.name(), "configured": false, "state": "not_configured" });
-    }
-    let mut session = load(network, vault, config)
-        .await
-        .unwrap_or_else(|failure| Session {
-            network,
-            record: None,
-            state: "disconnected",
-            error: Some(if failure.code.is_empty() {
-                "social_provider_unavailable".into()
-            } else {
-                failure.code
-            }),
-        });
+/// An account's public view: never a token.
+async fn account_view(mut session: Session, config: &Config) -> JsonValue {
     let extra = describe(&mut session, config).await;
-    let mut view = JsonMap::new();
-    view.insert("network".into(), json!(network.name()));
-    view.insert("configured".into(), json!(true));
-    view.insert("state".into(), json!(session.state));
-    if let Some(error) = &session.error {
-        view.insert("error".into(), json!(error));
-    }
-    let record = session.record.as_ref();
+    let record = session.record.clone().unwrap_or_else(|| json!({}));
     let field = |name: &str, empty: JsonValue| {
         record
-            .and_then(|r| r.get(name))
+            .get(name)
             .filter(|v| js::truthy(Some(v)))
             .cloned()
             .unwrap_or(empty)
     };
+    let mut view = JsonMap::new();
+    view.insert("account".into(), json!(session.account));
+    view.insert("label".into(), json!(accounts::label(&record)));
     view.insert("identity".into(), field("identity", JsonValue::Null));
+    view.insert("state".into(), json!(session.state));
     view.insert("scopes".into(), field("scopes", json!([])));
     view.insert("expires_at".into(), field("expires_at", JsonValue::Null));
-    if let (Network::Facebook, Some(record)) = (network, record) {
-        view.insert("pages".into(), facebook::public_pages(record));
+    if let Some(error) = &session.error {
+        view.insert("error".into(), json!(error));
+    }
+    match session.network {
+        Network::Facebook => {
+            view.insert("pages".into(), facebook::public_pages(&record));
+        }
+        Network::Mastodon => {
+            view.insert("host".into(), field("host", JsonValue::Null));
+        }
+        Network::Discord => {
+            view.insert("reads".into(), json!(discord::reads(&record)));
+        }
+        _ => {}
     }
     view.extend(extra.as_object().cloned().unwrap_or_default());
     JsonValue::Object(view)
 }
 
-/// `listSocialAccounts`.
+/// One network's view: whether the operator made it available, and its accounts.
+pub async fn network_view(network: Network, vault: &Credentials, config: &Config) -> JsonValue {
+    if !network.configured(config) {
+        return json!({ "network": network.name(), "configured": false, "accounts": [] });
+    }
+    let record = vault.read_record(&network.record()).await;
+    let all = match record {
+        Ok(record) => accounts::list(network, record.as_ref()),
+        Err(code) => {
+            return json!({ "network": network.name(), "configured": true, "accounts": [], "error": code });
+        }
+    };
+    let views = futures_util::future::join_all(all.into_iter().map(|account| async move {
+        let id = net::text(account.get("account"));
+        let session = settled(network, account.clone(), vault, config)
+            .await
+            .unwrap_or_else(|failure| Session {
+                network,
+                account: id,
+                record: Some(account),
+                state: "connected",
+                error: Some(if failure.code.is_empty() {
+                    "social_provider_unavailable".into()
+                } else {
+                    failure.code
+                }),
+            });
+        account_view(session, config).await
+    }))
+    .await;
+    json!({ "network": network.name(), "configured": true, "accounts": views })
+}
+
+/// `listSocialAccounts`: `{ networks: [{ network, configured, accounts }] }`'s list.
 pub async fn accounts(vault: &Credentials, config: &Config) -> JsonValue {
     let views = futures_util::future::join_all(
         NETWORKS
             .iter()
-            .map(|network| account_view(*network, vault, config)),
+            .map(|network| network_view(*network, vault, config)),
     )
     .await;
-    let mut out = JsonMap::new();
-    for (network, view) in NETWORKS.iter().zip(views) {
-        out.insert(network.name().into(), view);
-    }
-    JsonValue::Object(out)
+    JsonValue::Array(views)
 }
 
-/// `startSocialConnection`: the network's official page, its completion sealing the session.
-pub fn connect(
-    oauth: &Arc<OAuth>,
-    network: &str,
-    principal: &str,
-    vault: &Credentials,
-    config: &Arc<Config>,
-) -> Sd<JsonValue> {
-    let network = Network::of(network)?;
-    if !network.configured(config) {
-        return Err(Se::new("social_not_configured"));
+/// The account view of the account `id` once stored.
+async fn view_of(network: Network, id: &str, env: &Env) -> Sd<JsonValue> {
+    let session = load(network, Some(id), &env.vault, &env.config).await?;
+    Ok(account_view(session, &env.config).await)
+}
+
+/// The account stored (a new one added, a known one replaced), the linked accounts told.
+pub async fn store_account(network: Network, account: JsonValue, env: &Env) -> Sd<JsonValue> {
+    let id = accounts::id_of(network, &account);
+    if !accounts::shaped(&id) {
+        return Err(Se::new("social_provider_rejected"));
     }
-    let (vault, settings) = (vault.clone(), config.clone());
-    let complete: Complete = Box::new(move |code: String, redirect: String, _current: Current| {
+    accounts::change(&env.vault, network, |all| {
+        let record =
+            accounts::with_account(network, Some(&accounts::record_of(network, all)), account);
+        Ok((accounts::list(network, Some(&record)), ()))
+    })
+    .await?;
+    relink(env).await?;
+    view_of(network, &id, env).await
+}
+
+/// The webhooks' and the polling's view of the person: every enabled account, its remote ids.
+pub async fn relink(env: &Env) -> Sd<()> {
+    let mut entries = Vec::new();
+    for network in NETWORKS {
+        let record = env.vault.read_record(&network.record()).await?;
+        for account in accounts::list(network, record.as_ref()) {
+            if !accounts::enabled(&account) {
+                continue;
+            }
+            let mut remote_ids = vec![net::text(account.pointer("/identity/id"))];
+            if network == Network::Facebook {
+                let pages = account.get("pages").and_then(JsonValue::as_array);
+                remote_ids.extend(pages.into_iter().flatten().map(|p| net::text(p.get("id"))));
+            }
+            remote_ids.retain(|id| !id.is_empty());
+            let polled =
+                network.polled() && (network != Network::Discord || discord::reads(&account));
+            entries.push(Entry {
+                network: network.name().into(),
+                account: net::text(account.get("account")),
+                remote_ids,
+                polled,
+            });
+        }
+    }
+    env.linked
+        .set(&env.principal, &env.vault.social_root(), entries)
+        .await
+}
+
+fn completion(network: Network, env: &Env, exchange: Exchange) -> Complete {
+    let env = env.clone();
+    Box::new(move |code: String, redirect: String, _current: Current| {
         Box::pin(async move {
-            let now = now_ms();
-            let exchanged = match network {
-                Network::TikTok => tiktok::exchange(&settings, &code, &redirect, now).await,
-                Network::Instagram => instagram::exchange(&settings, &code, &redirect, now).await,
-                Network::Facebook => facebook::exchange(&settings, &code, &redirect, now).await,
-            };
-            let stored = match exchanged {
-                Ok(record) => vault
-                    .store_record(&network.record(), record)
-                    .await
-                    .map_err(Se::from),
+            let stored = match exchange(code, redirect).await {
+                Ok(account) => store_account(network, account, &env).await,
                 Err(failure) => Err(failure),
             };
             // The callback tells only the social codes.
@@ -243,39 +291,154 @@ pub fn connect(
                 } else {
                     "social_provider_unavailable".into()
                 }
-            })?;
-            Ok(account_view(network, &vault, &settings).await)
+            })
         })
-    });
-    let authorize = |state: &str, redirect: &str| match network {
-        Network::TikTok => tiktok::authorize_url(config, state, redirect),
-        Network::Instagram => instagram::authorize_url(config, state, redirect),
-        Network::Facebook => facebook::authorize_url(config, state, redirect),
-    };
-    let base = config.get("SOCIAL_PUBLIC_BASE_URL").to_string();
-    oauth
-        .start(principal, network.name(), &base, authorize, complete)
-        .map_err(|failure| Se::new(&failure.message))
+    })
 }
 
-/// `disconnectSocialAccount`: the tokens deleted from atome in every case; the provider's
-/// revocation attempted where it is documented, its outcome told.
-pub async fn disconnect(network: &str, vault: &Credentials, config: &Config) -> Sd<JsonValue> {
-    let network = Network::of(network)?;
-    let record = vault.read_record(&network.record()).await?;
-    let revocable = network != Network::Instagram;
-    let mut revoked = if revocable {
-        json!(false)
-    } else {
-        JsonValue::Null
-    };
-    if let Some(record) = record.filter(|_| revocable && network.adapter_configured(config)) {
-        let done = match network {
-            Network::TikTok => tiktok::revoke(config, &record).await,
-            _ => facebook::revoke(&record).await,
-        };
-        revoked = json!(done.is_ok());
+type Exchange = Box<
+    dyn FnOnce(String, String) -> futures_util::future::BoxFuture<'static, Sd<JsonValue>> + Send,
+>;
+
+/// `startSocialConnection`: the network's official page, its completion sealing the account.
+/// Mastodon registers atome on the person's instance first; Bluesky resolves the person's
+/// handle to their server and pushes the request there (atproto OAuth).
+pub async fn connect(oauth: &Arc<OAuth>, payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
+    let network = Network::of(&net::text(payload.get("network")))?;
+    let config = env.config.clone();
+    if network.entered() {
+        return Err(Se::new("social_request_invalid"));
     }
-    vault.remove_record(&network.record()).await?;
-    Ok(json!({ "network": network.name(), "state": "disconnected", "provider_revoked": revoked }))
+    if !network.configured(&config) {
+        return Err(Se::new("social_not_configured"));
+    }
+    let base = config.get("SOCIAL_PUBLIC_BASE_URL").to_string();
+    let principal = env.principal.clone();
+    let started = match network {
+        Network::Mastodon => {
+            let redirect = oauth::redirect_uri(&base, network.name()).map_err(Se::from)?;
+            let app =
+                mastodon::register(&config, &net::text(payload.get("instance")), &redirect).await?;
+            let (settings, registered) = (config.clone(), app.clone());
+            let exchange: Exchange = Box::new(move |code, redirect| {
+                Box::pin(async move {
+                    mastodon::exchange(&settings, &registered, &code, &redirect, now_ms()).await
+                })
+            });
+            let complete = completion(network, env, exchange);
+            let authorize =
+                |state: &str, redirect: &str| mastodon::authorize_url(&app, state, redirect);
+            oauth.start(&principal, network.name(), &base, authorize, complete)
+        }
+        Network::Bluesky => {
+            let server = bluesky_auth::discover(&config, &net::text(payload.get("handle"))).await?;
+            let flow = bluesky_auth::Flow::new(&config, server)?;
+            let (settings, finishing) = (config.clone(), flow.clone());
+            let exchange: Exchange = Box::new(move |code, redirect| {
+                Box::pin(async move {
+                    finishing
+                        .exchange(&settings, &code, &redirect, now_ms())
+                        .await
+                })
+            });
+            let complete = completion(network, env, exchange);
+            let pushed = config.clone();
+            let authorize = move |state: String,
+                                  redirect: String|
+                  -> futures_util::future::BoxFuture<
+                'static,
+                Result<String, String>,
+            > {
+                Box::pin(async move {
+                    flow.authorize(&pushed, &state, &redirect)
+                        .await
+                        .map_err(|failure| failure.code)
+                })
+            };
+            oauth
+                .start_pushed(&principal, network.name(), &base, authorize, complete)
+                .await
+        }
+        _ => {
+            let settings = config.clone();
+            let exchange: Exchange = Box::new(move |code, redirect| {
+                Box::pin(async move {
+                    network
+                        .exchange(&settings, &code, &redirect, now_ms())
+                        .await
+                })
+            });
+            let complete = completion(network, env, exchange);
+            let url = |state: &str, redirect: &str| {
+                network
+                    .authorize_url(&config, state, redirect)
+                    .unwrap_or_default()
+            };
+            oauth.start(&principal, network.name(), &base, url, complete)
+        }
+    };
+    started.map_err(|failure| Se::new(&failure.message))
+}
+
+/// `social.credentials.save`: a Telegram bot and its channel, a Discord channel's webhook (and
+/// the bot that reads it), checked with the network then kept in the vault.
+pub async fn credentials(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
+    let network = Network::of(&net::text(payload.get("network")))?;
+    let fields = payload
+        .get("fields")
+        .filter(|f| f.is_object())
+        .ok_or_else(|| Se::new("social_request_invalid"))?;
+    let now = now_ms();
+    let account = match network {
+        Network::Telegram => telegram::connect(&env.config, fields, now).await?,
+        Network::Discord => discord::connect(&env.config, fields, now).await?,
+        _ => return Err(Se::new("social_request_invalid")),
+    };
+    store_account(network, account, env).await
+}
+
+/// `social.account.enable`: an account set aside without erasing it, or taken back.
+pub async fn enable(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
+    let network = Network::of(&net::text(payload.get("network")))?;
+    let id = net::text(payload.get("account"));
+    let Some(enabled) = payload.get("enabled").and_then(JsonValue::as_bool) else {
+        return Err(Se::new("social_request_invalid"));
+    };
+    accounts::update(&env.vault, network, &id, |account| {
+        account["enabled"] = json!(enabled);
+    })
+    .await?;
+    relink(env).await?;
+    view_of(network, &id, env).await
+}
+
+/// `disconnectSocialAccount`: the account's tokens (every account of the network when none is
+/// named) and its kept conversations deleted from atome in every case; the provider's
+/// revocation attempted where it is documented, its outcome told.
+pub async fn disconnect(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
+    let network = Network::of(&net::text(payload.get("network")))?;
+    let only = net::text(payload.get("account"));
+    let removed = accounts::change(&env.vault, network, |all| {
+        let (gone, kept): (Vec<JsonValue>, Vec<JsonValue>) = all
+            .into_iter()
+            .partition(|a| only.is_empty() || net::text(a.get("account")) == only);
+        if gone.is_empty() && !only.is_empty() {
+            return Err(Se::new("social_account_not_found"));
+        }
+        Ok((kept, gone))
+    })
+    .await?;
+    let mut told = Vec::new();
+    for account in &removed {
+        let revoked = if network.adapter_configured(&env.config) {
+            network.revoke(&env.config, account).await
+        } else {
+            None
+        };
+        let id = net::text(account.get("account"));
+        kept::erase(&env.vault.social_root(), network.name(), &id).await?;
+        told.push(json!({ "account": id, "provider_revoked": revoked.map(|done| done.is_ok()) }));
+    }
+    relink(env).await?;
+    Ok(json!({ "network": network.name(), "state": "disconnected", "accounts": told }))
 }

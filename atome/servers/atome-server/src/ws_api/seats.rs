@@ -53,7 +53,7 @@ const PLATFORMS: [&str; 6] = [
 const CAPABILITIES: [&str; 5] = ["render", "pointer_input", "audio", "video", "fullscreen"];
 
 pub(super) fn now() -> String {
-    js::iso(chrono::Utc::now().timestamp_millis())
+    js::iso(atome_js_values::dates::now_ms())
 }
 
 /// `message[a] ?? message[b]`.

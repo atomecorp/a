@@ -176,3 +176,124 @@ pub fn form_post(url: &str, fields: &[(&str, JsonValue)]) -> reqwest::RequestBui
 pub async fn delay(ms: u64) {
     tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
 }
+
+/// An answer whose headers matter (a resumable upload's `Location`, a created post's id, a DPoP
+/// nonce): its status, its headers and its JSON body, a refusal kept as it came for the caller
+/// to read before it classifies it.
+pub struct Answer {
+    pub status: u16,
+    pub headers: reqwest::header::HeaderMap,
+    pub body: JsonValue,
+}
+
+impl Answer {
+    pub fn header(&self, name: &str) -> String {
+        self.headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    /// The refusal as a social failure, as `fetch` classifies it.
+    pub fn failure(&self, reaches: bool) -> Se {
+        let provider_code = provider_code_of(&self.body);
+        Se {
+            code: classify(self.status, provider_code.as_deref()).into(),
+            http_status: Some(self.status),
+            reached: reaches && self.status >= 500,
+            provider_code,
+            detail: None,
+        }
+    }
+
+    pub fn ok(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+}
+
+/// The whole answer, a transport failure only as `fetch` tells it.
+pub async fn answer(request: reqwest::RequestBuilder, reaches: bool) -> Sd<Answer> {
+    let response = http::send(request).await.map_err(|_| Se {
+        reached: reaches,
+        ..Se::new("social_network_interrupted")
+    })?;
+    let status = response.status().as_u16();
+    let headers = response.headers().clone();
+    let bytes = http::bytes(response, usize::MAX).await.unwrap_or_default();
+    let body = if bytes.is_empty() {
+        serde_json::json!({})
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| serde_json::json!({}))
+    };
+    Ok(Answer {
+        status,
+        headers,
+        body,
+    })
+}
+
+/// `answer`, a refusal becoming its social failure.
+pub async fn accepted(request: reqwest::RequestBuilder, reaches: bool) -> Sd<Answer> {
+    let answer = answer(request, reaches).await?;
+    if answer.ok() {
+        Ok(answer)
+    } else {
+        Err(answer.failure(reaches))
+    }
+}
+
+/// A published post removed: done once the network says so, or says it no longer has it (404).
+pub async fn removed(request: reqwest::RequestBuilder) -> Sd<()> {
+    match fetch(request, true).await {
+        Ok(_) => Ok(()),
+        Err(failure) if failure.http_status == Some(404) => Ok(()),
+        Err(failure) => Err(failure),
+    }
+}
+
+pub fn json_post(url: &str, body: &JsonValue) -> reqwest::RequestBuilder {
+    http::client()
+        .post(url)
+        .header("Content-Type", "application/json")
+        .body(body.to_string())
+}
+
+/// A `multipart/form-data` body: each part a field, or a file with its name and type.
+pub fn multipart(parts: &[(&str, Option<(&str, &str)>, Vec<u8>)]) -> (String, Vec<u8>) {
+    let boundary = format!("----atome{}", crate::providers::oauth::hex(12));
+    let mut body = Vec::new();
+    for (name, file, bytes) in parts {
+        body.extend(format!("--{boundary}\r\n").as_bytes());
+        match file {
+            Some((filename, mime)) => body.extend(
+                format!("Content-Disposition: form-data; name=\"{name}\"; filename=\"{}\"\r\nContent-Type: {mime}\r\n\r\n",
+                    filename.replace('"', "%22").replace(['\r', '\n'], " ")).as_bytes()),
+            None => body.extend(format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes()),
+        }
+        body.extend(bytes);
+        body.extend(b"\r\n");
+    }
+    body.extend(format!("--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
+/// A string field of a provider's answer, empty when absent.
+pub fn text(value: Option<&JsonValue>) -> String {
+    value
+        .filter(|v| js::truthy(Some(v)))
+        .map(js::string)
+        .unwrap_or_default()
+}
+
+/// An RFC 3339 time (or Meta's `+0000` offset form) as milliseconds, 0 when it does not parse.
+pub fn millis(value: &str) -> i64 {
+    js::dates::rfc3339(value)
+        .or_else(|| js::dates::zoned(value, "%Y-%m-%dT%H:%M:%S%z"))
+        .map_or(0, |time| time.utc.millis())
+}
+
+/// Milliseconds as the ISO time the conversation items carry.
+pub fn iso(ms: i64) -> String {
+    js::iso(ms)
+}

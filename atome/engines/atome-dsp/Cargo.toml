@@ -12,6 +12,7 @@ path = "src/lib.rs"
 [dependencies]
 nam-rs = "0.4"
 fft-convolver = "0.4"
+realfft = "3"
 
 [lints]
 workspace = true

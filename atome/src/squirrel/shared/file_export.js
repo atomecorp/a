@@ -1,22 +1,17 @@
 import { getNativeImportInvoke } from '../contacts/macos_source.js';
+import { bytesToBase64 } from './scalars.js';
 
 const checkedFile = (name, bytes) => {
     if (name === '.' || name === '..') throw new Error('export_filename_invalid');
     if (!/^[^/\\\0\r\n]{1,180}$/.test(name)) throw new Error('export_filename_invalid');
     if (!(bytes instanceof Uint8Array) || bytes.length > 64 * 1024 * 1024) throw new Error('export_bytes_invalid');
 };
-const base64Of = (bytes) => {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return btoa(binary);
-};
-
 /** Explicit portable file export; native hosts never fall back to browser FS. */
 export async function saveExportFile(name, bytes, mime = 'application/octet-stream') {
     checkedFile(name, bytes);
     const invoke = getNativeImportInvoke();
     if (invoke) {
-        const saved = await invoke('export_file_save', { name, dataBase64: base64Of(bytes) });
+        const saved = await invoke('export_file_save', { name, dataBase64: bytesToBase64(bytes) });
         if (!saved?.success) return { ok: false, cancelled: saved?.cancelled === true, error: saved?.error || 'export_not_saved' };
         return { ok: true, via: 'native', path: saved.path };
     }
@@ -39,7 +34,7 @@ export async function printExportFile(name, bytes, mime) {
     const invoke = getNativeImportInvoke();
     if (invoke) {
         // A host that cannot print (the AUv3 extension, Android) refuses the command: its reason is the answer.
-        const printed = await invoke('export_file_print', { name, dataBase64: base64Of(bytes), mime })
+        const printed = await invoke('export_file_print', { name, dataBase64: bytesToBase64(bytes), mime })
             .catch(error => ({ success: false, error: String(error?.message || error) }));
         if (!printed?.success) return { ok: false, cancelled: printed?.cancelled === true, error: printed?.error || 'export_not_printed' };
         return { ok: true, via: 'native' };

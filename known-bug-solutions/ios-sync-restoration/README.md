@@ -12,6 +12,12 @@ Rejected hypothesis: Calendar without a business project cannot by itself explai
 
 ## Regression and acceptance
 
-`tests/probes/ios_sync_recovery.probe.mjs` executes actual Swift journal/state/sync owners with synthetic authentication/device seams: own/foreign ownership, profile alias, duplicate delivery, binding refusal, atomic queue/batch rollback, legacy backfill, retry isolation, replay migration, newer edits, removed properties and lifecycle tombstones. `ios_sync_delivery.probe.mjs` uses actual URLSession sockets against a local synthetic server: welcome, dropped send, incomplete receipt, successful same-ID retry. The registered `tests/eve/dashboard_sync_recovery.test.mjs` exercises independent-source failure/recovery and durable invalidation alongside existing adapter/project-change suites; SyncEngine tests verify the WS notification contains no business state.
+The Swift journal/state/sync owners and their probes were retired on 6 Nov. 2026 (`7289b9f25`); the Rust local server's tests now hold the restoration contract:
+
+- `cargo test -p atome-server --lib local::local_atome_sync_restart_tests` (a replay cut before it settles resumes from its durable cursor after a restart; a duplicate delivery is not applied twice; lifecycle tombstones stay out of listings).
+- `cargo test -p atome-server --lib local::local_atome_ws_sync_replay_tests` (bounded batches, acks only once durable, a reconnection with nothing new applies nothing).
+- `cargo test -p atome-server --lib local::local_atome_isolation_tests` (own/foreign ownership, principal-bound pending delivery).
+- `cargo test -p atome-server --lib local::local_atome_remote_projection::tests` (own profile alias, a child before its parent, remote deletion, shared vault owner).
+- `cargo test -p atome-server --lib local::local_atome_sync_worker::tests` (retry isolation per principal, interrupted delivery requeued, outbound identity normalized). The registered `tests/eve/dashboard_sync_recovery.test.mjs` exercises independent-source failure/recovery and durable invalidation alongside existing adapter/project-change suites; SyncEngine tests verify the WS notification contains no business state.
 
 Required physical acceptance: build/install an update retaining the app/group data; launch the real Dashboard, allow authenticated replay, observe the red notice and restored categories, reopen Dashboard using native gestures, test a local edit through disconnection/reconnection, and collect pixels plus native console. Do not uninstall or extract the private database to simulate this. A passing synthetic test or install is not proof of full recovery of pre-uninstall data. Deployment and physical evidence are recorded in `eVe/documentations/FRAMEWORK_STATE.md`.

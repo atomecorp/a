@@ -6,23 +6,26 @@
 // any host, and on Windows only a shared one. Every input of the engine is opened here, so a take
 // and a monitored strip share the interface the exclusive mode holds.
 
+#![allow(
+    unsafe_code,
+    reason = "WASAPI buffers and COM objects are reached through the windows crate's unsafe bindings"
+)]
+
 use super::aux_outputs;
 use super::output_fill::OutputFill;
 use super::output_idle;
-use super::scheduled_backend::{BLOCK_FRAMES, note_discontinuity, note_rest, now_host_ns};
+use super::scheduled_backend::{BLOCK_FRAMES, note_rest, now_host_ns};
 use super::wasapi_client::{self, Endpoint, Exclusive, ExclusiveFormat};
+use super::windows_driver::{SharedFill, Tap};
 use atome_mix_graph::resample::LinearResampler;
 use atome_mix_graph::shared::LiveInput;
 use kira::Frame;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use windows::Win32::Media::Audio::{AUDCLNT_BUFFERFLAGS_SILENT, eCapture, eRender};
-
-// A recorder's tap: an input period's interleaved samples and its host instant.
-pub(crate) type Tap = Arc<dyn Fn(&[f32], i64) + Send + Sync>;
 
 struct Input {
     stream: Exclusive,
@@ -40,7 +43,6 @@ unsafe impl Send for Input {}
 
 static INPUTS: Mutex<Option<HashMap<String, Input>>> = Mutex::new(None);
 static OUTPUT_RATE: AtomicU32 = AtomicU32::new(0);
-static NEXT_TAP: AtomicU64 = AtomicU64::new(1);
 
 // COM work runs on a thread of its own in the multithreaded apartment (the
 // caller's may be the app's single-threaded one).
@@ -157,11 +159,9 @@ pub(crate) fn listen(device: &str, live: Vec<Arc<LiveInput>>) -> Result<(), Stri
     with_input(Some(device), open, |input| input.live = live)
 }
 
-// A take's tap on `device` (None: the default input); returns its id for `untap`.
-pub(crate) fn tap(device: Option<&str>, tap: Tap) -> Result<u64, String> {
-    let id = NEXT_TAP.fetch_add(1, Ordering::AcqRel);
-    with_input(device, true, |input| input.taps.push((id, tap)))?;
-    Ok(id)
+// A take's tap `id` on `device` (None: the default input).
+pub(crate) fn tap(device: Option<&str>, id: u64, tap: Tap) -> Result<(), String> {
+    with_input(device, true, |input| input.taps.push((id, tap)))
 }
 
 pub(crate) fn untap(device: Option<&str>, id: u64) -> Result<(), String> {
@@ -217,48 +217,50 @@ impl Input {
                 self.resampler.process(&self.frames, &mut self.resampled);
                 &self.resampled
             };
-            self.live.iter().for_each(|input| input.push(pushed));
+            self.live.iter().for_each(|input| {
+                input.push_at(pushed, host_ns as f64);
+            });
         }
     }
 }
 
-// Starts the device thread on the default output; Ok once its first stream plays.
-pub(crate) fn start(
-    fill: OutputFill,
-    stop: Arc<AtomicBool>,
-    wake: Receiver<()>,
-) -> Result<(), String> {
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), String>>();
-    crate::engine_thread::spawn(move || {
-        let mut fill = fill;
-        let mut ready = Some(ready_tx);
-        if let Err(error) = wasapi_client::com() {
-            let _ = ready.take().map(|ready| ready.send(Err(error)));
-            return;
+// The device thread's COM apartment and pro-audio scheduling (windows_driver.rs owns the thread).
+pub(crate) fn prepare_thread() -> Result<(), String> {
+    wasapi_client::com()?;
+    wasapi_client::pro_audio_thread();
+    Ok(())
+}
+
+// Plays the default output while the driver stays WASAPI (`generation`); `opened` hears whether
+// it opened. Err when it did not; Ok once it was lost, the engine stopped or the driver changed —
+// its inputs then closed.
+pub(crate) fn run(
+    fill: &SharedFill,
+    stop: &AtomicBool,
+    wake: &Receiver<()>,
+    generation: u64,
+    opened: &mut dyn FnMut(Result<(), String>) -> bool,
+) -> Result<(), ()> {
+    let output = match open_output() {
+        Ok(output) => output,
+        Err(error) => {
+            opened(Err(error));
+            return Err(());
         }
-        wasapi_client::pro_audio_thread();
-        while !stop.load(Ordering::Acquire) {
-            match open_output() {
-                Ok(output) => {
-                    let _ = ready.take().map(|ready| ready.send(Ok(())));
-                    play(&output, &mut fill, &stop, &wake);
-                }
-                Err(error) => {
-                    // The first stream reports its error; a lost device is looked for again.
-                    if let Some(ready) = ready.take() {
-                        let _ = ready.send(Err(error));
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_millis(250));
-                }
-            }
-            note_discontinuity();
-        }
-        OUTPUT_RATE.store(0, Ordering::Release);
-    });
-    ready_rx
-        .recv()
-        .map_err(|_| "output_thread_failed".to_string())?
+    };
+    if !opened(Ok(())) {
+        return Err(());
+    }
+    if let Ok(mut fill) = fill.lock() {
+        play(&output, &mut fill, stop, wake, generation);
+    }
+    if !super::windows_driver::unchanged(generation)
+        && let Ok(mut inputs) = INPUTS.lock()
+    {
+        *inputs = None;
+    }
+    OUTPUT_RATE.store(0, Ordering::Release);
+    Ok(())
 }
 
 fn open_output() -> Result<Exclusive, String> {
@@ -293,7 +295,13 @@ fn prime(output: &Exclusive) -> Result<(), String> {
 
 // Plays `output` until the engine stops or the device goes away; rests (stream stopped) while
 // nothing sounds and no input is open.
-fn play(output: &Exclusive, fill: &mut OutputFill, stop: &AtomicBool, wake: &Receiver<()>) {
+fn play(
+    output: &Exclusive,
+    fill: &mut OutputFill,
+    stop: &AtomicBool,
+    wake: &Receiver<()>,
+    generation: u64,
+) {
     let Endpoint::Render(render) = &output.endpoint else {
         return;
     };
@@ -304,7 +312,7 @@ fn play(output: &Exclusive, fill: &mut OutputFill, stop: &AtomicBool, wake: &Rec
     if !playing {
         return;
     }
-    while !stop.load(Ordering::Acquire) {
+    while !stop.load(Ordering::Acquire) && super::windows_driver::unchanged(generation) {
         if !playing {
             let _ = wake.recv_timeout(Duration::from_millis(250));
             if output_idle::is_active() {
@@ -320,7 +328,7 @@ fn play(output: &Exclusive, fill: &mut OutputFill, stop: &AtomicBool, wake: &Rec
         }
         let host_ns = now_host_ns();
         let inputs_open = match INPUTS.try_lock() {
-            Ok(mut inputs) => inputs.as_mut().map_or(false, |inputs| {
+            Ok(mut inputs) => inputs.as_mut().is_some_and(|inputs| {
                 inputs.values_mut().for_each(|input| input.drain(host_ns));
                 !inputs.is_empty()
             }),

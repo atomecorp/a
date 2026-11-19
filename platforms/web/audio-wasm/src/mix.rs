@@ -6,7 +6,7 @@ use atome_mix_graph::dsp_module::StoredAsset;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
-fn with_engine<T>(
+pub(crate) fn with_engine<T>(
     action: impl FnOnce(&mut crate::WasmAudioEngine) -> Result<T, String>,
 ) -> Result<T, JsValue> {
     let mut guard = ENGINE
@@ -40,6 +40,21 @@ pub fn audio_mix_levels() -> Result<js_sys::Array, JsValue> {
         js_sys::Reflect::set(&entry, &"strip_id".into(), &level.strip_id.into())?;
         js_sys::Reflect::set(&entry, &"peak".into(), &(level.peak as f64).into())?;
         js_sys::Reflect::set(&entry, &"rms".into(), &(level.rms as f64).into())?;
+        out.push(&entry);
+    }
+    Ok(out)
+}
+
+// The live measurements of the mix's `dsp` modules: [{ module_id, values }].
+#[wasm_bindgen]
+pub fn audio_mix_readings() -> Result<js_sys::Array, JsValue> {
+    let readings = with_engine(|engine| Ok(engine.mix.readings()))?;
+    let out = js_sys::Array::new();
+    for reading in readings {
+        let entry = js_sys::Object::new();
+        js_sys::Reflect::set(&entry, &"module_id".into(), &reading.module_id.into())?;
+        let values = js_sys::Float32Array::from(reading.values.as_slice());
+        js_sys::Reflect::set(&entry, &"values".into(), &values.into())?;
         out.push(&entry);
     }
     Ok(out)
@@ -92,9 +107,11 @@ pub fn audio_mix_module_state(module_id: &str) -> Result<Option<u8>, JsValue> {
     with_engine(|engine| Ok(engine.mix.module_state(module_id)))
 }
 
-// Web live input: the recorder worklet's chunks (mono) for one input device.
+// Web live input: the recorder worklet's chunks (mono) for one input device,
+// the first sample at the context frame `start_frame` (a REC point's take is
+// placed by it, record.rs).
 #[wasm_bindgen]
-pub fn audio_mix_live_push(device_id: &str, pcm: &[f32]) -> Result<(), JsValue> {
+pub fn audio_mix_live_push(device_id: &str, pcm: &[f32], start_frame: f64) -> Result<(), JsValue> {
     crate::scheduled_backend::wake()?;
     with_engine(|engine| {
         if let Some((_, input)) = engine
@@ -108,7 +125,7 @@ pub fn audio_mix_live_push(device_id: &str, pcm: &[f32]) -> Result<(), JsValue> 
                 .iter()
                 .map(|sample| kira::Frame::from_mono(*sample))
                 .collect();
-            input.push(&frames);
+            input.push_at(&frames, start_frame);
         }
         Ok(())
     })

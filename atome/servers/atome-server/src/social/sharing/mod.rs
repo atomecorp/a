@@ -5,7 +5,7 @@
 // with its link and revoked with it; a list's every new version is validated by its recipient
 // (lists.rs); a programme's interior is never shared. What the engine tells people (a frame to
 // their live connections, a notice on their stack) is handed back to its caller as `Effect`s.
-mod grants;
+pub(crate) mod grants;
 mod list_view;
 mod lists;
 mod manage;

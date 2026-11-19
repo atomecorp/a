@@ -18,33 +18,24 @@ pub(super) struct Authority {
 }
 
 // `sqlTime`: SQLite compares `expires_at` as text, 'YYYY-MM-DD HH:MM:SS' in UTC.
-fn sql_time(value: Option<&JsonValue>) -> Option<String> {
+pub(crate) fn sql_time(value: Option<&JsonValue>) -> Option<String> {
     let text = js::string(value.filter(|value| js::truthy(Some(value)))?);
+    let formats = ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M"];
     let instant = if text.contains('T') || text.ends_with('Z') {
-        chrono::DateTime::parse_from_rfc3339(&text)
-            .map(|instant| instant.with_timezone(&chrono::Utc))
-            .ok()
+        js::dates::rfc3339(&text)
+            .map(|instant| instant.utc)
             .or_else(|| {
-                ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M"]
+                formats
                     .iter()
-                    .find_map(|format| {
-                        chrono::NaiveDateTime::parse_from_str(&text, format)
-                            .ok()
-                            .and_then(|local| local.and_local_timezone(chrono::Local).single())
-                            .map(|instant| instant.with_timezone(&chrono::Utc))
-                    })
+                    .find_map(|format| js::dates::local(js::dates::naive(&text, format)?).single())
             })
     } else {
         let utc = text.replacen(' ', "T", 1);
-        ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M"]
+        formats
             .iter()
-            .find_map(|format| {
-                chrono::NaiveDateTime::parse_from_str(&utc, format)
-                    .ok()
-                    .map(|naive| naive.and_utc())
-            })
+            .find_map(|format| js::dates::naive(&utc, format))
     }?;
-    Some(instant.format("%Y-%m-%d %H:%M:%S").to_string())
+    Some(instant.sql())
 }
 
 fn mode_of(value: Option<&JsonValue>) -> &'static str {

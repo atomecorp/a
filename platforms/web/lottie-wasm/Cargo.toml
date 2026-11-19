@@ -1,0 +1,25 @@
+[package]
+name = "atome-lottie-wasm"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The browser's Lottie player, its own WASM module loaded when a Lottie atome is first shown or imported: a file's report, and its frames drawn by vello on the module's WebGPU device into ImageBitmaps the renderer copies"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+atome-lottie = { path = "../../../atome/engines/atome-lottie" }
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
+# Lottie -> vello scene (vello 0.10 is velato 0.12's and builds on wgpu 29, the workspace's).
+velato = { version = "0.12.0", default-features = false, features = ["vello"] }
+vello = { version = "0.10.0", default-features = false, features = ["wgpu"] }
+wasm-bindgen.workspace = true
+wasm-bindgen-futures = "0.4"
+web-sys = { workspace = true, features = ["ImageBitmap", "OffscreenCanvas"] }
+wgpu = { workspace = true, features = ["std", "webgpu", "wgsl"] }
+
+[lints]
+workspace = true

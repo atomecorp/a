@@ -179,7 +179,7 @@ impl Shop {
         else {
             return Ok(fail("shop_amount_invalid"));
         };
-        let at = chrono::Utc::now().timestamp_millis();
+        let at = atome_js_values::dates::now_ms();
         let state = contract::opening(&kind, listing["registration"].as_str().unwrap_or("auto"));
         let deposit = if kind == "rental" {
             listing["deposit"].clone()
@@ -259,7 +259,7 @@ impl Shop {
         let Some(role) = role else {
             return Ok(fail("shop_order_forbidden"));
         };
-        let at = chrono::Utc::now().timestamp_millis();
+        let at = atome_js_values::dates::now_ms();
         let to = match contract::step(&order, &js::slice(js::trim(action), 40), role, at) {
             Ok(to) => to,
             Err(error) => return Ok(fail(&error)),

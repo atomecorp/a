@@ -121,7 +121,7 @@ fn served(delivery: &JsonValue) -> bool {
     delivery["route"] == "direct" || delivery["transfer"] == "provider_inbox"
 }
 
-/// `socialPublish(ownerId, social)`: `{ content, destinations, options: { tiktok } }`, prepared at
+/// `socialPublish(ownerId, social)`: `{ content, destinations, options: { <network> } }`, prepared at
 /// its time (the content as it stands then, Q2), then published where the server reaches the
 /// network; a destination only the person can finish (the share sheet, an export, copied text) is
 /// told as such, never left ready. The deliveries, in the order prepared.
@@ -157,12 +157,21 @@ pub async fn social_publish(
         .filter(|delivery| delivery["status"] != "failed" && served(delivery))
         .map(|delivery| {
             let mut asked = json!({ "id": delivery["destination"] });
-            if delivery["network"] == "tiktok" && delivery["route"] == "direct" {
-                asked["options"] = social
-                    .pointer("/options/tiktok")
-                    .filter(|options| js::truthy(Some(options)))
-                    .cloned()
-                    .unwrap_or_else(|| json!({}));
+            // A network's own options (`options.<network>`: TikTok's who-sees, YouTube's title
+            // and visibility, R-190), TikTok's always sent.
+            let network = js::text(delivery.get("network"));
+            let options = social
+                .pointer(&format!("/options/{network}"))
+                .filter(|options| js::truthy(Some(options)))
+                .cloned();
+            // TikTok's lie at the top of the delivery's options, another network's under its name.
+            if delivery["route"] == "direct" {
+                match (options, network.as_str()) {
+                    (Some(options), "tiktok") => asked["options"] = options,
+                    (None, "tiktok") => asked["options"] = json!({}),
+                    (Some(options), _) => asked["options"] = json!({ network.clone(): options }),
+                    (None, _) => {}
+                }
             }
             asked
         })
@@ -177,20 +186,27 @@ pub async fn social_publish(
             .map_err(|failure| failure.message)?;
         answer["deliveries"].as_array().cloned().unwrap_or_default()
     };
+    // Each delivery names its job, so a post the planned send published can be removed later
+    // (`social.delete {job_id, destination}`, R-190).
+    let job_id = prepared["job_id"].clone();
     let told = deliveries.into_iter().map(|mut delivery| {
         if let Some(fields) = delivery.as_object_mut() {
             fields.shift_remove("preview");
         }
-        if let Some(found) = published
+        let mut delivery = match published
             .iter()
             .find(|entry| entry["destination"] == delivery["destination"])
         {
-            return found.clone();
-        }
-        if delivery["status"] != "failed" {
-            delivery["status"] = json!("failed");
-            delivery["error"] = json!("social_needs_person");
-        }
+            Some(found) => found.clone(),
+            None => {
+                if delivery["status"] != "failed" {
+                    delivery["status"] = json!("failed");
+                    delivery["error"] = json!("social_needs_person");
+                }
+                delivery
+            }
+        };
+        delivery["job_id"] = job_id.clone();
         delivery
     });
     Ok(JsonValue::Array(told.collect()))

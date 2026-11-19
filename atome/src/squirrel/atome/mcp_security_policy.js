@@ -14,6 +14,23 @@ const MEDIA_CAPTURE_RUNTIME_TOOL_PATTERNS = [/^ui\.capture\./, /^ui\.detail\.rec
 const CONSENT_COMMANDS = Object.freeze(['body_data.set_consent', 'sensors.set_consent']);
 // The assistant's risk tiers (ai/agent_gateway_state.js RISK_TIERS) from which a call waits for the person.
 const CONFIRMED_AI_TIERS = Object.freeze(['moderate', 'high', 'irreversible']);
+// What leaves toward other people or the world, moves money or deletes for good (AGENTS.md rule 22): asked by the assistant, only
+// these are asked again, in her conversation and in the person's own mode (spoken or typed), never on a screen.
+// Everything else the person asked her is done at once (mcp_confirmation_gate.js).
+const OUTWARD_COMMANDS = new Set(['mail.send', 'communication.send', 'calendar.share', 'contacts.push_icloud',
+    'social.connect', 'social.publish', 'social.reply', 'ordonnance.send', 'ordonnance.sign', 'prescription_aid.send',
+    'share.send', 'share.rights', 'events.publish', 'shop.sell', 'shop.buy', 'shop.withdraw', 'coaches.book', 'creation.send',
+    'site.publish', 'site.domain_buy', 'site.domain_transfer', 'video_train.share', 'video_train.forward',
+    'publish.send', 'publish.send_now', 'forum.post', 'forum.invite', 'billing.topup', 'billing.withdraw',
+    'billing.admin_move', 'billing.invite',
+    // Permanent deletions, which no history keeps (user, 17 Nov. 2026, « On les ajoute. Oui. »): media deleted for good from
+    // the server and every device, a sale deleted for good, a post taken off a network, motion recordings and body data
+    // erased with their copies, a health product erased with every intake, a forum with everyone's posts, a book's
+    // files, a mail box. A deletion the history keeps (a project, a creation, a list) is done at once.
+    'media_import.delete', 'shop.delete', 'social.delete', 'sensors.delete', 'body_data.delete', 'health_products.remove',
+    'health_products.list_remove', 'forum.delete', 'books.remove', 'site.mail_remove']);
+const OUTWARD_AI_TIERS = Object.freeze(['high', 'irreversible']);
+const outwardOf = subject => OUTWARD_COMMANDS.has(String(subject || '').split(':').pop());
 const MCP_RATE_LIMIT_RULES = Object.freeze([
     {
         id: 'mail.send',
@@ -109,12 +126,37 @@ export function sanitizeConfirmationParams(params = {}) {
 
 const allow = (subject, required, extra = {}) => ({ allowed: true, scope: 'tool', subject, access: 'allow',
     required_capabilities: required, confirmation_required: false, proposal_required: false, sandbox_profile: null,
-    sensitive: false, idempotent: false, ...extra });
+    sensitive: false, idempotent: false, outward: outwardOf(subject), ...extra });
 const confirm = (subject, required, extra = {}) => allow(subject, required, { access: 'confirm', confirmation_required: true,
     proposal_required: true, sensitive: true, idempotent: true, ...extra });
 const deny = (scope, subject, error) => ({ allowed: false, scope, subject: subject || null, error });
 const withConfirmation = policy => ({ ...policy, access: 'confirm', confirmation_required: true, proposal_required: true,
     sensitive: true, idempotent: true });
+
+// The document profile (user, 18 Nov. 2026: « Oui ajoute ce profile l'assistant sachant qu'on peut intervenir avec la
+// voix ou avec l'input de prompt »): while the person works on one text with Calc on (Créer › Texte), what the assistant
+// asks, spoken or typed, names no Atome but that text; '' while it is not filed yet, then none at all. It narrows, it never
+// asks: no confirmation is added (AGENTS.md rule 22). The person at the device is not narrowed.
+let documentScope = null;
+export const setMcpDocumentScope = (atomeId = '') => { documentScope = { atome_id: String(atomeId || '') }; };
+export const clearMcpDocumentScope = () => { documentScope = null; };
+const ATOME_KEY = /(^|_)atome_ids?$/;
+// Every Atome a request names: the values of its `…atome_id` / `…atome_ids` keys, at any depth (a tool's input, a batch's events).
+const namedAtomes = (value, found = new Set(), depth = 0) => {
+    if (!value || typeof value !== 'object' || depth > 8) return found;
+    Object.entries(value).forEach(([key, item]) => {
+        if (key === '__mcp') return;
+        if (ATOME_KEY.test(key)) [item].flat().forEach(id => { if (typeof id === 'string' && id.trim()) found.add(id.trim()); });
+        else namedAtomes(item, found, depth + 1);
+    });
+    return found;
+};
+/** `access` narrowed by the document profile for an assistant's request (`assistant`: its transport is voice or ai). */
+export function documentScopePolicy(access, params = {}, assistant = false) {
+    if (!documentScope || !assistant || access?.allowed !== true) return access;
+    if ([...namedAtomes(params)].some(id => id !== documentScope.atome_id)) return deny('document', access.subject, 'mcp_document_scope_denied');
+    return { ...access, document_scope: documentScope.atome_id };
+}
 
 const CALENDAR_WRITES = ['calendar.create', 'calendar.update', 'calendar.delete', 'calendar.share'];
 const CONTACT_WRITES = ['contacts.import_icloud', 'contacts.create', 'contacts.update'];
@@ -126,7 +168,8 @@ function contractPolicy(contract, input = {}) {
     const capture = MEDIA_CAPTURE_COMMANDS.includes(contract.name);
     const consent = CONSENT_COMMANDS.includes(contract.name) && input?.granted === true;
     const policy = allow(contract.name, [contract.capability, ...(capture ? [MEDIA_CAPTURE_CAPABILITY] : [])], {
-        ...(contract.name.startsWith('social.') ? { idempotent: contract.name !== 'social.connect' } : {}),
+        // A connection and a reply (each one a new message on the network) are never replayed.
+        ...(contract.name.startsWith('social.') ? { idempotent: !['social.connect', 'social.reply'].includes(contract.name) } : {}),
         ...(contract.access === 'write' && /^(apple_music|music)\./.test(contract.name) ? { idempotent: true } : {}) });
     if (!CONFIRMED_COMMANDS.includes(contract.name) && !capture && !consent) return policy;
     return { ...withConfirmation(policy), proposal_required: contract.name === 'social.publish',
@@ -137,6 +180,14 @@ function runtimeToolPolicy(toolId, input = {}) {
     if (PERSONAL_IMPORT_TOOLS.some(tool => tool.name === toolId)) return resolveAccessPolicy(toolId, input);
     const contract = findContractCommand(toolId);
     if (contract) return contractPolicy(contract, input);
+    // A timed run is its tool's run, later (timed_tool_runs.js): the tool's own policy, and an outward one is always asked.
+    if (toolId === 'timer.schedule') {
+        const target = runtimeToolPolicy(String(input?.tool || '').trim(), input?.input || {});
+        if (target.allowed === false) return target;
+        const policy = { ...target, subject: 'runtime.tools.call:timer.schedule',
+            required_capabilities: [...new Set(['runtime.execute', ...target.required_capabilities])] };
+        return policy.outward && !policy.confirmation_required ? withConfirmation(policy) : policy;
+    }
     if (toolId.startsWith('tv.')) return allow(toolId, ['tv.control']);
     const subject = `runtime.tools.call:${toolId || 'unknown'}`;
     const timeline = resolveTimelineToolCapability(toolId);
@@ -156,6 +207,7 @@ function aiToolPolicy(name, tool) {
     if (!RISK_TIERS.includes(tool.risk_tier)) return deny('tool', name, 'mcp_ai_tool_risk_tier_invalid');
     const twin = TIMELINE_AI_RUNTIME_TOOL_IDS[name];
     const policy = { ...(twin ? runtimeToolPolicy(twin, {}) : allow(name, ['ai.execute'])), subject: name };
+    if (OUTWARD_AI_TIERS.includes(tool.risk_tier) || outwardOf(name)) policy.outward = true;
     return CONFIRMED_AI_TIERS.includes(tool.risk_tier) && !policy.confirmation_required ? withConfirmation(policy) : policy;
 }
 
@@ -225,7 +277,7 @@ export function resolveAccessPolicy(method, params = {}, context = {}) {
         const sensitive = policies.some(policy => policy.sensitive || policy.confirmation_required);
         const policy = allow(sensitive ? 'runtime.tools.batch_call:sensitive_batch' : name,
             [...new Set(['runtime.execute', ...policies.flatMap(entry => entry.required_capabilities)])],
-            { idempotent: policies.some(entry => entry.idempotent) });
+            { idempotent: policies.some(entry => entry.idempotent), outward: policies.some(entry => entry.outward) });
         return sensitive ? { ...withConfirmation(policy), sandbox_profile: 'desktop_local_owner' } : policy;
     }
     if (name === 'ai.tools.call') return aiToolPolicy(String(params?.tool_name || '').trim(), context.aiTool || null);

@@ -84,6 +84,25 @@ mod enabled {
         Ok(())
     }
 
+    // The local clock as `%Y%m%d_%H%M%S_%3f` (the form tests/atome_js_values/date_formats.rs
+    // checks against chrono's).
+    fn backup_stamp() -> Result<String, String> {
+        use atome_js_values::dates;
+        let (wall, _) = dates::local_wall(dates::Instant::now())
+            .ok_or_else(|| "taxonomy_clock_out_of_range".to_string())?;
+        let f = wall.fields();
+        Ok(format!(
+            "{}{:02}{:02}_{:02}{:02}{:02}_{:03}",
+            dates::chrono_year(f.year),
+            f.month,
+            f.day,
+            f.hour,
+            f.minute,
+            f.second,
+            f.nanos / 1_000_000
+        ))
+    }
+
     // `previous` is the text the editor started from: if the file changed on
     // disk meanwhile (another edit, a checkout), nothing is overwritten.
     pub fn save(text: String, previous: String) -> Result<TaxonomySaveResult, String> {
@@ -103,7 +122,7 @@ mod enabled {
         if current != previous {
             return Err("taxonomy_changed_on_disk".to_string());
         }
-        let stamp = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
+        let stamp = backup_stamp()?;
         let backup = backups.join(format!("context_menus_{stamp}.json"));
         fs::write(&backup, &current).map_err(|error| format!("taxonomy_backup_failed:{error}"))?;
         let temporary = path.with_extension("json.tmp");

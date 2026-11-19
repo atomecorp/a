@@ -2,6 +2,7 @@
 // the frames rendered, with no update between blocks; a loop wraps it; a stop leaves the value set.
 
 use crate::automation::{AutomationPoint, Curve, evaluate};
+use crate::modulation::CONTROL_FRAMES;
 use crate::tests::{BLOCK, rig};
 use kira::Frame;
 
@@ -56,13 +57,20 @@ fn curves_follow_their_shape() {
 fn the_engine_plays_the_lane_on_its_own_clock() {
     let mut rig = rig(&program(true, 1, 0.5, "null"));
     rig.block(&[("s", Frame::new(1.0, 1.0))]);
-    // The first block runs at the anchor: 0.5 s → halfway from -60 to 0.
-    assert!((gain(&rig) + 30.0).abs() < 1e-3, "{}", gain(&rig));
+    // The lane is evaluated every control step (R-191): after the first block it holds the value of
+    // its last step, CONTROL_FRAMES before the block's end, on a ramp anchored at 0.5 s.
+    let last_step = (BLOCK - CONTROL_FRAMES) as f64 / 48_000.0;
+    let at = |seconds: f64| (-60.0 + 60.0 * seconds) as f32;
+    assert!(
+        (gain(&rig) - at(0.5 + last_step)).abs() < 1e-3,
+        "{}",
+        gain(&rig)
+    );
     // 0.25 s later with no apply at all: the curve moved by itself.
     for _ in 0..(12_000 / BLOCK) {
         rig.block(&[("s", Frame::new(1.0, 1.0))]);
     }
-    let expected = -60.0 + 60.0 * (0.5 + ((12_000 / BLOCK) * BLOCK) as f64 / 48_000.0) as f32;
+    let expected = at(0.5 + ((12_000 / BLOCK) * BLOCK) as f64 / 48_000.0 + last_step);
     assert!(
         (gain(&rig) - expected).abs() < 0.1,
         "{} vs {expected}",

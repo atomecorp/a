@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
 import { afterAll, test } from 'vitest';
+import { createPointerRestTimer } from '../../eVe/domains/rendering/pointer_rest_timer.js';
 import {
     MYSTIC_AUTO_OPEN_DWELL_MS,
     MYSTIC_AUTO_OPEN_DWELL_TOLERANCE_PX,
@@ -182,7 +183,11 @@ test('a release fires the tool or the palette under the finger, never the centre
     await wait(50);
     assert.equal(toolCalls, 1, 'releasing on a tool launches it exactly once');
 
-    const second = await openMenu(harness, items);
+    // The same runtime reopened, as the product's one Mystic (bevy_ui_product_runtime.js): the first still closing after its
+    // tool fired, `openAt` ends that close before laying the new tree. A second runtime on the same tree would see the first's
+    // late removal take its tree away, a race the product never runs (17 Nov. 2026: lost under load).
+    await mystic.openAt({ ...CENTER, items, holding: true });
+    const second = mystic;
     assert.equal(await settledPhase(second, 'open'), true);
     harness.setHit('eve_bevy_ui_mystic_center');
     assert.equal(second.releaseAt({ ...CENTER }), false);
@@ -304,6 +309,8 @@ Object.assign(globalThis, {
     HTMLImageElement: window.HTMLImageElement
 });
 const projectCanvas = window.document.getElementById('eve_surface_project');
+// A frame follows the timers, as the browser's: the long press's rest is read there (pointer_rest_timer.js).
+window.requestAnimationFrame = (callback) => window.setTimeout(() => callback(Date.now()), 1);
 window.document.elementsFromPoint = () => [projectCanvas];
 window.Atome = { getStateCurrent: async (id) => ({ id, properties: {}, capabilities: { write: true, create: true, delete: true } }) };
 
@@ -325,13 +332,19 @@ setMysticRuntime({
     activateDirectional: ({ direction }) => { gesture.directions.push(direction); return gesture.acceptDirection; }
 });
 gesture.acceptDirection = true;
-const disposeGestureRuntime = installIntuitionXMysticContextRuntime({ longPressMs: 5 });
+// The input clock the gestures are judged on is the events' own (`timeStamp`, context.js): the test sets it, so a gesture's
+// timing never depends on how loaded the machine running it is (17 Nov. 2026). `inputAt` is the instant the next events carry.
+const LONG_PRESS_MS = 5;
+let inputAt = 1000, pressAt = 1000;
+// The instant `ms` after the hold took the pointer over (the press held still for LONG_PRESS_MS).
+const afterHold = (ms) => { inputAt = pressAt + LONG_PRESS_MS + ms; };
+const disposeGestureRuntime = installIntuitionXMysticContextRuntime({ longPressMs: LONG_PRESS_MS });
 
 const pointerEvent = (type, properties = {}) => {
     const event = new window.Event(type, { bubbles: true, cancelable: true });
     Object.entries({
         button: 0, pointerId: 61, pointerType: 'mouse', isPrimary: true,
-        clientX: 300, clientY: 300, ...properties
+        clientX: 300, clientY: 300, timeStamp: inputAt, ...properties
     }).forEach(([key, value]) => Object.defineProperty(event, key, { configurable: true, value }));
     return event;
 };
@@ -342,6 +355,8 @@ const holdFrom = async (properties = {}) => {
     gesture.hoverOptions.length = 0;
     gesture.releases.length = 0;
     gesture.directions.length = 0;
+    // A new press, well after the last one; the events after it carry its instant until a test moves the clock.
+    pressAt = inputAt = inputAt + 10_000;
     projectCanvas.dispatchEvent(pointerEvent('pointerdown', properties));
     assert.equal(await waitForOpen(() => gesture.open === true), true, 'the hold must open the menu');
     assert.equal(gesture.holding, true);
@@ -377,6 +392,7 @@ test('a released pointer arms no dwell any more: it only follows the hover', { t
 
 test('a fast root fling launches its direction and owns the terminal event', { timeout: 20000 }, async () => {
     await holdFrom();
+    afterHold(40);
     projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 300, clientY: 40 }));
     assert.deepEqual(gesture.directions, ['north'], '260 px in one move is a north fling');
     projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 300, clientY: 40 }));
@@ -384,12 +400,58 @@ test('a fast root fling launches its direction and owns the terminal event', { t
     assert.equal(release?.allowActivation, false, 'the release after a fling must not launch a second tool');
 });
 
+test('a flick made in time stays a fling when the busy page reads it late', { timeout: 20000 }, async () => {
+    // The user's case: right after the hold the menu opens (its tree, its frames) and the page is busy; the finger's move,
+    // made 100 ms after the hold, is only read once the page is free again, 600 ms later. Judged when it is read, the flick
+    // would be refused; judged when the finger made it, it is the fling it was.
+    await holdFrom();
+    afterHold(100);
+    const move = pointerEvent('pointermove', { clientX: 300, clientY: 40 });
+    const busyUntil = Date.now() + 600;
+    while (Date.now() < busyUntil) { /* the page busy: the move waits in its queue */ }
+    projectCanvas.dispatchEvent(move);
+    assert.deepEqual(gesture.directions, ['north'], 'a flick made 100 ms after the hold is a fling, however late it is read');
+    projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 300, clientY: 40 }));
+});
+
+test('a small move before the hold re-arms nothing: the window starts when the press\'s rest was due', { timeout: 20000 }, async () => {
+    // The Mystic's rest is armed once, by the press (context_pointer_lock.js); a move inside the tolerance keeps it, a
+    // longer one cancels the hold. The window is the rest's own `dueAt`: the press + the delay, never the small move.
+    gesture.open = false;
+    gesture.directions.length = 0;
+    pressAt = inputAt = inputAt + 10_000;
+    projectCanvas.dispatchEvent(pointerEvent('pointerdown'));
+    inputAt = pressAt + 3;
+    projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 302, clientY: 301 }));
+    assert.equal(await waitForOpen(() => gesture.open === true), true, 'a small move keeps the hold');
+    // 502 ms after the press's due instant (499 after the small move's): past the window.
+    afterHold(502);
+    projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 300, clientY: 40 }));
+    assert.deepEqual(gesture.directions, [], 'the window is measured from the press, not from the small move');
+    projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 300, clientY: 40 }));
+});
+
+test('the rest timer keeps its due instant on the clock of the input that armed it', () => {
+    const timer = createPointerRestTimer({ schedule: () => 1, cancel: () => {}, frame: () => {} });
+    assert.equal(timer.dueAt(), null, 'nothing armed, nothing due');
+    timer.arm(460, () => {}, 1000);
+    assert.equal(timer.dueAt(), 1460);
+    // A re-arm (BevyUI's hold moved within its tolerance) moves the due instant to the input that re-armed it.
+    timer.arm(460, () => {}, 1100);
+    assert.equal(timer.dueAt(), 1560);
+    timer.arm(460, () => {});
+    assert.equal(timer.dueAt(), null, 'armed without an instant, no due instant is made up');
+    timer.arm(460, () => {}, 2000);
+    timer.clear();
+    assert.equal(timer.dueAt(), null, 'a cleared rest is due no more');
+});
+
 test('the fling window opens with the held gesture, not with the press', { timeout: 20000 }, async () => {
     // Production arms the long press 460 ms after the press: measured from the
     // press instant, the 500 ms window would close 40 ms after the menu appears
     // and no flick could ever fire. The clock starts when the hold takes over.
     await holdFrom();
-    await wait(600);
+    afterHold(600);
     projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 300, clientY: 40 }));
     assert.deepEqual(gesture.directions, [], 'a flick that waits longer than the window is not a fling');
     projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 300, clientY: 40 }));
@@ -398,13 +460,14 @@ test('the fling window opens with the held gesture, not with the press', { timeo
 
 test('a slow drag, a diagonal drag and a submenu fling launch nothing', { timeout: 20000 }, async () => {
     await holdFrom();
-    await wait(600);
+    afterHold(600);
     projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 300, clientY: 40 }));
     assert.deepEqual(gesture.directions, [], 'past half a second the same travel is no longer a fling');
     projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 300, clientY: 40 }));
     assert.equal(gesture.releases.at(-1)?.allowActivation, true, 'a slow drag keeps the ordinary release');
 
     await holdFrom();
+    afterHold(40);
     projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 500, clientY: 100 }));
     assert.deepEqual(gesture.directions, [], '45° away from both axes is not a cardinal fling');
     projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 500, clientY: 100 }));
@@ -414,6 +477,7 @@ test('a slow drag, a diagonal drag and a submenu fling launch nothing', { timeou
     // but the ordinary release stays available.
     gesture.acceptDirection = false;
     await holdFrom();
+    afterHold(40);
     projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 300, clientY: 40 }));
     assert.deepEqual(gesture.directions, ['north']);
     projectCanvas.dispatchEvent(pointerEvent('pointerup', { clientX: 300, clientY: 40 }));

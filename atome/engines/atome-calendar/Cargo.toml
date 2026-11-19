@@ -8,7 +8,6 @@ description = "The one calendar engine (ICAL.js's time, recurrence and time zone
 
 [dependencies]
 atome-js-values = { path = "../js-values" }
-chrono = "0.4"
 serde_json.workspace = true
 
 # In the browser the named time zones are the browser's own (Intl), as the JavaScript engine read them.

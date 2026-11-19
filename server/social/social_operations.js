@@ -1,7 +1,7 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { SOCIAL_MEDIA_CONSTRAINTS, socialContentKind, utf16Length, validateSocialInput } from '../../atome/src/squirrel/social/contracts.js';
-import { planSocialDestination } from '../../atome/src/squirrel/social/capabilities.js';
+import { planSocialDestination, socialTextLimit } from '../../atome/src/squirrel/social/capabilities.js';
 import { resolveDownloadTarget } from '../server_uploads.js';
 import { SocialError } from './social_http.js';
 import { assessMedia, issuePublicMediaUrl, prepareVariant, previewThumbnail, probeMedia } from './social_media.js';
@@ -52,12 +52,16 @@ async function prepareDelivery({ job, delivery, store }) {
 }
 
 function checkText(job, delivery) {
+    const limit = socialTextLimit(delivery.network, job.kind);
     const text = job.content.text;
-    const tiktok = SOCIAL_MEDIA_CONSTRAINTS.tiktok.caption;
-    if (delivery.network === 'tiktok' && job.kind === 'video' && utf16Length(text) > tiktok.video) return 'caption_too_long';
-    if (delivery.network === 'tiktok' && job.kind === 'image' && utf16Length(text) > tiktok.photoDescription) return 'caption_too_long';
-    return null;
+    if (!limit) return null;
+    return (limit.utf16 ? utf16Length(text) : [...text].length) > limit.max ? limit.detail : null;
 }
+
+// This reference server keeps one account per network (its view keyed by network); the planner reads the
+// `social.accounts` view of the atome-server, network by network, each with its accounts.
+const networksView = (views) => Object.values(views).map((view) => ({ network: view.network, configured: view.configured === true,
+    accounts: view.configured && view.state !== 'disconnected' ? [{ ...view, account: String(view.identity?.id || view.network) }] : [] }));
 
 async function prepare({ content, destinations, handoff = {} }, { principal, ctx, resolveTarget }) {
     const kind = socialContentKind(content);
@@ -65,9 +69,10 @@ async function prepare({ content, destinations, handoff = {} }, { principal, ctx
     const store = createSocialJobStore(ctx.vault.socialRoot);
     await store.pruneStale();
     const accounts = await listSocialAccounts(ctx);
+    const networks = networksView(accounts);
     const job = { id: newJobId(), created_at: Date.now(), kind, content: { text: String(content.text || '').trim(), media: content.media || null },
         source: null, probe: null, variants: {}, deliveries: {} };
-    const plans = destinations.map((destination) => planSocialDestination({ destination, accounts, kind, handoff }));
+    const plans = destinations.map((destination) => planSocialDestination({ destination, networks, kind, handoff }));
     let mediaError = null;
     if (content.media && plans.some(serverRoute)) {
         try {
@@ -88,7 +93,7 @@ async function prepare({ content, destinations, handoff = {} }, { principal, ctx
             } catch (error) {
                 Object.assign(delivery, { status: 'failed', route: null, error: error?.code || 'social_media_unreadable', detail: error?.detail || null,
                     // The share sheet or an export still works with the original file.
-                    fallback: planSocialDestination({ destination: plan.destination, accounts: {}, kind, handoff }) });
+                    fallback: planSocialDestination({ destination: plan.destination, kind, handoff }) });
             }
         }
         const textError = delivery.route && serverRoute(delivery) ? checkText(job, delivery) : null;

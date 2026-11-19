@@ -1,7 +1,7 @@
 // The time zones a calendar names without defining them (`Intl.DateTimeFormat({ timeZone })` in the
 // former atome/src/squirrel/calendar/icalendar.js#calendarDate): an IANA zone (zone_named: the
 // system's TZif files on a native host, the browser's own Intl in WASM), or an offset zone
-// (`+01:00`); the host's local zone (`new Date(y, m, d, …)`) through chrono. A wall time resolves as
+// (`+01:00`); the host's local zone (`new Date(y, m, d, …)`) through atome_js_values::dates. A wall time resolves as
 // the JS code resolves it: the earlier instant in a fold, the offset before the change in a gap. A
 // zone's one name is the name Intl resolves it to (`canonical`, the table zone_names.json generated
 // from Node by temp/l310_calendar/zone_names.mjs).

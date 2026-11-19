@@ -1,6 +1,7 @@
 // The `/ws/api` families of what the server projects from the people's vaults into shared bases
 // (server/wsApiOperationChain.js `FAMILIES`, ported family by family): the objectives network
-// (server/ws_objective_network.js), the reports on a public event (server/ws_public_events.js) and
+// (server/ws_objective_network.js), the reports on a public event (server/ws_public_events.js), the
+// CB sociale (social/cb/, its connection's zone forgotten when it closes) and
 // the shop (server/ws_shop.js), the coaches (server/ws_coaches.js), an account's public sharing key
 // (server/ws_share_keys.js), its plan and credits (server/billing/ws_billing_operations.js), its
 // scheduled sends (scheduled/) and its websites (server/ws_site.js). The connection says who it is
@@ -11,9 +12,10 @@ use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::sync::Arc;
 
-pub(super) const KINDS: [&str; 10] = [
+pub(super) const KINDS: [&str; 11] = [
     "objective-network",
     "public-events",
+    "cb",
     "shop",
     "shop-public",
     "coaches",
@@ -170,6 +172,7 @@ async fn decided(
     let Some(user) = user else {
         let error = match kind {
             "public-events" => "events_auth_required",
+            "cb" => "cb_auth_required",
             "shop" => "shop_auth_required",
             "coaches" => "coach_auth_required",
             _ => "objective_network_auth_required",
@@ -178,6 +181,12 @@ async fn decided(
     };
     let result = match kind {
         "public-events" => social.events.handle(message, user).await?,
+        "cb" => {
+            social
+                .cb
+                .handle(&social.directory, message, user, connection.live)
+                .await?
+        }
         "coaches" => {
             social
                 .coaches

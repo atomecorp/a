@@ -15,9 +15,12 @@ const command = (family, action, persistent, description, input, required = []) 
     capability: `${family}.${persistent ? 'write' : 'read'}`, description, input_schema: object(input, required), output_schema: output });
 const STATUS = { type: 'string', enum: ['declared_current', 'declared_historical', 'proposed', 'experimental', 'professional_only', 'unknown'] };
 const P = 'health_protocol';
+const TEMPLATE_LINES = { type: 'array', minItems: 1, maxItems: 144, items: { type: 'object', additionalProperties: false, required: ['ref', 'label'],
+    properties: { ref: id, section: { type: 'string', maxLength: 200 }, item_kind: { type: 'string', maxLength: 40 }, status: { type: 'string', maxLength: 40 },
+        label: { type: 'string', minLength: 1, maxLength: 400 } } } };
 export const HEALTH_PROTOCOL_COMMANDS = Object.freeze([
     command(P, 'import', true, 'Import a health protocol text (pasted, or a text Atome already filed): the original is kept unchanged, every line read with its status, confidence, S0–S5 alerts and a proposed day, nothing active.',
-        { text: { type: 'string', minLength: 1, maxLength: 524288 }, text_atome_id: id }),
+        { text: { type: 'string', minLength: 1, maxLength: 524288 }, text_atome_id: id, title: { type: 'string', maxLength: 200 } }),
     command(P, 'list', false, 'List the imported protocols and their review state.', {}),
     command(P, 'read', false, 'Read a protocol\'s outputs A–I (original, conciliation, ingredients, kinds, questions, alerts, planning, conflicts, approval).', { proposal_id: id }, ['proposal_id']),
     command(P, 'correct', true, 'Correct the status read on one line.', { proposal_id: id, ref: id, status: STATUS }, ['proposal_id', 'ref', 'status']),
@@ -31,10 +34,10 @@ export const HEALTH_PROTOCOL_COMMANDS = Object.freeze([
     command(P, 'refuse', true, 'Refuse the whole proposal.', { proposal_id: id }, ['proposal_id']),
     command(P, 'activate', true, 'Activate the kept, planned, evaluated lines after the person\'s confirmation; calendar writes personal occurrences, reminders lists the lines whose « Rappel » is on.',
         { proposal_id: id, confirmed: { type: 'boolean' }, calendar: { type: 'boolean' }, reminders: { type: 'array', items: id } }, ['proposal_id', 'confirmed']),
-    command(P, 'template_create', true, 'Make a private template from a proposal; ticks: { line ref: true|false }; doses and medicine lines unticked by default.',
-        { proposal_id: id, title: { type: 'string', minLength: 1, maxLength: 200 }, ticks: { type: 'object' }, include_doses: { type: 'boolean' } }, ['proposal_id', 'title']),
-    command(P, 'template_revise', true, 'Publish a new version of one\'s template; receivers get it as a proposal.',
-        { template_id: id, proposal_id: id, ticks: { type: 'object' }, include_doses: { type: 'boolean' } }, ['template_id']),
+    command(P, 'template_create', true, 'Make a private template from a proposal, or from lines (a treatment\'s: { ref, section, item_kind, status, label }); ticks: { line ref: true|false }; doses and medicine lines unticked by default.',
+        { proposal_id: id, lines: TEMPLATE_LINES, title: { type: 'string', minLength: 1, maxLength: 200 }, ticks: { type: 'object' }, include_doses: { type: 'boolean' } }, ['title']),
+    command(P, 'template_revise', true, 'Publish a new version of one\'s template (from a proposal, or new lines); receivers get it as a proposal.',
+        { template_id: id, proposal_id: id, lines: TEMPLATE_LINES, ticks: { type: 'object' }, include_doses: { type: 'boolean' } }, ['template_id']),
     command(P, 'template_list', false, 'List one\'s protocol templates.', {}),
     command(P, 'template_preview', false, 'Show exactly what a template would send.', { template_id: id }, ['template_id']),
     command(P, 'template_proposals', false, 'List the template versions shared with the person that wait for their answer.', {}),
@@ -56,7 +59,8 @@ const list = { list_id: { type: 'string', minLength: 1, maxLength: 80, descripti
 // the last day would (history kept), Supprimer erases the product and every intake of it — one product or a whole list.
 export const HEALTH_PRODUCTS_COMMANDS = Object.freeze([
     command(Q, 'declare', true, 'Declare (or change) a product the person takes or applies: name, kind, form, actives, the quantity per intake (typed, or recommended by eVe: then to_validate with its recommendation, no intake nor reminder until validate), hours or as_needed (« si besoin », no hour, at most max_per_day), start_day and end_day (none: long-term), their own instructions, source (who says what it holds: self, label, doctor), the BDPM codes (cis, cip13) when found there.', {
-        product_id: id, name: { type: 'string', minLength: 1, maxLength: 200 }, item_kind: { type: 'string', enum: ['supplement', 'medication', 'cosmetic', 'device'] },
+        product_id: id, name: { type: 'string', minLength: 1, maxLength: 200 }, item_kind: { type: 'string', enum: ['supplement', 'medication', 'cosmetic', 'device', 'activity', 'nutrition'] },
+        repeat: { type: ['object', 'null'], description: 'How often: none every day; { freq: daily, interval } one day in N; { freq: weekly, days } weekdays (0 Sunday); { freq: weekly, times } N a week.' },
         form: { type: 'string', maxLength: 80 }, brand: { type: 'string', maxLength: 200 }, per_intake: quantity, hours: { type: 'array', maxItems: 12, items: { type: 'string' } },
         as_needed: { type: 'boolean' }, max_per_day: { type: 'integer', minimum: 1, maximum: 24 }, start_day: day, end_day: day,
         instructions: { type: 'string', maxLength: 400 }, cis: { type: 'string', maxLength: 16 }, cip13: { type: 'string', maxLength: 16 }, strength: { type: 'string', maxLength: 120 },
@@ -67,6 +71,12 @@ export const HEALTH_PRODUCTS_COMMANDS = Object.freeze([
         stock_units: { type: 'number', minimum: 0, maximum: 100000, description: 'The units the person has left, counted on stock_day (today when none).' }, stock_day: day,
         received_from: { type: 'string', maxLength: 300, description: 'The account a list it came from was sent by (a list received, then validated).' },
         received_entry: { type: 'string', maxLength: 400, description: 'Its line in that list, so a later version updates it.' }, ...list }, ['name']),
+    command(Q, 'treatment_save', true, 'Create (or change) a treatment: its name, instructions, genre (its new lines\' kind), first and last day (none: long-term); its lines are products declared with list_id « treatment:<treatment_id> ». A changed first or last day moves its lines\' that matched.', {
+        treatment_id: id, name: { type: 'string', minLength: 1, maxLength: 200 }, instructions: { type: 'string', maxLength: 400 },
+        item_kind: { type: 'string', enum: ['medication', 'supplement', 'cosmetic', 'activity', 'nutrition'] }, start_day: day, end_day: { type: ['string', 'null'], maxLength: 10 },
+        proposal_id: id, template_id: id }, ['name']),
+    command(Q, 'treatment_list', false, 'List the person\'s treatments.', {}),
+    command(Q, 'treatment_remove', true, 'Supprimer a treatment: its lines, their intakes and reminders, then the treatment.', { treatment_id: id }, ['treatment_id']),
     command(Q, 'validate', true, 'Valider: the person (by self) or the doctor (by doctor) takes a sheet eVe recommended as theirs; only then its intakes and reminders start. Never called for the person.',
         { product_id: id, by: { type: 'string', enum: ['self', 'doctor'] } }, ['product_id']),
     command(Q, 'list', false, 'List the declared products (current, paused, former; a product past its last day reads as former), each with what is left of it (supply: units_left, per_day, days_left, empty_day) once its stock is counted.', {}),
@@ -99,7 +109,7 @@ export const HEALTH_PRODUCTS_COMMANDS = Object.freeze([
         { product_id: id, on: { type: 'boolean' } }, ['product_id', 'on'])
 ]);
 export const HEALTH_PRODUCTS_CONFIRMED_COMMANDS = Object.freeze(['health_products.reminder', 'health_products.stop', 'health_products.remove', 'health_products.list_stop',
-    'health_products.list_remove']);
+    'health_products.list_remove', 'health_products.treatment_remove']);
 
 const validator = commands => (action, input) => {
     const contract = commands.find(entry => entry.action === action);

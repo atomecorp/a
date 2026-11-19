@@ -38,6 +38,76 @@ export const waitFor = async (page, predicate, argument = null, timeoutMs = 3000
     throw new Error(`wait_timeout:${JSON.stringify(last)}`);
 };
 
+// A press sent while the page is starved reaches it late or alone: its release, or the moves of a drag (Chrome
+// aligns mouse moves to frames), land after the app's hold timer (the ribbon's 520 ms, the Mystic's 460 ms) has
+// already read a hold. Gestures wait until a queued task runs within `maxLagMs` and a frame within `maxFrameMs`,
+// `samples` times in a row.
+export const waitForResponsivePage = async (page, { maxLagMs = 50, maxFrameMs = 100, samples = 3, timeoutMs = 60000 } = {}) => {
+    const deadline = Date.now() + timeoutMs;
+    let calm = 0;
+    let last = { lag: Infinity, frame: Infinity };
+    while (Date.now() < deadline) {
+        last = await page.evaluate(() => new Promise((resolve) => {
+            const start = performance.now();
+            setTimeout(() => {
+                const lag = performance.now() - start;
+                requestAnimationFrame(() => {
+                    const before = performance.now();
+                    requestAnimationFrame(() => resolve({ lag, frame: performance.now() - before }));
+                });
+            }, 0);
+        }));
+        calm = last.lag <= maxLagMs && last.frame <= maxFrameMs ? calm + 1 : 0;
+        if (calm >= samples) return true;
+    }
+    throw new Error(`page_not_responsive:${Math.round(last.lag)}ms:${Math.round(last.frame)}ms`);
+};
+
+// A mouse driven over one CDP session. Its press leaves together with the path that follows it (commands on
+// one session are delivered in order): sent one awaited command at a time, a loaded machine kept the finger still
+// for its round trip, long enough for the app to read a hold (a media's Mystic, the ribbon's 520 ms).
+export const openCdpPointer = async (page) => {
+    const session = await page.context().newCDPSession(page);
+    let at = { x: 0, y: 0 };
+    let pressed = false;
+    const send = (type, point) => session.send('Input.dispatchMouseEvent', {
+        type, x: point.x, y: point.y, button: type === 'mouseMoved' && !pressed ? 'none' : 'left',
+        buttons: (type === 'mousePressed' || (type === 'mouseMoved' && pressed)) ? 1 : 0,
+        clickCount: type === 'mouseMoved' ? 0 : 1
+    });
+    const pathTo = (target, steps) => {
+        const start = at;
+        const count = Math.max(1, Math.round(Number(steps) || 1));
+        at = { x: target.x, y: target.y };
+        return Array.from({ length: count }, (_, index) => ({
+            x: start.x + (target.x - start.x) * (index + 1) / count,
+            y: start.y + (target.y - start.y) * (index + 1) / count
+        }));
+    };
+    return {
+        move: async (target) => { at = { x: target.x, y: target.y }; await send('mouseMoved', at); },
+        // `legs`: [{ to, steps }], the first travelled right after the press, in the same burst; each next one in a frame
+        // of its own, as a finger's (one burst is coalesced into one move at its last point: a path out and back to the
+        // press read as a finger at rest).
+        press: async (legs = []) => {
+            const pressPoint = at;
+            pressed = true;
+            const [first, ...next] = legs;
+            await Promise.all([send('mousePressed', pressPoint),
+                ...(first ? pathTo(first.to, first.steps) : []).map((point) => send('mouseMoved', point))]);
+            for (const leg of next) {
+                await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+                await Promise.all(pathTo(leg.to, leg.steps).map((point) => send('mouseMoved', point)));
+            }
+        },
+        travel: async (target, steps = 1) => { await Promise.all(pathTo(target, steps).map((point) => send('mouseMoved', point))); },
+        release: async () => { pressed = false; await send('mouseReleased', at); },
+        close: () => session.detach()
+    };
+};
+
+// Samples of 120 ms that outlast a lit thumb's hide delay (bevy_ui_scroll_layout.js DEFAULT_HIDE_DELAY_MS, 700 ms).
+const THUMB_REST_SAMPLES = 7;
 export const waitForStableScene = async (page, projectId, consecutiveSamples = 4) => {
     let previous = '';
     let stable = 0;
@@ -53,9 +123,14 @@ export const waitForStableScene = async (page, projectId, consecutiveSamples = 4
             // carries playback motion (progress bars) that never settles while playing.
             const records = (window.eveToolBase?.getProjectSceneState?.(pid)?.records || [])
                 .filter((record) => !String(record.id || '').startsWith('__eve_bevy_ui_'));
+            // A list's thumb is lit by a hover (steady) or by a scroll, a row revealed by code included (it rests
+            // after its hide delay): while one is lit, the scene must hold longer than that delay to be stable.
+            const scroll = window.eveBevyUiRuntime?.captureTreeScroll?.('eve_bevy_ui_project_view') || null;
             return JSON.stringify({
                 paletteMotionActive: menu.paletteMotionActive === true || window.eveBevyUiRuntime?.state?.renderQueues?.size > 0,
+                thumbLit: (scroll?.offsets || []).some((area) => area.active),
                 uiVersions: [...(window.eveBevyUiRuntime?.state?.renderVersions?.entries?.() || [])],
+                scroll,
                 surfaceSize,
                 backingSize: [surface?.width || 0, surface?.height || 0],
                 recordCount: records.length,
@@ -66,9 +141,10 @@ export const waitForStableScene = async (page, projectId, consecutiveSamples = 4
                 ])
             });
         }, projectId);
-        if (signature === previous && !JSON.parse(signature).paletteMotionActive) stable += 1;
+        const parsed = JSON.parse(signature);
+        if (signature === previous && !parsed.paletteMotionActive) stable += 1;
         else stable = 0;
-        if (stable >= consecutiveSamples) return true;
+        if (stable >= (parsed.thumbLit ? Math.max(consecutiveSamples, THUMB_REST_SAMPLES) : consecutiveSamples)) return true;
         previous = signature;
         await wait(120);
     }
@@ -480,6 +556,7 @@ export const clickCanvasTarget = async (page, target, { double = false } = {}) =
     assert(position.x >= 0 && position.x <= bounds.width, `canvas_click_x_outside:${JSON.stringify({ position, bounds })}`);
     assert(position.y >= 0 && position.y <= bounds.height, `canvas_click_y_outside:${JSON.stringify({ position, bounds })}`);
     const touchCapable = await page.evaluate(() => Number(navigator.maxTouchPoints || 0) > 0);
+    await waitForResponsivePage(page);
     if (touchCapable) {
         await page.touchscreen.tap(point.x, point.y);
         if (double) {
@@ -492,5 +569,18 @@ export const clickCanvasTarget = async (page, target, { double = false } = {}) =
         await page.mouse.dblclick(point.x, point.y, { delay: 40 });
         return;
     }
-    await page.mouse.click(point.x, point.y, { delay: 40 });
+    // Press and release are queued together on one CDP session (delivered in order): sent as two awaited
+    // commands, a loaded machine spaced them by its round trip (620 ms measured), which the ribbon rightly reads
+    // as a hold (BEVY_MAIN_MENU_HOLD_DELAY_MS) instead of a touch.
+    const session = await page.context().newCDPSession(page);
+    try {
+        const pointer = { x: point.x, y: point.y, button: 'left', clickCount: 1 };
+        await session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y });
+        await Promise.all([
+            session.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...pointer }),
+            session.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...pointer })
+        ]);
+    } finally {
+        await session.detach();
+    }
 };

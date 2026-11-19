@@ -22,7 +22,6 @@ const SALE_KINDS: [&str; 10] = [
 const DIGITAL_KINDS: [&str; 4] = ["project", "content", "template", "subscription"];
 const STATUSES: [&str; 4] = ["live", "refused", "hidden", "sold_out"];
 const REASONS: [&str; 5] = ["invalid", "quota", "suspended", "reported", "event"];
-const COMMISSION_RATE: f64 = 0.03;
 const MAX_IMAGES: usize = 6;
 const MAX_PRICE: f64 = 100_000.0;
 const PLACE_KINDS: [&str; 3] = ["seller", "buyer", "visio"];
@@ -232,17 +231,18 @@ pub fn error(listing: &JsonValue) -> Option<&'static str> {
     None
 }
 
-/// `shopSplit(amount)`: what the buyer pays, Atome's 3 %, what the seller receives, in cents.
-pub fn split(amount: f64) -> Option<(f64, f64, f64)> {
-    let cents = round(amount * 100.0);
+/// `shopSplit(price)` (R-193): what the buyer pays, Atome's 3 % added on top of the price, what the
+/// seller receives (the whole price), in cents; never a cut from the seller.
+pub fn split(price: f64) -> Option<(f64, f64, f64)> {
+    let cents = round(price * 100.0);
     if !cents.is_finite() || cents < 0.0 {
         return None;
     }
-    let commission = round(cents * COMMISSION_RATE);
+    let commission = crate::billing::pricing::commission(cents as i64) as f64;
     Some((
-        cents / 100.0,
+        (cents + commission) / 100.0,
         commission / 100.0,
-        (cents - commission) / 100.0,
+        cents / 100.0,
     ))
 }
 

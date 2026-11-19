@@ -12,6 +12,8 @@ struct WatchCatalog: Decodable {
     let tiles: [WatchTile]
     let pictures: [String: String]
     let atom: String
+    // The screen's ground: atome's wallpaper, softened by the page (watch_catalog.js), a JPEG in base64.
+    let wallpaper: String
 }
 
 struct WatchTheme: Decodable {
@@ -84,6 +86,8 @@ struct WatchValue: Decodable, Identifiable, Equatable {
 struct WatchSessionState: Decodable, Equatable {
     let phase: String
     let step: String?
+    // The step's name alone (« Série 1 / 3 »), the title of the disc's page; `line` adds « En pause ».
+    let stage: String?
     let line: String?
     let figure: WatchFigure?
     let ring: WatchRing?

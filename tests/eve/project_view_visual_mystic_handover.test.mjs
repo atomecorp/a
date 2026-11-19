@@ -51,7 +51,33 @@ const tick = () => delay(8);
 
 afterAll(() => window.close());
 
-const createHarness = ({ visualPanel = null, type = 'video', composite = false } = {}) => {
+// A clock the test moves itself (`advance`), for the BevyUI pointer's timers (its hold, its tap gates): a gesture's
+// timing is then what the test says, never what a loaded machine makes of real time (17 Nov. 2026: an 8 ms gap that
+// became more than the 20 ms hold under load let the hold take a plain drag).
+const createDrivenClock = () => {
+    let time = 0, next = 0;
+    const timers = new Map();
+    return {
+        now: () => time,
+        schedule: (callback, ms = 0) => { next += 1; timers.set(next, { at: time + Math.max(0, Number(ms) || 0), callback }); return next; },
+        cancel: (id) => { timers.delete(id); },
+        // Time moves on `ms`; every timer due by then runs, in its order.
+        advance: (ms) => {
+            const until = time + ms;
+            for (;;) {
+                const due = [...timers].filter(([, timer]) => timer.at <= until).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+                if (!due) break;
+                timers.delete(due[0]);
+                time = due[1].at;
+                due[1].callback();
+            }
+            time = until;
+        }
+    };
+};
+
+// `clock`: a driven clock (createDrivenClock) for the pointer's timers; without it, real time.
+const createHarness = ({ visualPanel = null, type = 'video', composite = false, clock = null } = {}) => {
     const canvas = document.getElementById('eve_surface_project');
     canvas.getBoundingClientRect = () => RECT;
     canvas.setPointerCapture = () => {};
@@ -118,6 +144,7 @@ const createHarness = ({ visualPanel = null, type = 'video', composite = false }
     const pointerRuntime = createBevyUiPointerRuntime({
         state: harness.pointerState,
         holdDelayMs: 20,
+        ...(clock ? { schedule: clock.schedule, cancelSchedule: clock.cancel, now: clock.now } : {}),
         hitTestTrees: (_canvas, point) => hitAt(point),
         localEventForTarget: localBevyEventForTarget,
         emitUiEvents: (events) => events.filter(Boolean).forEach((event) => {
@@ -128,7 +155,9 @@ const createHarness = ({ visualPanel = null, type = 'video', composite = false }
         // reports `false` from `end()`.
         scrollRuntime: {
             begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false
-        }
+        },
+        // The frame a hold's rest waits for (pointer_rest_timer.js): the page's.
+        frame: (callback) => globalThis.requestAnimationFrame(callback)
     });
 
     const mounted = new Map();
@@ -171,13 +200,19 @@ const createHarness = ({ visualPanel = null, type = 'video', composite = false }
 };
 
 test('the visual preview follows a plain drag when no menu owns the pointer', { timeout: 20000 }, async () => {
-    const harness = createHarness();
+    // 8 ms between the gestures on the driven clock, under the 20 ms hold: a drag, whatever the load (`tick` only lets
+    // the asynchronous press settle).
+    const clock = createDrivenClock();
+    const harness = createHarness({ clock });
     closeMysticMenu();
     await wait(20);
     harness.intents.length = 0;
     harness.route('pointerdown', MEDIA_POINT); await tick();
+    clock.advance(8);
     harness.route('pointermove', { x: 190, y: 140 }); await tick();
+    clock.advance(8);
     harness.route('pointermove', { x: 230, y: 170 }); await tick();
+    clock.advance(8);
     harness.route('pointerup', { x: 230, y: 170 });
     await wait(30);
 
@@ -189,12 +224,16 @@ test('the visual preview follows a plain drag when no menu owns the pointer', { 
 });
 
 test('a long press hands the visual preview gesture over to the Flower', { timeout: 20000 }, async () => {
-    const harness = createHarness();
+    // The hold and the drag after it on the driven clock: the press lasts the hold's 20 ms because the test says so,
+    // and the next drag stays a drag whatever the load.
+    const clock = createDrivenClock();
+    const harness = createHarness({ clock });
     closeMysticMenu();
     await wait(30);
     harness.intents.length = 0;
 
-    harness.route('pointerdown', MEDIA_POINT);
+    harness.route('pointerdown', MEDIA_POINT); await tick();
+    clock.advance(20);
     const deadline = Date.now() + 4000;
     while (Date.now() < deadline && harness.mysticRuntime.isOpen() !== true) await wait(2);
     assert.equal(harness.menuOpens, 1, 'the long press opens the media menu from the preview');
@@ -220,7 +259,9 @@ test('a long press hands the visual preview gesture over to the Flower', { timeo
     await wait(30);
     harness.intents.length = 0;
     harness.route('pointerdown', MEDIA_POINT); await tick();
+    clock.advance(8);
     harness.route('pointermove', { x: MEDIA_POINT.x + 60, y: MEDIA_POINT.y + 30 }); await tick();
+    clock.advance(8);
     harness.route('pointerup', { x: MEDIA_POINT.x + 60, y: MEDIA_POINT.y + 30 });
     await wait(30);
     assert.ok(harness.moveIntents().length >= 1, 'the panel is not left frozen after the hand-over');

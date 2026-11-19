@@ -5,7 +5,7 @@ use crate::{
     procedural_sdf::ProceduralSdfMaterial,
     types::{
         AtomeBevyRendererConfig, AtomeEntityTable, AtomeProceduralSdf, AtomeRenderNode,
-        AtomeRenderScene, AtomeStylePatch,
+        AtomeRenderScene, AtomeStylePatch, MysticRows,
     },
     workspace_backdrop::{AtomePresentationCamera, AtomeWorkspaceBackdrop},
     workspace_blur::{AssistantOpticsSettings, backdrop_blur_lod},
@@ -106,6 +106,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             playback_progress: None,
             selected: None,
             filters: None,
+            effects: None,
             transition: None,
             procedural: Some(contract()),
             progress_ring: None,
@@ -169,6 +170,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             opacity: None,
             playback_progress: None,
             filters: None,
+            effects: None,
             transition: None,
             procedural: Some(patched),
             progress_ring: None,
@@ -298,9 +300,11 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("* hole_dose"));
     // The contact shadow is occluded by the plate it belongs to. A turning plate
     // carries its full shadow; a plate lying flat keeps atome's standard tool
-    // shadow at `mystic_style.y`, on its menu face only.
+    // shadow at `mystic_style.y`, on its menu face only — unless it is pressed in
+    // (selected, R-219), its shadow then inside it.
     assert!(shader.contains("* shadow_dose * (1.0 - plate_mask) * lifted"));
-    assert!(shader.contains("let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0 || level_turn));"));
+    assert!(shader.contains("let resting = clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, (cosine < 0.0 || level_turn) && !pressed);"));
+    assert!(shader.contains("let lifted = max(abs(sine), resting);"));
     // A tile that has not started turning paints nothing at all, except in a
     // level turn, where it still shows the level it carried.
     assert!(
@@ -349,4 +353,23 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
         order.windows(2).all(|pair| pair[0] < pair[1]),
         "mystic uniforms follow liquid_drop_count in order"
     );
+}
+
+#[test]
+fn procedural_sdf_mystic_tile_colour_keeps_the_pressed_mark() {
+    // A selected Mystic plate (R-219) is told by its colour's alpha above 1 (1 + its glass dose): normalising keeps it, up to 2.
+    let mut colours = MysticRows::default();
+    colours[0] = [0.2, 0.3, 0.5, 1.8];
+    colours[1] = [0.2, 0.3, 0.5, 5.0];
+    colours[2] = [0.2, 0.3, 0.5, 1.0];
+    let normalized = AtomeProceduralSdf {
+        mystic_tile_colors: colours,
+        ..contract()
+    }
+    .normalized();
+    assert_eq!(normalized.mystic_tile_colors[0][3], 1.8);
+    assert_eq!(normalized.mystic_tile_colors[1][3], 2.0);
+    assert_eq!(normalized.mystic_tile_colors[2][3], 1.0);
+    let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
+    assert!(shader.contains("let pressed = material.mystic_tile_colors[index].a > 1.001;"));
 }

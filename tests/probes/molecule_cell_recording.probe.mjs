@@ -45,7 +45,8 @@ test('a cell take starts on the start step, ends on the end step and lands at th
     const stop = await recorder.stop({ timeline, key: 'A|t' });
     assert.equal(stop.end_frame, 10000 + 3 * 24000, 'the end lands on the next beat');
     assert.equal(recorder.read()[0].recording, true);
-    await scheduled[0].callback();
+    // The landing of the stop is the last timer scheduled (the take's fixed length schedules its own first).
+    await scheduled.at(-1).callback();
     assert.deepEqual(calls[0], { timeline_end_frame: 4 * RATE + 2 * 24000 }, 'cut to the beats played, from the Scene start');
     assert.equal(recorder.isRecording('A|t'), false);
 });

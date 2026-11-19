@@ -3,50 +3,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createCellPlayer } from '../../eVe/core/media_engine/molecule_cell_player.js';
-import { normalizeTimeline } from '../../eVe/core/media_engine/molecule_support.js';
 import { createMoleculeCellsRuntime } from '../../eVe/intuition/tools/molecule/runtime_cells.js';
+import { windowMidiPlan } from '../../eVe/intuition/tools/molecule/runtime_midi.js';
 import { addClip, addScene, createTimeline, setCellSettings, updateSection } from '../../eVe/intuition/tools/molecule/kernel/index.js';
+import { RATE, fakeSession } from '../helpers/molecule_cell_fake_session.mjs';
 
-const RATE = 48000;
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 const until = async (predicate, ms = 3000) => {
     const end = Date.now() + ms;
     while (!predicate() && Date.now() < end) await wait(10);
     return predicate();
-};
-
-// A session over a fake engine: the render clock follows the wall clock.
-const fakeSession = (tracks) => {
-    const calls = [];
-    const stopped = [];
-    const origin = globalThis.performance.now();
-    const frames = () => Math.floor(((globalThis.performance.now() - origin) / 1000) * RATE);
-    const session = {
-        calls, stopped, ends: [], voiceState: new Map(), runtimeClips: new Map(),
-        _ensureVideoAudioAsset: async () => true,
-        _stopRuntimeVoice: async (runtime, voiceId) => {
-            if (!runtime.liveVoiceIds.has(voiceId)) return;
-            runtime.liveVoiceIds.delete(voiceId);
-            stopped.push(voiceId);
-        },
-        setTimeline: async (timeline) => {
-            session.timeline = normalizeTimeline(timeline);
-            session.timeline.tracks.flatMap((track) => track.clips).forEach((clip) => {
-                if (!session.runtimeClips.has(clip.id)) {
-                    session.runtimeClips.set(clip.id, { assetId: clip.id, voiceId: `${clip.id}:voice`, audioAvailable: true, liveVoiceIds: new Set() });
-                }
-            });
-        },
-        audio: {
-            readRenderClock: async () => ({ sample_rate: RATE, frames_rendered: frames(), block_frames: 128, played_frame_now: frames() }),
-            readRenderClockNow: () => null,
-            scheduleVoices: async (voices) => { calls.push(...voices); return voices.map((voice) => voice.startRenderFrame); },
-            setVoiceEnd: async (voiceId, endFrame, releaseFrames) => { session.ends.push({ voiceId, endFrame, releaseFrames }); return true; },
-            stopVoice: async () => {}
-        }
-    };
-    if (tracks) void session.setTimeline({ tracks });
-    return session;
 };
 
 const twoTracks = [
@@ -64,7 +30,9 @@ test('a cell plays its passes back to back on exact frames, then ends', async ()
     assert.ok(session.calls.every((voice) => voice.assetId === 'ca'), 'only the cell\'s track plays');
     assert.ok(session.calls.every((voice) => Math.abs(voice.startSeconds - 0.5) < 1e-9 && voice.envelope.endSeconds === 0.7), 'each pass plays the window');
     const shapes = session.calls.map(({ envelope }) => [envelope.attackStartSeconds ?? null, envelope.attackSeconds ?? 0, envelope.releaseSeconds ?? 0]);
-    assert.deepEqual(shapes, [[0.5, 0.01, 0], [null, 0, 0], [null, 0, 0.02]], 'the attack on the first pass from the cell start, the release on the last');
+    // The ADSR runs from the cell's start on every pass (its origin 0.2 s earlier each pass), the release on the last.
+    assert.deepEqual(shapes.map(([start, attack, release]) => [Math.round(start * 1e6) / 1e6, attack, release]),
+        [[0.5, 0.01, 0], [0.3, 0.01, 0], [0.1, 0.01, 0.02]], 'the attack from the cell start, the release on the last pass');
 });
 
 test('quantized launches share one grid; a Follow Action starts on the exact end frame', async () => {
@@ -126,4 +94,46 @@ test('runtime: a Scene cell plays every track then the next Scene; a track cell 
     assert.equal(cells.read('m').cells.length, 1, 'an infinite Loop keeps playing');
     await cells.trigger({ groupId: 'm', timeline, cells: [{ scene_id: 'A', track_id: 't' }] });
     assert.ok(await until(() => !cells.read('m').playing, 500), 'a second press stops a Latch cell on the next frame it can');
+});
+
+// A cell plays its MIDI too (user 17 Nov. 2026: MIDI cells were silent), one window per pass, and the picture
+// reads where it is (its playheads); a stopped cell stops its MIDI.
+test('runtime: a cell plays its MIDI each pass, shows its playhead, and its MIDI stops with it', async () => {
+    let timeline = createTimeline({ timeline_id: 'tl', project_id: 'p', owner_atome_id: 'g', initial_section_id: 's', initial_track_id: 't' });
+    timeline = updateSection(timeline, { section_id: 's', duration_frames: 10 * RATE });
+    timeline = addClip(timeline, {
+        clip_id: 'm1', track_id: 't', kind: 'midi', source: { type: 'atome', atome_id: 'midi_x' },
+        timeline: { start_seconds: 0, duration_seconds: 1, source_in_seconds: 0, source_out_seconds: 1 },
+        next_empty_track_id: 't2', next_empty_track_name: 'Piste 2'
+    });
+    timeline = addScene(timeline, { scene_id: 'A', name: 'A', start_frame: 0, duration_frames: 0.25 * RATE });
+    timeline = setCellSettings(timeline, { scene_id: 'A', track_id: 't', settings: { play_mode: 'loop', passes: 2, quantize_start: 'off', quantize_end: 'off' } });
+    const session = fakeSession();
+    const engine = { getSession: () => session, createSession: () => session, disposeSession: async () => ({ ok: true }) };
+    const lanes = [];
+    const stopped = [];
+    const midi = {
+        start: async (options) => { lanes.push(options); return { ok: true, playing: 1, errors: [] }; },
+        stop: async (key) => { stopped.push(key); return { ok: true }; }
+    };
+    const cells = createMoleculeCellsRuntime({ env: {}, engine, midi, readTimeline: () => timeline });
+    await cells.trigger({ groupId: 'g', timeline, cells: [{ scene_id: 'A', track_id: 't' }] });
+    assert.ok(await until(() => lanes.length === 2, 1500), `two passes, two MIDI windows: ${lanes.length}`);
+    assert.deepEqual(lanes.map((lane) => [lane.fromSeconds, lane.untilSeconds, lane.trackIds]), [[0, 0.25, ['t']], [0, 0.25, ['t']]]);
+    assert.ok(lanes[1].delayMs > lanes[0].delayMs, 'the second pass is heard after the first');
+    await until(() => (session.readPlayheads?.() || []).length > 0, 1000);
+    const [head] = session.readPlayheads();
+    assert.ok(head.position >= 0 && head.position < 0.25 && head.trackIds[0] === 't', JSON.stringify(head));
+    await cells.trigger({ groupId: 'g', timeline, cells: [{ scene_id: 'A', track_id: 't' }] });
+    assert.ok(await until(() => !cells.read('g').playing, 1500), 'the second press stops it');
+    assert.ok(stopped.length >= 1, 'its MIDI stopped with it');
+});
+
+test('windowMidiPlan: a note held across the window end is released there', () => {
+    const on = (at, note) => ({ at_ms: at, bytes: [0x90, note, 100] });
+    const off = (at, note) => ({ at_ms: at, bytes: [0x80, note, 0] });
+    const plan = { events: [on(0, 60), off(100, 60), on(200, 62), off(900, 62)], duration_ms: 1000 };
+    const cut = windowMidiPlan(plan, { startSeconds: 0, durationSeconds: 1, sourceInSeconds: 0 }, 0, 0.5);
+    assert.deepEqual(cut.events.map((event) => [event.at_ms, event.bytes[0], event.bytes[1]]), [[0, 0x90, 60], [100, 0x80, 60], [200, 0x90, 62], [500, 0x80, 62]]);
+    assert.equal(cut.duration_ms, 500);
 });

@@ -1,55 +1,61 @@
 import UIKit
+import WebKit
 import OSLog
 
-enum ExternalDisplayState: String { case connected, disconnected }
-
-protocol ExternalDisplayObserver: AnyObject {
-    func externalDisplayChanged(_ state: ExternalDisplayState)
-}
-
-final class ExternalDisplayGuards {
-    static let shared = ExternalDisplayGuards()
-    private init() {}
-    private let log = Logger(subsystem: "atome", category: "ExternalDisplay")
-
-    // In AUv3, all external display behaviors must be disabled.
-    func startObservingIfApp(observer: ExternalDisplayObserver) {
-    guard !Self.isRunningInExtension else {
-        log.info("Skipped in extension (AUv3)")
-        return
-    }
-#if APP_EXTENSION
-    log.info("Compile-time app-extension; external display observing disabled")
-    return
-#else
-        if #available(iOS 16.0, *) {
-            // Prefer scene-based observation on modern iOS (host app can wire UISceneDelegate callbacks)
-        log.info("iOS16+: rely on UIScene lifecycle for external screens")
-        } else {
-            NotificationCenter.default.addObserver(self, selector: #selector(screenDidConnect(_:)), name: UIScreen.didConnectNotification, object: nil)
-            NotificationCenter.default.addObserver(self, selector: #selector(screenDidDisconnect(_:)), name: UIScreen.didDisconnectNotification, object: nil)
-        log.info("Observing via UIScreen notifications (pre-iOS16)")
-        }
-    log.info("Observing (App)")
-#endif
-    }
-
-    func stopObserving() {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    @objc private func screenDidConnect(_ note: Notification) {
-    log.info("Screen connected: \(String(describing: note.object))")
-    }
-
-    @objc private func screenDidDisconnect(_ note: Notification) {
-    log.info("Screen disconnected: \(String(describing: note.object))")
-    }
-
+enum ExternalDisplayGuards {
     static var isRunningInExtension: Bool {
         let path = Bundle.main.bundlePath
         if path.hasSuffix(".appex") { return true }
         if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
         return false
+    }
+}
+
+/// Connected screens (R-212, contract validated by the user, 17 Nov. 2026): the app's page says where it is
+/// (`swiftBridge` action `externalDisplay`, eVe/domains/rendering/external_display_link.js); the page a connected
+/// screen shows (application/ExternalDisplaySceneDelegate.swift) gets it here. The page's origin is opaque
+/// (`atome:///`), so no browser channel reaches the other web view: this relay is the link, keeping the last
+/// place for a screen connected later. In the AUv3 no screen ever connects: the place is only kept.
+final class ExternalDisplayRelay: NSObject, WKScriptMessageHandler {
+    static let shared = ExternalDisplayRelay()
+    static let followerHandlerName = "externalDisplayFollower"
+    private let log = Logger(subsystem: "atome", category: "ExternalDisplay")
+    private var lastPlace: [String: Any]?
+    private weak var follower: WKWebView?
+
+    private override init() {}
+
+    /// From the app's page: `{ version: 1, message: { type: 'place', place } }`.
+    func receive(_ body: [String: Any]) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard (body["version"] as? NSNumber)?.intValue == 1,
+              let message = body["message"] as? [String: Any],
+              message["type"] as? String == "place" else {
+            log.error("external display message refused")
+            return
+        }
+        lastPlace = message
+        deliver(message)
+    }
+
+    func attach(follower webView: WKWebView) { follower = webView }
+
+    func detach() { follower = nil }
+
+    /// The screen's page asks where the device is (its `hello`, once it follows).
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == Self.followerHandlerName,
+              (message.body as? [String: Any])?["type"] as? String == "hello",
+              let lastPlace else { return }
+        deliver(lastPlace)
+    }
+
+    private func deliver(_ message: [String: Any]) {
+        guard let follower,
+              let data = try? JSONSerialization.data(withJSONObject: message),
+              let json = String(data: data, encoding: .utf8) else { return }
+        follower.evaluateJavaScript("window.__eveExternalDisplayReceive?.(\(json));") { [log] _, error in
+            if let error { log.error("external display place not delivered: \(error.localizedDescription)") }
+        }
     }
 }

@@ -88,8 +88,10 @@ text over the whole field, so selecting a word and copying it means something.
 - `tests/eve/text_editing_session_contract.test.mjs` — a predicate-retained session
   survives a native blur, keeps its editor mounted, does not commit, takes the focus
   back, and returns to normal commit-on-blur once the predicate goes false.
-- `tests/eve/bevy_ui_flower_contract.probe.mjs` — the corolla re-derives its centre on
-  a surface change and stays inside it; a resize during a close still unmounts.
+- `tests/eve/mystic_surface_resize.probe.mjs` — the Flower became the Mystic menu
+  (`bevy_ui_mystic_runtime.js`, Sept. 2026): its tiles are laid again from the stored
+  opening point on a surface change and stay inside it; a resize during a close still
+  unmounts and releases the surface subscription.
 
 Physical iPhone acceptance (Debug, cleaned binary, `one.atome.app`): a real 900 ms
 long press on the `Clé API` field shows the menu with the panel **completely still** —

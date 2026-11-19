@@ -175,20 +175,20 @@ describe('Communicate main-menu unread projection', () => {
         expect(warmups).toContain('__eveCommunicationBootstrapError');
     });
 
-    it('projects the unread summary and count into the reserved Communicate width', () => {
-        const nodes = buildMainMenuNotificationNodes({
-            itemSize: 64,
-            width: 304,
-            iconOffsetX: 240,
-            summary: 'Hello',
-            count: 2
-        });
+    it('shows what waits as the folded tool\'s count, never as an unfolded field', () => {
+        const nodes = buildMainMenuNotificationNodes({ itemSize: 64, width: 64, iconOffsetX: 0, summary: 'Hello', count: 2 });
+        expect(nodes.map((node) => node.id)).toEqual(['eve_bevy_ui_main_menu_communication_unread_badge']);
+        expect(nodes[0].children[0].text).toBe('2');
+        expect(nodes[0].style.position[0] + nodes[0].style.size[0]).toBeLessThanOrEqual(64);
+        const urgent = buildMainMenuNotificationNodes({ itemSize: 64, width: 64, iconOffsetX: 0, count: 1, urgent: true });
+        expect(urgent[0].style.background).not.toEqual(nodes[0].style.background);
+    });
+
+    it('keeps the ringing call in its field', () => {
+        const nodes = buildMainMenuNotificationNodes({ itemSize: 64, width: 304, iconOffsetX: 240, summary: 'Ana', alert: true });
         expect(nodes.map((node) => node.id)).toEqual([
             'eve_bevy_ui_main_menu_communication_unread_surface',
-            'eve_bevy_ui_main_menu_communication_unread_summary',
-            'eve_bevy_ui_main_menu_communication_unread_count'
+            'eve_bevy_ui_main_menu_communication_unread_summary'
         ]);
-        expect(nodes.find((node) => node.id.endsWith('_summary'))?.text).toBe('Hello');
-        expect(nodes.find((node) => node.id.endsWith('_count'))?.text).toBe('2');
     });
 });

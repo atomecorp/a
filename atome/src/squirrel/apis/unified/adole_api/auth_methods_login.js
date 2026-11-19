@@ -181,7 +181,14 @@ export function phoneLinkClient() {
     return client;
 }
 
-export async function restoreLocalAuthorization() {
+// One restoration at a time: the boot's auto-login and a module asking for the local session (health, commit
+// transport) met on iOS and each signed its own resume, two local sessions issued where one was needed.
+export function restoreLocalAuthorization() {
+    if (!localRenewal) localRenewal = restoreLocalAuthorizationOnce().finally(() => { localRenewal = null; });
+    return localRenewal;
+}
+
+async function restoreLocalAuthorizationOnce() {
     const store = deviceStore();
     let record = null;
     if (isTauriRuntime()) {
@@ -275,8 +282,7 @@ export function ensureLocalSession() {
     }
     if (state.mode !== 'authenticated') return Promise.resolve({ ok: true });
     if (TauriAdapter.getToken() && localExpiresAt > Date.now()) return Promise.resolve({ ok: true });
-    if (!localRenewal) localRenewal = restoreLocalAuthorization().finally(() => { localRenewal = null; });
-    return localRenewal;
+    return restoreLocalAuthorization();
 }
 
 let linksInitialized = false;
@@ -284,12 +290,12 @@ let workspaceSynchronize = null;
 let communicationPushClient = null;
 // Vider la file d'envoi du workspace navigateur AVANT une action serveur qui porte sur un
 // objet cree localement (partager un projet tout juste cree echouait : `share_owner_required`).
-// Une passe suffit : une demande recue pendant une passe en cours la fait relancer.
+// Une passe suffit : une demande recue pendant une passe en cours la fait relancer. Only the outbox leaves: nothing is read back.
 // On Tauri the objects to share are delivered from the native queue right away: the
 // queue is ordered by creation and may hold a whole workspace republication.
 export async function flushBrowserWorkspace({ atomeIds = [] } = {}) {
     if (typeof workspaceSynchronize !== 'function') return { ok: true, skipped: true };
-    await workspaceSynchronize();
+    await workspaceSynchronize({ pull: 'none' });
     const ids = [...new Set((Array.isArray(atomeIds) ? atomeIds : []).map(id => String(id || '').trim()).filter(Boolean))];
     if (isTauriRuntime() && ids.length) {
         const flushed = await TauriAdapter.sync.flush({ atome_ids: ids });
@@ -334,7 +340,7 @@ export async function initializePhoneLinks() {
         const result = await env.__ATOME_IOS_NATIVE_INVOKE('auth_link_take', {});
         if (result?.url) await phoneLinkClient().consumeLink(result.url);
     };
-    const synchronize = async () => {
+    const synchronize = async (options) => {
         if (isTauriRuntime()) {
             // Configured once per session pair, not before every share.
             const { ensureFastifyToken } = await import('./auth_fastify_token.js');
@@ -353,35 +359,37 @@ export async function initializePhoneLinks() {
                 });
                 if (!response.ok) throw new Error('workspace_media_sync_failed');
                 return response.json();
-            } });
+            } }, options);
     };
     workspaceSynchronize = synchronize;
     let syncRetryTimer = null, syncFailures = 0;
     const cancelSyncRetry = () => { clearTimeout(syncRetryTimer); syncRetryTimer = null; syncFailures = 0; };
-    const requestSync = () => {
+    // `options.pull` says what to read back (browser_workspace.js): the whole workspace by default (a recovery).
+    const requestSync = (options) => {
         if (getSessionState().mode !== 'authenticated') { cancelSyncRetry(); return; }
         const principal = getSessionState().user?.id, environment = getFastifyHttpBaseUrl();
         const current = () => getSessionState().user?.id === principal && getFastifyHttpBaseUrl() === environment;
-        void synchronize().then(() => { if (current()) cancelSyncRetry(); }, error => {
+        void synchronize(options).then(() => { if (current()) cancelSyncRetry(); }, error => {
             if (!current()) return;
             env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }));
             if (!syncRetryTimer && getSessionState().mode === 'authenticated') {
-                syncRetryTimer = setTimeout(() => { syncRetryTimer = null; requestSync(); }, Math.min(30000, 1000 * 2 ** Math.min(syncFailures++, 5)));
+                syncRetryTimer = setTimeout(() => { syncRetryTimer = null; requestSync({ pull: 'none' }); }, Math.min(30000, 1000 * 2 ** Math.min(syncFailures++, 5)));
             }
         });
     };
     listeners.signal.addEventListener('abort', cancelSyncRetry, { once: true });
     listeners.signal.addEventListener('abort', subscribeBrowserWorkspaceChanges(env, requestSync), { once: true });
     env.addEventListener('squirrel:user-logged-out', cancelSyncRetry, { signal: listeners.signal });
-    env.addEventListener('squirrel:auth-transport-open', requestSync, { signal: listeners.signal });
+    env.addEventListener('squirrel:auth-transport-open', () => requestSync(), { signal: listeners.signal });
     env.addEventListener('squirrel:remote-session-ready', () => {
-        void requeueRefusedBrowserWorkspaceEvents().then(requestSync, (error) => {
+        void requeueRefusedBrowserWorkspaceEvents().then(() => requestSync(), (error) => {
             env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }));
             requestSync();
         });
     }, { signal: listeners.signal });
-    env.addEventListener('squirrel:workspace-outbox-ready', requestSync, { signal: listeners.signal });
-    env.addEventListener('online', requestSync, { signal: listeners.signal });
+    // A local commit is already here: only the outbox leaves, nothing is read back.
+    env.addEventListener('squirrel:workspace-outbox-ready', () => requestSync({ pull: 'none' }), { signal: listeners.signal });
+    env.addEventListener('online', () => requestSync(), { signal: listeners.signal });
     env.addEventListener('squirrel:phone-link-ready', resume, { signal: listeners.signal });
     // The SMS link is often opened elsewhere (browser, phone). The ready notice
     // only reaches the socket that last asked; coming back to the app must not

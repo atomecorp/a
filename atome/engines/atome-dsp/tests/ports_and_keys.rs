@@ -137,10 +137,15 @@ fn keyed(kind: ModuleKind, input: f32, key: Option<f32>, params: &[(u32, f32)]) 
 
 #[test]
 fn a_key_drives_the_dynamics() {
-    use atome_dsp::dynamics::{RATIO, THRESHOLD_DB};
+    use atome_dsp::dynamics::{KEY_HPF_HZ, KEY_HPF_OFF_HZ, RATIO, THRESHOLD_DB};
     use atome_dsp::gate::{DUCK_AMOUNT_DB, GATE_RANGE_DB, GATE_RELEASE_MS};
-    // Compressor: a quiet block is turned down only while its key is loud.
-    let settings = [(THRESHOLD_DB, -30.0), (RATIO, 5.0)];
+    // Compressor: a quiet block is turned down only while its key is loud. The key here is a constant (DC): its
+    // detector high-pass is off, or it would remove it (R-184).
+    let settings = [
+        (THRESHOLD_DB, -30.0),
+        (RATIO, 5.0),
+        (KEY_HPF_HZ, KEY_HPF_OFF_HZ),
+    ];
     assert!(keyed(ModuleKind::Compressor, 0.01, None, &settings).abs() < 0.01);
     let ducked = keyed(ModuleKind::Compressor, 0.01, Some(1.0), &settings);
     assert!(

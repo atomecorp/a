@@ -5,7 +5,7 @@
 // for adults only, read from the card's own birth date.
 use crate::social::news::db::text;
 use crate::vault_router::js;
-use chrono::{Datelike, Local, NaiveDate};
+use atome_js_values::dates;
 use serde_json::{Value as JsonValue, json};
 
 // The goals a card can declare, each with its themes (none: the goal alone), and whether it is
@@ -62,8 +62,8 @@ const SEARCH_ALL: &str = "all";
 const SEXES: [&str; 3] = ["woman", "man", "other"];
 const ORIENTATIONS: [&str; 3] = ["hetero", "homo", "bi"];
 const SCOPES: [&str; 3] = ["france", "world", "area"];
-const MINIMUM_AGE: i32 = 18;
-const OLDEST_AGE: i32 = 120;
+const MINIMUM_AGE: i64 = 18;
+const OLDEST_AGE: i64 = 120;
 const PHOTOS_MAX: usize = 6;
 const HIDDEN_MAX: usize = 500;
 
@@ -307,14 +307,17 @@ pub fn allowed(birth: Option<&JsonValue>) -> bool {
     if !(1000..=9999).contains(&year) {
         return false;
     }
-    let Some(born) = NaiveDate::from_ymd_opt(year as i32, month, day) else {
+    let (year, month, day) = (i64::from(year), i64::from(month), i64::from(day));
+    let Some(born) = dates::date_days(year, month, day) else {
         return false;
     };
-    let today = Local::now().date_naive();
-    if born > today {
+    let (today, _) =
+        dates::local_wall(dates::Instant::now()).expect("the present lies in chrono's range");
+    if born > today.seconds.div_euclid(86_400) {
         return false;
     }
-    let before_birthday = (today.month(), today.day()) < (month, day);
-    let age = today.year() - year as i32 - i32::from(before_birthday);
+    let today = today.fields();
+    let before_birthday = (today.month, today.day) < (month, day);
+    let age = today.year - year - i64::from(before_birthday);
     (MINIMUM_AGE..=OLDEST_AGE).contains(&age)
 }

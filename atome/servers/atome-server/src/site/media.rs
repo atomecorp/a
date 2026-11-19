@@ -31,6 +31,9 @@ fn mime(path: &Path) -> &'static str {
         "m4a" => "audio/mp4",
         "wav" => "audio/wav",
         "ogg" => "audio/ogg",
+        "pdf" => "application/pdf",
+        "zip" => "application/zip",
+        "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     }
 }
@@ -87,7 +90,14 @@ impl Site {
             let kind = js::first(record, &["type", "kind"])
                 .map(|kind| js::text(Some(kind)).to_lowercase())
                 .unwrap_or_default();
-            let url = clip(record.pointer("/properties/media_url"), 2000);
+            // A stored file names itself (`file_name`) when it carries no media address.
+            let url = match clip(record.pointer("/properties/media_url"), 2000) {
+                url if url.is_empty() => match clip(record.pointer("/properties/file_name"), 500) {
+                    name if name.is_empty() => name,
+                    name => format!("/api/uploads/{}", urlencoding::encode(&name)),
+                },
+                url => url,
+            };
             if !MEDIA_TYPES.contains(&kind.as_str()) || url.is_empty() {
                 continue;
             }

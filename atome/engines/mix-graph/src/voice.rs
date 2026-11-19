@@ -13,11 +13,12 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::voice_control::{self, VoiceControl};
+use crate::warp_voice::{self, VoiceWarp, WarpPlan};
 
 // Timeline window of a voice: where the voice starts inside its clip, the clip's
 // length, its linear fades and, when it stops before the clip's end (a loop
 // pass), where it stops; all in seconds of clip (= output) time.
-#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceEnvelope {
     #[serde(default)]
@@ -38,6 +39,33 @@ pub struct VoiceEnvelope {
     pub attack_seconds: f64,
     #[serde(default)]
     pub release_seconds: f64,
+    // The rest of the cell's ADSR: once the attack is over the level falls to
+    // `sustain_level` in `decay_seconds` and holds there; the release falls from it.
+    // The decay starts at `decay_start_seconds` (clip time), by default where the attack ends.
+    #[serde(default)]
+    pub decay_start_seconds: Option<f64>,
+    #[serde(default)]
+    pub decay_seconds: f64,
+    #[serde(default = "one")]
+    pub sustain_level: f64,
+}
+
+impl Default for VoiceEnvelope {
+    fn default() -> Self {
+        Self {
+            offset_seconds: 0.0,
+            duration_seconds: 0.0,
+            fade_in_seconds: 0.0,
+            fade_out_seconds: 0.0,
+            end_seconds: None,
+            attack_start_seconds: 0.0,
+            attack_seconds: 0.0,
+            release_seconds: 0.0,
+            decay_start_seconds: None,
+            decay_seconds: 0.0,
+            sustain_level: 1.0,
+        }
+    }
 }
 
 impl VoiceEnvelope {
@@ -71,7 +99,25 @@ impl VoiceEnvelope {
         } else {
             1.0
         };
-        fade_in.min(fade_out).min(attack).min(release) as f32
+        fade_in.min(fade_out).min(attack).min(release) as f32 * self.decay_gain(offset)
+    }
+
+    // The level after the attack: 1, falling to the sustain level over the decay.
+    fn decay_gain(&self, offset: f64) -> f32 {
+        let sustain = self.sustain_level.clamp(0.0, 1.0);
+        let since = offset
+            - self
+                .decay_start_seconds
+                .unwrap_or(self.attack_start_seconds + self.attack_seconds);
+        if sustain >= 1.0 || since < 0.0 {
+            return 1.0;
+        }
+        let fallen = if self.decay_seconds > 0.0 {
+            (since / self.decay_seconds).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        (1.0 - (1.0 - sustain) * fallen) as f32
     }
 }
 
@@ -99,6 +145,12 @@ pub struct VoiceRequest {
     pub loop_end_seconds: Option<f64>,
     #[serde(default)]
     pub envelope: Option<VoiceEnvelope>,
+    // Played backwards: the voice's window, from its end to its start.
+    #[serde(default)]
+    pub reverse: bool,
+    // A warped clip: its source read through a time map, at its own pitch (warp_voice.rs).
+    #[serde(default)]
+    pub warp: Option<VoiceWarp>,
 }
 
 impl Default for VoiceRequest {
@@ -112,6 +164,8 @@ impl Default for VoiceRequest {
             loop_start_seconds: None,
             loop_end_seconds: None,
             envelope: None,
+            reverse: false,
+            warp: None,
         }
     }
 }
@@ -135,6 +189,8 @@ pub struct VoiceSound {
     pub data: StaticSoundData,
     pub envelope: Option<VoiceEnvelope>,
     pub control: Option<Arc<VoiceControl>>,
+    // A warped voice: `data` is then its level (a constant carrying gain and pan), the frames come from the plan.
+    pub warp: Option<WarpPlan>,
 }
 
 impl VoiceSound {
@@ -152,7 +208,11 @@ impl SoundData for VoiceSound {
     type Handle = StaticSoundHandle;
 
     fn into_sound(self) -> Result<(Box<dyn Sound>, Self::Handle), Self::Error> {
-        let (inner, handle) = self.data.into_sound()?;
+        let (level, handle) = self.data.into_sound()?;
+        let inner = match self.warp {
+            Some(plan) => warp_voice::warped_sound(level, plan),
+            None => level,
+        };
         match self.envelope {
             Some(envelope) => Ok((
                 Box::new(EnvelopedSound {
@@ -308,6 +368,9 @@ pub fn build_voice_sound(
     mut data: StaticSoundData,
     request: &VoiceRequest,
 ) -> Result<VoiceSound, String> {
+    if let Some(warp) = &request.warp {
+        return warp_voice::warped_voice(data, request, warp);
+    }
     let source_duration = duration_seconds(&data)?;
     if !request.gain.is_finite() {
         return Err("gain must be finite".to_string());
@@ -329,6 +392,9 @@ pub fn build_voice_sound(
         .map(|value| value.min(source_duration));
     if let Some(duration) = duration {
         data = data.slice(start..start + duration);
+    } else if request.reverse && start > 0.0 {
+        // Backwards, a start cuts the window's other end: the voice plays from the source's end down to `start`.
+        data = data.slice(start..source_duration);
     } else if start > 0.0 {
         data = data.start_position(start);
     }
@@ -351,7 +417,8 @@ pub fn build_voice_sound(
     let data = data
         .volume(gain_to_decibels(request.gain))
         .panning(Panning(request.pan.clamp(-1.0, 1.0) as f32))
-        .playback_rate(PlaybackRate(request.rate.max(0.0001)));
+        .playback_rate(PlaybackRate(request.rate.max(0.0001)))
+        .reverse(request.reverse);
     let envelope = request.envelope.filter(|envelope| {
         envelope.duration_seconds.is_finite() && envelope.duration_seconds > 0.0
     });
@@ -359,5 +426,6 @@ pub fn build_voice_sound(
         data,
         envelope,
         control: None,
+        warp: None,
     })
 }

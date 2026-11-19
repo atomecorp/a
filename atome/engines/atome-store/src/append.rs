@@ -1,9 +1,10 @@
 // The append-only event commit as Fastify's ADOLE engine runs it
 // (`appendEvent` / `appendEvents`, database/adole_event_log.js): normalisation, a
-// retry answered with the recorded event, the type gate, the prepared payload, the
-// containment, the stream sequence, the conflict decisions, the insert, the
-// projection stored with the event, the deferred references resolved. Its result
-// is the event Fastify returns, field for field.
+// retry answered with the recorded event (or with its receipt when it changed nothing),
+// the type gate, the prepared payload (a `set` that changes nothing answered with a
+// receipt and recorded nowhere), the containment, the stream sequence, the conflict
+// decisions, the insert, the projection stored with the event, the deferred references
+// resolved. Its result is the event Fastify returns, field for field.
 use super::*;
 
 pub type JsonEvent = JsonMap<String, JsonValue>;
@@ -146,7 +147,7 @@ fn declared_type(event: &JsonEvent) -> Option<JsonValue> {
 }
 
 pub fn iso_now() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    atome_js_values::iso(dates::now_ms())
 }
 
 // `normalizeEventInput(event, options)`.
@@ -366,17 +367,24 @@ fn append_one(
         assert_replay(&existing, &event)?;
         return Ok((recorded(existing), false));
     }
+    if let Some(answer) = receipts::resent(db, &event)? {
+        return Ok((answer, false));
+    }
     assert_event_properties(
         db,
         raw.as_object().expect("normalized object"),
         &event,
         options,
     )?;
-    mutation::prepare(
+    let received = event.clone();
+    if mutation::prepare(
         db,
         &mut event,
         options.conflict_mode == ConflictMode::OfflineLww,
-    )?;
+    )? == mutation::Prepared::Unchanged
+    {
+        return Ok((receipts::receive_unchanged(db, &received)?, false));
+    }
     let project_id = containment::resolve_event_project_id(db, &record_of(&event))?;
     event.insert("project_id".into(), json!(project_id));
     let (stream_id, sequence) = event_stream(db, &record_of(&event))?;

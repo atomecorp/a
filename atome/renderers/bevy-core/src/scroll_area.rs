@@ -347,20 +347,28 @@ impl ScrollTree {
         Ok(())
     }
 
-    /// Lays every presented record back on its description (the tree detached).
+    /// Lays every presented record back on its description (the tree detached). A record the browser laid
+    /// again since it was last read or laid here already shows its new description: its base is an older
+    /// one, and laid back it went back to its former place and size, its text already drawn for the new
+    /// size (user, 17 Nov. 2026: a Sport card turned standing kept its lying rows, stretched).
     pub fn restore(&mut self, world: &mut World) -> Result<(), String> {
         for (spec, state) in &mut self.records {
             let presented = std::mem::take(state);
             let (Some(_), Some(base)) = (presented.applied, presented.base) else {
                 continue;
             };
-            if world
+            let Some(entity) = world
                 .resource::<AtomeEntityTable>()
                 .by_id
-                .contains_key(&spec.id)
-            {
-                apply_transform(world, base.patch(&spec.id))?;
+                .get(&spec.id)
+                .copied()
+            else {
+                continue;
+            };
+            if presented.laid != position_tick(world, entity).map(|tick| (entity, tick)) {
+                continue;
             }
+            apply_transform(world, base.patch(&spec.id))?;
         }
         Ok(())
     }
@@ -404,6 +412,7 @@ fn opacity_patch(id: &str, opacity: f32) -> AtomeStylePatch {
         opacity: Some(opacity),
         playback_progress: None,
         filters: None,
+        effects: None,
         transition: None,
         procedural: None,
         progress_ring: None,

@@ -1,4 +1,4 @@
-import { normalizeAiProviderError, requestProviderJsonCompletion, resolveActiveAiProviderConfig } from '../ai/provider_client.js';
+import { normalizeAiProviderError, requestProviderJsonCompletion } from '../ai/provider_client.js';
 import { createAiQuotaTracker } from '../ai/quota_tracker.js';
 import { normalizeVoiceIntent } from './intent_schema.js';
 import { DEFAULT_LOCALE, isEnglishLocale, listAtomeAiTools, localizeAiFailure, localizeQuotaWarning, localizeSceneGroundingFailure, resolveLocale } from './ai_planner_runtime_context.js';
@@ -309,8 +309,6 @@ const collectPlannerEntities = (parsed = {}, rawActions = []) => {
 };
 export const createVoiceAiPlanner = ({
     env = globalThis,
-    loadProfile,
-    fetchImpl,
     quotaTracker = null,
     isOnline = () => checkConnection('fastify')
 } = {}) => ({
@@ -322,10 +320,9 @@ export const createVoiceAiPlanner = ({
             ? quotaTracker
             : createAiQuotaTracker({ env });
         // Offline only the model call stops (R-104 §7): the deterministic intent above already ran.
-        const providerConfig = !await isOnline() ? { ok: false, error: 'offline' } : await resolveActiveAiProviderConfig({
-            ...(typeof loadProfile === 'function' ? { loadProfile } : {}), env });
-
-        if (providerConfig?.providerId === 'openai') Object.assign(providerConfig, { ok: false, error: 'voice_realtime_required' });
+        // atome-server answers (R-120): it picks the model, so provider and model are known once it has.
+        const providerConfig = !await isOnline() ? { ok: false, error: 'offline' }
+            : { ok: true, providerId: '', model: '', source: 'atome-server.chat' };
         if (providerConfig?.ok !== true) {
             const code = toText(providerConfig?.error) || 'no_ai_key_configured';
             return normalizeVoiceIntent({
@@ -362,15 +359,13 @@ export const createVoiceAiPlanner = ({
                 atomeAiTools: listAtomeAiTools(env)
             });
             writeVoiceDiagnostic(env, 'voice.provider.request', buildProviderRequestDiagnostic({ options, providerConfig, utterance, systemPrompt }));
-            const { parsed, text, usage } = await requestProviderJsonCompletion({
-                providerId: providerConfig.providerId,
-                model: providerConfig.model,
-                apiKey: providerConfig.apiKey,
+            const { parsed, text, usage, provider, model } = await requestProviderJsonCompletion({
+                env,
                 systemPrompt,
                 prompt: String(utterance || ''),
-                ...(typeof fetchImpl === 'function' ? { fetchImpl } : {}),
                 ...(options.signal ? { signal: options.signal } : {})
             });
+            Object.assign(providerConfig, { providerId: provider, model });
             writeVoiceDiagnostic(env, 'voice.provider.response', buildProviderResponseDiagnostic({
                 options, providerConfig, parsed, text, usage, elapsedMs: Date.now() - providerStartedAt
             }));

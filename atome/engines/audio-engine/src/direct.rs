@@ -97,6 +97,13 @@ pub(crate) fn with_graph<T>(
     with_direct(|direct| action(&mut direct.graph))
 }
 
+// The direct path's output latency (frames), read without its lock.
+static OUTPUT_LATENCY: AtomicUsize = AtomicUsize::new(0);
+
+pub fn output_latency_frames() -> usize {
+    OUTPUT_LATENCY.load(Ordering::Acquire)
+}
+
 pub fn apply(program: Program) -> Result<usize, String> {
     with_direct(|direct| {
         direct.program = program.clone();
@@ -109,6 +116,7 @@ fn play(program: Program) -> Result<usize, String> {
     let count = program.strips.len();
     let inputs = with_graph(|graph| {
         graph.apply(program)?;
+        OUTPUT_LATENCY.store(graph.output_latency_frames(), Ordering::Release);
         Ok(graph.live_inputs())
     })?;
     if ACTIVE.swap(count > 0, Ordering::AcqRel) != (count > 0) {
@@ -134,6 +142,10 @@ pub fn unload_asset(asset_id: &str) -> Result<(), String> {
 
 pub fn levels() -> Result<Vec<StripLevel>, String> {
     with_graph(|graph| Ok(graph.levels()))
+}
+
+pub fn readings() -> Result<Vec<atome_mix_graph::ModuleReading>, String> {
+    with_graph(|graph| Ok(graph.readings()))
 }
 
 pub fn cut_tail(module_id: &str) -> Result<(), String> {

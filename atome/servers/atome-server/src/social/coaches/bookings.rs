@@ -23,7 +23,7 @@ fn fail(error: &str) -> JsonValue {
 }
 
 fn now() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 // What each side reads of a booking: the other's name, never the other's agenda.

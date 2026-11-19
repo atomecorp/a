@@ -25,8 +25,8 @@ import {
     readIdempotencyRecord,
     writeIdempotencyRecord
 } from './mcp_security.js';
-import { resolveAccessPolicy } from './mcp_security_policy.js';
-import { validateConfirmation } from './mcp_confirmation_gate.js';
+import { documentScopePolicy, resolveAccessPolicy } from './mcp_security_policy.js';
+import { MCP_ASSISTANT_SOURCES, validateConfirmation } from './mcp_confirmation_gate.js';
 import { programAccessPolicy } from './mcp_surface_grants.js';
 import { resolveTransportActor, runtimeActor, transportSource } from './mcp_transport.js';
 import { loadAIAgent } from './mcp_bridges.js';
@@ -47,7 +47,9 @@ async function resolvePolicyContext(method, params) {
 
 async function judge(method, params, transport) {
     const actor = resolveTransportActor(transport);
-    const access = programAccessPolicy(actor, resolveAccessPolicy(method, params, await resolvePolicyContext(method, params)));
+    const policy = programAccessPolicy(actor, resolveAccessPolicy(method, params, await resolvePolicyContext(method, params)));
+    // The assistant, spoken or typed, kept to the document under work (mcp_security_policy.js#documentScopePolicy).
+    const access = documentScopePolicy(policy, params, MCP_ASSISTANT_SOURCES.includes(actor.source));
     if (access.allowed !== true) {
         throw denied(actor, method, access, 'access_denied', { error: access.error || 'mcp_access_denied' }, access.error || 'mcp_access_denied');
     }
@@ -64,19 +66,21 @@ const journalIfSensitive = (access, type, payload) => {
     if (access.sensitive === true) pushSecurityJournal(type, payload);
 };
 
-async function run(method, params, request, transport, actor, access, confirmed) {
+async function run(method, params, request, transport, actor, access, confirmationId) {
+    const confirmed = Boolean(confirmationId);
     const operation = createOperationRecord(method, params, request.id != null ? request.id : null);
     const trace = { actor_id: actor.actor_id, operation_id: operation.operation_id, method, subject: access.subject || method };
     journalIfSensitive(access, 'operation_started', trace);
     const handlerParams = { ...params };
     // Only a confirmation the gate consumed reaches a handler as `confirmed`.
     if (confirmed) handlerParams.confirmed = true; else delete handlerParams.confirmed;
-    delete handlerParams.confirmation_id;
+    // The gate's own fields leave only the requests it judged; `mcp.confirmations.read` names its record by that field.
+    if (access.confirmation_required === true) delete handlerParams.confirmation_id;
     handlerParams.__mcp = {
         operation_id: operation.operation_id,
         signal: operation.controller?.signal || null,
         access,
-        confirmation_id: confirmed ? String(params.confirmation_id) : null,
+        confirmation_id: confirmed ? String(confirmationId) : null,
         actor: runtimeActor(actor),
         source: transportSource(transport),
         // A step of a toolchain is a request of its own, judged here with the same transport.
@@ -146,7 +150,8 @@ async function handleAtomeMCPRequestAsync(request, transport) {
             response.result = confirmation.gate;
             return response;
         }
-        response.result = await run(method, params, request, transport, actor, access, confirmation.consumed === true);
+        response.result = await run(method, params, request, transport, actor, access,
+            confirmation.consumed === true ? confirmation.confirmation_id : null);
     } catch (error) {
         response.error = {
             code: Number.isInteger(error?.code) ? error.code : MCP_ERROR.INTERNAL,

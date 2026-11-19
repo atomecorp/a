@@ -19,7 +19,7 @@ const canonicalPath = pathname => {
 const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
     .map(value => value.toString(16).padStart(2, '0')).join('');
 const notify = async (type, code) => {
-    for (const client of await self.clients.matchAll({ includeUncontrolled: true })) client.postMessage({ type, code });
+    for (const client of await self.clients.matchAll({ includeUncontrolled: true })) client.postMessage({ type, code, version });
 };
 
 // Each file is fetched, checked against its manifest digest, then stored; six at a time.
@@ -29,7 +29,10 @@ const storeVerified = async (cache, list) => {
         while (index < list.length) {
             const asset = list[index++];
             const response = await fetch(asset.url, { cache: 'no-store', credentials: 'omit', redirect: 'error' });
-            if (!response.ok || await digest(await response.clone().arrayBuffer()) !== asset.digest) throw new Error('offline_asset_integrity_failed');
+            if (!response.ok) throw new Error('offline_asset_integrity_failed');
+            // Served, but no longer the file this manifest names: the server holds a newer version (sw.js is registered
+            // again by the page, early-init.js, and that version installs).
+            if (await digest(await response.clone().arrayBuffer()) !== asset.digest) throw new Error('offline_app_superseded');
             await cache.put(asset.url, response);
         }
     }));
@@ -40,26 +43,59 @@ const storeVerified = async (cache, list) => {
 // The version the active worker serves, written when it activates. A version installed while a page keeps the active
 // one waits; a newer one supersedes it before it ever activates (the served files changed again), and its shell (120 MB)
 // would stay until some activation: a few such changes filled the origin's quota and the project's own writes were
-// refused (guest_storage_quota_exceeded). An install drops every shell but its own and the active one's; without the
-// active one's mark (written by an older worker) it drops none, the active worker answering from its own shell.
+// refused (guest_storage_quota_exceeded). An install drops every shell but its own and the active one's; with no
+// worker active (a first install, perhaps superseded several times) only its own stays; with an active worker but
+// without its mark (written by an older worker) it drops none, that worker answering from its own shell.
 const ACTIVE_MARK = 'atome-active-version';
 const ACTIVE_KEY = '/__atome_active_version';
 const dropSupersededShells = async () => {
-    const active = await (await caches.open(ACTIVE_MARK)).match(ACTIVE_KEY);
-    if (!active) return;
-    const kept = new Set([CACHE_NAME, `atome-shell-${await active.text()}`]);
+    const active = self.registration.active ? await (await caches.open(ACTIVE_MARK)).match(ACTIVE_KEY) : null;
+    if (self.registration.active && !active) return;
+    const kept = new Set([CACHE_NAME, ...(active ? [`atome-shell-${await active.text()}`] : [])]);
     const names = await caches.keys();
     await Promise.all(names.filter(name => name.startsWith('atome-shell-') && !kept.has(name)).map(name => caches.delete(name)));
 };
 
+// The files of this version an earlier install already verified and stored stay: an install cut short (the browser
+// ends an event past five minutes, and a first install under load downloads the whole shell) resumes where it stopped
+// at the next registration instead of starting again from nothing. The files an earlier shell holds unchanged (same
+// digest) are taken from it, never downloaded again. What is left is fetched and verified as before.
+const missingAssets = async cache => {
+    const stored = new Set((await cache.keys()).map(request => new URL(request.url).pathname));
+    return assets.filter(asset => !stored.has(asset.url));
+};
+// The shells an install may take unchanged files from: the active version's, and every version an earlier install
+// left (cut short, or superseded before it activated).
+const takeUnchangedFromEarlier = async (cache, list) => {
+    const earlier = (await caches.keys()).filter(name => name.startsWith('atome-shell-') && name !== CACHE_NAME);
+    let left = list;
+    for (const name of earlier) {
+        if (!left.length) break;
+        const previous = await caches.open(name);
+        const missing = [];
+        for (const asset of left) {
+            const response = await previous.match(asset.url);
+            if (response && await digest(await response.clone().arrayBuffer()) === asset.digest) await cache.put(asset.url, response);
+            else missing.push(asset);
+        }
+        left = missing;
+    }
+    return left;
+};
+
 self.addEventListener('install', event => event.waitUntil((async () => {
     try {
+        const cache = await caches.open(CACHE_NAME);
+        const left = await takeUnchangedFromEarlier(cache, await missingAssets(cache));
         await dropSupersededShells();
-        await storeVerified(await caches.open(CACHE_NAME), assets);
+        await storeVerified(cache, left);
         await notify('atome:offline-app-ready', version);
     } catch (error) {
-        await caches.delete(CACHE_NAME);
-        await notify('atome:offline-app-error', error.name === 'QuotaExceededError' ? 'offline_storage_quota_exceeded' : 'offline_app_install_failed');
+        // A full origin keeps nothing of this version; any other failure keeps what was verified, for the next install.
+        if (error.name === 'QuotaExceededError') await caches.delete(CACHE_NAME);
+        const code = error.name === 'QuotaExceededError' ? 'offline_storage_quota_exceeded'
+            : error.message === 'offline_app_superseded' ? 'offline_app_superseded' : 'offline_app_install_failed';
+        await notify('atome:offline-app-error', code);
         throw error;
     }
 })()));

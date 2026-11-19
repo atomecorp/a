@@ -17,6 +17,7 @@ extension AppNativeAudioController {
     func acquireAudioSessionConsumer(_ consumerId: String,
                                      kind: AppNativeAudioConsumerKind,
                                      prefersBluetoothMicrophone: Bool = false) throws {
+        noteCaptureStarting(kind: kind)
         audioSessionConsumers.acquire(
             consumerId,
             kind: kind,
@@ -34,11 +35,13 @@ extension AppNativeAudioController {
     func releaseAudioSessionConsumer(_ consumerId: String) {
         guard audioSessionConsumers.release(consumerId) else { return }
         applyCurrentAudioSessionPlan(transition: "release:\(consumerId)")
+        resumeMusicAfterCapture(transition: "release:\(consumerId)")
     }
 
     func releaseAllAudioSessionConsumers(transition: String) {
         audioSessionConsumers.releaseAll()
         applyCurrentAudioSessionPlan(transition: transition)
+        resumeMusicAfterCapture(transition: transition)
     }
 
     /// Re-asserts the plan required by the current consumers.

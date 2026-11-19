@@ -50,6 +50,47 @@ pub extern "C" fn atome_ios_audio_command(
     }
 }
 
+/// Loads a clip from its file's bytes, passed as they are: a sound never becomes a JSON array of numbers (a 90 MB
+/// AIFF once grew into gigabytes of `serde_json::Value` and the app was killed, 16 Nov. 2026). Same reply as
+/// `atome_ios_audio_command`.
+#[unsafe(no_mangle)]
+pub extern "C" fn atome_ios_audio_load_clip_bytes(
+    id: *const c_char,
+    bytes: *const u8,
+    count: usize,
+) -> *mut c_char {
+    let Some(id) = read(id) else {
+        return reply(serde_json::json!({ "ok": false, "error": "audio_clip_id_missing" }));
+    };
+    if bytes.is_null() || count == 0 {
+        return reply(serde_json::json!({ "ok": false, "error": "audio_clip_bytes_missing" }));
+    }
+    // SAFETY: Swift passes a buffer of `count` bytes it owns for the call.
+    let bytes = unsafe { std::slice::from_raw_parts(bytes, count) }.to_vec();
+    match atome_audio_engine::commands::load_clip_from_bytes(&id, bytes) {
+        Ok(result) => reply(serde_json::json!({ "ok": true, "result": result })),
+        Err(error) => reply(serde_json::json!({ "ok": false, "error": error })),
+    }
+}
+
+/// A sound's length in seconds, read from its container without decoding nor loading a clip (an upload's
+/// duration). Its bytes come as they are, like `atome_ios_audio_load_clip_bytes`. Same reply as `atome_ios_audio_command`.
+#[unsafe(no_mangle)]
+pub extern "C" fn atome_ios_audio_probe_duration_bytes(
+    bytes: *const u8,
+    count: usize,
+) -> *mut c_char {
+    if bytes.is_null() || count == 0 {
+        return reply(serde_json::json!({ "ok": false, "error": "audio_clip_bytes_missing" }));
+    }
+    // SAFETY: Swift passes a buffer of `count` bytes it owns for the call.
+    let bytes = unsafe { std::slice::from_raw_parts(bytes, count) };
+    match atome_audio_engine::commands::probe_duration_from_bytes(bytes) {
+        Ok(result) => reply(serde_json::json!({ "ok": true, "result": result })),
+        Err(error) => reply(serde_json::json!({ "ok": false, "error": error })),
+    }
+}
+
 /// Microphone PCM for the voice session, 16 kHz mono in [-1, 1]: Swift owns the iOS audio
 /// session and capture, the engine only listens. False when no session runs, and always false
 /// in a build without the voice engine (AUv3, simulator), whose `audio_voice_start` already fails.
@@ -104,13 +145,15 @@ pub extern "C" fn atome_ios_audio_host_render(
     atome_audio_engine::host_output::render(left, right, host_ns) as u32
 }
 
-/// Real-time: hands the host's input (`frames` frames of `left`/`right`) to the
-/// strips listening to it (IN `host`); true when one does, the chain then plays it.
+/// Real-time: hands the host's input (`frames` frames of `left`/`right`, the first at
+/// `host_ns`, the quantum's host instant) to the strips listening to it (IN `host`);
+/// true when one does, the chain then plays it.
 #[unsafe(no_mangle)]
 pub extern "C" fn atome_ios_audio_host_input(
     left: *const f32,
     right: *const f32,
     frames: u32,
+    host_ns: i64,
 ) -> bool {
     if left.is_null() || right.is_null() || frames == 0 {
         return false;
@@ -122,5 +165,52 @@ pub extern "C" fn atome_ios_audio_host_input(
             std::slice::from_raw_parts(right, frames as usize),
         )
     };
-    atome_audio_engine::host_output::push_host_input(left, right)
+    atome_audio_engine::host_output::push_host_input(left, right, host_ns)
+}
+
+/// The capture clock of a take of the host's input, for `exact_placement.js#nativeTakeStart`.
+#[repr(C)]
+pub struct AtomeIosCaptureClock {
+    pub first_capture_host_ns: i64,
+    pub anchor_frame: u64,
+    pub anchor_host_ns: i64,
+    pub output_sample_rate: u32,
+    pub discontinuities: u32,
+}
+
+/// Frames Atome's output lags what it plays and hears (its graphs' compensated latency), for the AUv3's
+/// `latency` the host compensates.
+#[unsafe(no_mangle)]
+pub extern "C" fn atome_ios_audio_host_latency_frames() -> u32 {
+    u32::try_from(atome_audio_engine::host_output::output_latency_frames()).unwrap_or(u32::MAX)
+}
+
+/// Real-time: where a take whose first sample the host heard at `first_capture_host_ns`
+/// starts on the engine's clock (`host_output::capture_clock`); false without an output anchor.
+#[unsafe(no_mangle)]
+pub extern "C" fn atome_ios_audio_host_capture_clock(
+    first_capture_host_ns: i64,
+    out: *mut AtomeIosCaptureClock,
+) -> bool {
+    if out.is_null() {
+        return false;
+    }
+    let Some(clock) = atome_audio_engine::host_output::capture_clock(first_capture_host_ns) else {
+        return false;
+    };
+    let (Some(anchor_frame), Some(anchor_host_ns)) = (clock.anchor_frame, clock.anchor_host_ns)
+    else {
+        return false;
+    };
+    // SAFETY: the caller passes a writable struct it owns for the call.
+    unsafe {
+        *out = AtomeIosCaptureClock {
+            first_capture_host_ns: clock.first_capture_host_ns,
+            anchor_frame,
+            anchor_host_ns,
+            output_sample_rate: clock.output_sample_rate,
+            discontinuities: clock.discontinuities,
+        };
+    }
+    true
 }

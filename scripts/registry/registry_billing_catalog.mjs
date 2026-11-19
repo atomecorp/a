@@ -11,7 +11,7 @@ const billingCatalogText = async () => {
     // The owner's own key order: the `offers` answer is the catalog as the owner writes it.
     return `${JSON.stringify({ format: 'billing_catalog/1', owner: 'atome/src/shared/billing_contract.js',
         plans: contract.BILLING_PLANS, packs: contract.BILLING_PACKS, sources: contract.BILLING_SOURCES, stores: contract.BILLING_STORES,
-        simulated_methods: contract.BILLING_SIMULATED_METHODS, period_ms: contract.BILLING_PERIOD_MS })}\n`;
+        simulated_methods: contract.BILLING_SIMULATED_METHODS, period_ms: contract.BILLING_PERIOD_MS, money: contract.BILLING_MONEY })}\n`;
 };
 
 export const writeBillingCatalog = async () => fs.writeFileSync(generatedFile(BILLING_CATALOG_FILE), await billingCatalogText());

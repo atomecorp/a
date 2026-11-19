@@ -71,10 +71,10 @@ if (globalThis.window?.top === globalThis.window) void auth.tryAutoLogin().catch
 
 const isAnonymousMode = () => getSessionState().mode === 'anonymous';
 // Trame authentifiee vers Fastify ; `errorCode` nomme l'echec d'authentification.
-const fastifyCall = async (message, errorCode) => {
+const fastifyCall = async (message, errorCode, options = {}) => {
   const prepared = await auth.ensureFastifyToken();
   if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || errorCode);
-  return FastifyAdapter.ws.send(message);
+  return FastifyAdapter.ws.send(message, options);
 };
 // A card number ("06 12 34 56 78" from a native book) is dialled from THIS device:
 // its country is known here, never on the server, so it leaves already in E.164.
@@ -358,9 +358,14 @@ export const AdoleAPI = {
   coaches: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'coaches', action }, 'coach_auth_unavailable')
   },
+  // The CB sociale (atome-server social/cb/): its zones, the recording notice, a report, a block, by pseudonym only.
+  // Reached through its runtime (eVe/domains/cb_social/cb_social_runtime.js), never from a view.
+  cb: {
+    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'cb', action }, 'cb_auth_unavailable')
+  },
   // Websites (server/site_services.js): publishing, versions, planned operations, domains, mail, hosting.
   site: {
-    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'site', action }, 'site_auth_unavailable')
+    call: (action, fields = {}, options = {}) => fastifyCall({ ...fields, type: 'site', action }, 'site_auth_unavailable', options)
   },
   // Scheduled sends (server/scheduled_sends.js): save, cancel, send-now, read, list; the server's clock sends them.
   scheduledSends: {

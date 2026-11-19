@@ -1,44 +1,57 @@
 import SwiftUI
 import WatchKit
 
-// The pieces every watch screen lays (screens validated on 2026-10-30, temp/watch_companion/out/w0_*.png), in the screen's own
-// points on the 45 mm frame (198 × 242): the title at the top left (the system's time at its right), the band at the foot (Back
-// leftmost, the Atom alone in its corner), the pulse small in the bottom left facing the Atom. Values: the theme the page sends.
+// The pieces every watch screen lays (the one design validated by the user on 2026-11-18, R-221, mockup
+// temp/watch_2026-11-17/mockups/out/4_design_unique.png), in the screen's own points on the 45 mm frame (198 × 242). Three fixed
+// zones: the title at the top left (the system's time at its right), the content, the band at the foot (the pulse on the left,
+// the Atom alone in its corner). Nothing passes from one zone to another. No ← tool: a swipe from the left edge goes back.
+// Values: the theme the page sends.
 enum WatchFrame {
-    static let titleTop: CGFloat = 7
-    static let side: CGFloat = 14
-    // From the screen's foot: the band's top, the pulse, the line above it.
-    static let bandBottom: CGFloat = 16
-    static let pulseBottom: CGFloat = 42
-    static let lineBottom: CGFloat = 64
+    // From the screen's sides: the title, the pulse and the Atom, clear of the rounded corners.
+    static let inset: CGFloat = 22
+    static let titleTop: CGFloat = 10
+    static let titleWidth: CGFloat = 100
+    // The Atom's glyph from the screen's foot.
+    static let atomBottom: CGFloat = 12
+    // A height of the validated design placed on this watch's screen.
+    static func y(_ points: CGFloat, _ size: CGSize) -> CGFloat { points * size.height / 242 }
+}
+
+// The charter's one text scale on the watch (12, ×1.3: AGENTS.md rule 11).
+enum WatchText {
+    static let small: CGFloat = 12
+    static let base: CGFloat = 15.6
 }
 
 struct WatchTitle: View {
     let text: String
     let theme: WatchTheme
     var body: some View {
-        Text(text).font(.system(size: 15, weight: .medium)).foregroundStyle(theme.color("label")).lineLimit(1).truncationMode(.tail)
-            .frame(maxWidth: 112, alignment: .leading)
+        Text(text).font(.system(size: WatchText.base, weight: .semibold)).foregroundStyle(theme.color("label")).lineLimit(1).truncationMode(.tail)
+            .frame(maxWidth: WatchFrame.titleWidth, alignment: .leading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.leading, WatchFrame.side).padding(.top, WatchFrame.titleTop)
+            .padding(.leading, WatchFrame.inset).padding(.top, WatchFrame.titleTop)
     }
 }
 
-// A tool of the band: the panels' glass, a tool's radius, its drop shadow; pressed in while touched.
-struct WatchToolButton<Glyph: View>: View {
-    let theme: WatchTheme
-    var label: String = ""
-    let action: () -> Void
-    @ViewBuilder let glyph: () -> Glyph
+// A line of words centred under the title or under the disc, cut with « … » if it ever lacks room.
+struct WatchCaption: View {
+    let text: String
+    var weight: Font.Weight = .semibold
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 3) {
-                if !label.isEmpty { Text(label).font(.system(size: 12)) }
-                glyph()
-            }
-            .frame(width: theme.metric("tool"), height: theme.metric("tool"))
-        }
-        .buttonStyle(WatchPressStyle(theme: theme, radius: theme.metric("toolRadius")))
+        Text(text).font(.system(size: WatchText.small, weight: weight)).lineLimit(1).truncationMode(.tail)
+            .padding(.horizontal, 14).frame(maxWidth: .infinity)
+    }
+}
+
+// The way back: a swipe from the screen's left edge (a strip no wider than a fingertip, so the pages and tiles keep their own
+// swipes everywhere else).
+struct WatchEdgeBack: View {
+    let action: () -> Void
+    var body: some View {
+        Color.clear.frame(width: 16).frame(maxHeight: .infinity).contentShape(Rectangle())
+            .highPriorityGesture(DragGesture(minimumDistance: 12).onEnded { drag in if drag.translation.width > 40 { action() } })
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -48,8 +61,23 @@ struct WatchPressStyle: ButtonStyle {
     let radius: CGFloat
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(RoundedRectangle(cornerRadius: radius).fill(configuration.isPressed ? theme.color("pressed") : theme.color("glass")))
-            .shadow(color: .black.opacity(configuration.isPressed ? 0 : 1), radius: 6)
+            .background(RoundedRectangle(cornerRadius: radius).fill(configuration.isPressed
+                ? AnyShapeStyle(theme.color("pressed").shadow(.inner(color: .black.opacity(0.6), radius: 2, y: 2))) : AnyShapeStyle(theme.color("glass"))))
+            .shadow(color: .black.opacity(configuration.isPressed ? 0 : 0.45), radius: 4, y: 3)
+    }
+}
+
+// A choice among several (a level, a value's line): at rest its glass and drop shadow, chosen the selected look pressed in.
+struct WatchChoiceBackground: View {
+    let theme: WatchTheme
+    let chosen: Bool
+    var body: some View {
+        let radius = theme.metric("rowRadius")
+        if chosen {
+            RoundedRectangle(cornerRadius: radius).fill(theme.color("selected").shadow(.inner(color: .black.opacity(0.6), radius: 2, y: 2)))
+        } else {
+            RoundedRectangle(cornerRadius: radius).fill(theme.color("glass")).shadow(color: .black.opacity(0.4), radius: 3, y: 2)
+        }
     }
 }
 
@@ -75,58 +103,35 @@ struct WatchAtom: View {
     }
 }
 
-// The band: Back leftmost when the screen has one, the tools after it, the Atom rightmost.
-struct WatchBand<Tools: View>: View {
+// The band: the pulse on the left while it is known, the Atom in the right corner, at the same height.
+struct WatchBand: View {
     @ObservedObject var link: WatchLink
     let theme: WatchTheme
-    var back: (() -> Void)? = nil
-    @ViewBuilder var tools: () -> Tools
+    var bpm: Double? = nil
     var body: some View {
-        HStack(spacing: theme.metric("gap")) {
-            if let back {
-                WatchToolButton(theme: theme, action: back) { Image(systemName: "chevron.left").font(.system(size: 22, weight: .semibold)) }
+        GeometryReader { geometry in
+            let atom = theme.metric("atom"), middle = geometry.size.height - WatchFrame.atomBottom - atom / 2
+            if let bpm {
+                HStack(spacing: 4) {
+                    Image(systemName: "heart.fill").font(.system(size: 11)).foregroundStyle(theme.color("heart"))
+                    Text("\(Int(bpm.rounded()))").font(.system(size: WatchText.small, weight: .semibold))
+                }
+                .fixedSize()
+                .position(x: WatchFrame.inset + 20, y: middle)
             }
-            tools()
-            Spacer(minLength: 0)
-            WatchAtom(link: link, theme: theme)
-        }
-        .padding(.horizontal, 6)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .padding(.bottom, WatchFrame.bandBottom)
-    }
-}
-
-extension WatchBand where Tools == EmptyView {
-    init(link: WatchLink, theme: WatchTheme, back: (() -> Void)? = nil) {
-        self.init(link: link, theme: theme, back: back) { EmptyView() }
-    }
-}
-
-// The pulse, small, in the bottom left facing the Atom (decision 3, revised by the user on 2026-10-30).
-struct WatchPulse: View {
-    let bpm: Double?
-    let theme: WatchTheme
-    var body: some View {
-        if let bpm {
-            HStack(spacing: 4) {
-                Image(systemName: "heart.fill").font(.system(size: 11)).foregroundStyle(theme.color("heart"))
-                Text("\(Int(bpm.rounded()))").font(.system(size: 13, weight: .medium))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            .padding(.leading, WatchFrame.side).padding(.bottom, WatchFrame.pulseBottom - 13)
+            WatchAtom(link: link, theme: theme).position(x: geometry.size.width - WatchFrame.inset - atom / 2, y: middle)
         }
     }
 }
 
-// Sport's orange disc: its drop shadow, its halo at rest, or the ring of the step under way around it (#dashboard_training_disc.js).
+// Sport's orange disc: its drop shadow, or the ring of the step under way around it (#dashboard_training_disc.js).
 struct WatchDisc<Content: View>: View {
     let theme: WatchTheme
-    var size: CGFloat? = nil
     var ring: WatchRing? = nil
     let action: () -> Void
     @ViewBuilder let content: () -> Content
     var body: some View {
-        let side = size ?? theme.metric("disc"), around = side + 2 * theme.metric("ringGap") + theme.metric("ringWidth")
+        let side = theme.metric("disc"), around = side + 2 * theme.metric("ringGap") + theme.metric("ringWidth")
         ZStack {
             if let ring {
                 TimelineView(.periodic(from: .now, by: 0.25)) { context in
@@ -141,30 +146,43 @@ struct WatchDisc<Content: View>: View {
             Button(action: action) {
                 content().foregroundStyle(.white).frame(width: side, height: side)
                     .background(Circle().fill(theme.color("disc")))
-                    .background(Circle().fill(theme.color("disc").opacity(ring == nil ? 0.16 : 0)).padding(-theme.metric("halo")))
-                    .shadow(color: .black.opacity(0.5), radius: 11, y: 10)
+                    .shadow(color: .black.opacity(0.45), radius: 6, y: 8)
             }
             .buttonStyle(.plain)
         }
     }
 }
 
-// The disc's figure: a count as the page gives it, or a clock counted here from the instant it ends or began.
+// The disc's figure: a count as the page gives it, or a clock counted here from the instant it ends or began. The 3-2-1
+// before a session (`whole`) reads as the phone's disc does: its whole seconds, never under 1. Paused, the pause sign takes
+// the word's place; `bare` (the stop slider's small disc) shows the figure alone.
 struct WatchFigureView: View {
     let figure: WatchFigure?
-    var size: CGFloat = 42
+    var size: CGFloat = 44
+    var whole = false
+    var paused = false
+    var bare = false
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(spacing: 2) {
-                Text(text(at: context.date)).font(.system(size: size, weight: .medium)).monospacedDigit().minimumScaleFactor(1)
-                if let word = figure?.word, !word.isEmpty { Text(word).font(.system(size: 12, weight: .medium)) }
+                Text(text(at: context.date)).font(.system(size: size, weight: .semibold)).monospacedDigit().minimumScaleFactor(1)
+                if bare {
+                    EmptyView()
+                } else if paused {
+                    Image(systemName: "pause.fill").font(.system(size: 13))
+                } else if let word = figure?.word, !word.isEmpty {
+                    Text(word).font(.system(size: WatchText.small, weight: .semibold))
+                }
             }
         }
     }
 
     private func text(at date: Date) -> String {
         let now = date.timeIntervalSince1970 * 1000
-        if let ends = figure?.ends_at { return Self.clock(max(0, (ends - now) / 1000).rounded(.up)) }
+        if let ends = figure?.ends_at {
+            let left = max(0, (ends - now) / 1000).rounded(.up)
+            return whole ? String(max(1, Int(left))) : Self.clock(left)
+        }
         if let since = figure?.since { return Self.clock(max(0, (now - since) / 1000).rounded(.down)) }
         return figure?.count ?? ""
     }
@@ -187,16 +205,16 @@ struct WatchTileView: View {
             RoundedRectangle(cornerRadius: radius).fill(theme.color("glass"))
             RoundedRectangle(cornerRadius: radius).fill(theme.color("tileTint"))
             RoundedRectangle(cornerRadius: radius).strokeBorder(theme.color("tileEdge"), lineWidth: 1)
-            Text(label).font(.system(size: 14, weight: .medium)).foregroundStyle(theme.color("label")).lineLimit(1).truncationMode(.tail)
-                .padding(.horizontal, theme.metric("pad")).padding(.top, 10)
+            Text(label).font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.color("label")).lineLimit(1).truncationMode(.tail)
+                .padding(.horizontal, theme.metric("pad")).padding(.top, 9)
             if let picture {
                 Image(uiImage: picture).resizable().frame(width: theme.metric("glyph"), height: theme.metric("glyph"))
                     .shadow(color: lit ? theme.color("litLight") : .clear, radius: 3)
                     .shadow(color: lit ? theme.color("litLight") : .clear, radius: 8)
-                    .padding(.top, 44)
+                    .padding(.top, 42)
             }
         }
         .frame(width: side, height: side)
-        .shadow(color: .black.opacity(0.9), radius: 6)
+        .shadow(color: .black.opacity(0.45), radius: 5, y: 4)
     }
 }

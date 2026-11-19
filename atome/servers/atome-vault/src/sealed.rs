@@ -85,9 +85,7 @@ fn unseal(secret: &str, sealed: &JsonValue) -> Result<JsonValue, String> {
 }
 
 fn now() -> String {
-    chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string()
+    atome_js_values::iso(atome_js_values::dates::now_ms())
 }
 
 pub struct Sealed {

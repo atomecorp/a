@@ -7,6 +7,7 @@
 
 import WebKit
 import OSLog
+import os
 import QuartzCore
 import AudioToolbox
 import Darwin
@@ -27,9 +28,20 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static func setNativeInvokeHandler(_ handler: NativeInvokeHandler?) { self.nativeInvokeHandler = handler }
     static var cachedTempo: Double = 120.0
     static func updateCachedTempo(_ t: Double) { if t > 0 { cachedTempo = t } }
-    static var lastPlayheadSeconds: Double = 0
-    static var lastIsPlaying: Bool = false
-    static func updateTransportCache(isPlaying: Bool, playheadSeconds: Double) { lastIsPlaying = isPlaying; lastPlayheadSeconds = playheadSeconds }
+    // The host transport as the render block last read it: whether it moves, its position (seconds
+    // on the host's beat grid) and the host instant (mach ns) of the first frame of that render
+    // quantum, the instant the Timeline locks onto (`auv3_host_bridge.js#subscribeAuv3HostClock`).
+    struct HostTransportSnapshot: Sendable {
+        var playing = false
+        var positionSeconds: Double = 0
+        var anchorHostNs: Int64 = 0
+    }
+    private static let hostTransportCache = OSAllocatedUnfairLock(initialState: HostTransportSnapshot())
+    // Render thread: never waits (a busy lock skips this quantum; the next one writes).
+    static func updateTransportCache(_ snapshot: HostTransportSnapshot) {
+        _ = hostTransportCache.withLockIfAvailable { $0 = snapshot }
+    }
+    static func readTransportCache() -> HostTransportSnapshot { hostTransportCache.withLock { $0 } }
     // NEW: remember last sent transport state to avoid duplicate/unreal logs
     static var lastSentTransportPlaying: Bool? = nil
     static var lastSentTransportPosition: Double = -1

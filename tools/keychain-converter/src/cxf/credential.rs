@@ -2,6 +2,7 @@
 //! credential may hold comes from `MEMBERS`, the spec's own tables: a member
 //! outside them cannot be written.
 
+use atome_js_values::dates;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
@@ -42,9 +43,7 @@ impl FieldKind {
         let bytes = value.as_bytes();
         let digits = |range: std::ops::Range<usize>| bytes[range].iter().all(u8::is_ascii_digit);
         match self {
-            FieldKind::Date => {
-                value.len() == 10 && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
-            }
+            FieldKind::Date => value.len() == 10 && dates::date(value, "%Y-%m-%d").is_some(),
             FieldKind::YearMonth => {
                 value.len() == 7
                     && bytes[4] == b'-'

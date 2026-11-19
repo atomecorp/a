@@ -13,8 +13,9 @@ use super::ical_time::{
 };
 use super::recur::Rule;
 use super::recur_iterator::Recurrence;
-use super::zone;
 use super::zones::Zones;
+use super::{js_date, zone};
+use atome_js_values as js;
 use std::cmp::Ordering;
 use std::sync::OnceLock;
 
@@ -259,8 +260,9 @@ fn expand(child: &Component, limit: i64, changes: &mut Vec<Change>) -> Result<()
 fn minimum_year() -> i64 {
     static YEAR: OnceLock<i64> = OnceLock::new();
     *YEAR.get_or_init(|| {
-        use chrono::Datelike;
-        i64::from(chrono::Local::now().year())
+        js_date::local_fields(js::dates::now_ms() as f64)
+            .expect("the present lies in the Date range")
+            .year
     })
 }
 

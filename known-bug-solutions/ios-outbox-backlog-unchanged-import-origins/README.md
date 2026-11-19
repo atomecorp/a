@@ -92,6 +92,25 @@ tools whose registry record flipped twice per boot (prompter: `label_key`
   was rejected for good: the code was read after `appendEvent`'s rollback had
   reset it. `AiSError.sqliteCode` keeps the failing statement's code.
 
+## Both engines, with a delivery receipt (R-189, 2026-11-16)
+
+The Rust store (`atome-store`, used by the local Axum server of Tauri, Android and iOS since
+6 Nov. 2026, and by the cloud vaults) and Fastify's engine (`database/adole_event_log.js`)
+still recorded a `set` that changed nothing: an event with empty `props`, queued for delivery
+by the local server. Its row was what let a resend of the same event id be recognised.
+
+- `atome-store/src/mutation.rs#prepare` and `database/adole_event_mutation.js#prepare`: a type
+  or parent equal to the atome's envelope is unchanged; a `set` on a live atome whose every
+  key is unchanged (no delete, no expected version) is `Unchanged` and records no event.
+- `atome-store/src/receipts.rs` and `database/adole_event_receipts.js`: such a delivery keeps
+  only a receipt (`event_receipts` in `database/schema.sql`: event id, atome id, intent hash,
+  time), checked after `events` by every append. A resend of the id is answered `unchanged`
+  (`inserted: false`), so the device's outbox clears it, and it is never applied over a later
+  change (the iPad's `name = Paul` resent after the Mac's « Paul Martin »); another intent
+  under that id is `event_id_conflict`. A receipt is never replayed, synced nor projected.
+- Nothing `inserted: false` is queued (`local_atome_sync_events.rs#queue_committed_events`)
+  nor announced to the views (`announce_committed_events`).
+
 ## Rejected hypotheses
 
 - Rows that can never be delivered: none among the pending ones (0 attempts,
@@ -118,12 +137,18 @@ tools whose registry record flipped twice per boot (prompter: `label_key`
 
 - `npx vitest run tests/eve/canonical_contact_import.test.mjs` (an unchanged
   pass with the iOS read projection writes nothing).
-- `node tests/probes/ios_sync_recovery.probe.mjs` (compiles the real Swift
-  outbox: unchanged set classified at enqueue and from the backlog, type change
-  and first event delivered, count and `get-pending` agree).
-- `node tests/probes/ios_sync_batch_subscribe.probe.mjs` (replay persisted in
-  runs despite interleaved `acked`/`pong`, every ack already durable) and
-  `ios_sync_recovery` (busy/interrupt inside a run keep nothing and are thrown).
+- `cargo test -p atome-server --lib local::local_atome_sync_restart_tests::an_unchanged_import_pass_queues_no_delivery`
+  (the Rust local server that replaced the Swift one on 6 Nov. 2026: a `set` that
+  changes nothing, the whole origin or its type alone, appends no event and queues no
+  delivery; a real change still does).
+- `cargo test -p atome-store unchanged_receipts` and `node --test tests/server/event_receipts.test.mjs`
+  (each engine: an unchanged set records no event, only its receipt; its resend after a
+  later change is ignored, interactive and offline-lww).
+- `cargo test -p atome-store commit_parity` (case `unchanged_set_receipt`, regenerated from
+  Fastify's engine by `node tests/fixtures/atome_store/generate_commit_cases.mjs`).
+- `cargo test -p atome-server --lib local::local_atome_ws_sync_replay_tests` (a
+  replay interleaved with `acked`/`pong` is persisted whole, every ack names an
+  event already durable; subscriptions go in batches of 500).
 - Device: Web Inspector probes in `temp/ios_outbox_2026-10-17/`
   (`measure.js`, `premise.js`, `versions.js`); `atome_disk_write_probe.txt`
   in the App Group Documents (Debug builds).

@@ -3,7 +3,6 @@
 // it, AUTH LOGIN, then one plain-text message (`buildPlainTextMessage`: UTF-8, 8bit, RFC 2047 words
 // for a name or a subject past ASCII, dot-stuffed) and QUIT. Every refusal names its step and the
 // server's lines, as the JavaScript client does.
-use super::dates;
 use super::mime::{LINE_BREAK, is_space, regex, text_of};
 use super::socket::{self, Socket, Transport};
 use crate::vault_router::js;
@@ -300,7 +299,7 @@ pub fn build_message(draft: &JsonValue, username: Option<&str>, now: i64) -> Res
     let subject =
         js::first(draft, &["subject"]).map_or_else(|| "(no subject)".into(), |s| js::text(Some(s)));
     let mut lines = vec![
-        format!("Date: {}", dates::utc_string(now)),
+        format!("Date: {}", js::utc_string(now)),
         format!("Message-ID: {message_id}"),
         // `formatAddress` of a blank address is null, written as such.
         format!(

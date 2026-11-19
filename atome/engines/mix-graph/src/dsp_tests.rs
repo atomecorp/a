@@ -43,7 +43,7 @@ fn an_amp_needs_its_loaded_capture() {
     let mut graph = crate::MixGraph::new(48_000);
     let error = graph.apply(program(json)).unwrap_err();
     assert!(error.contains("plexi is not loaded"), "{error}");
-    let unknown = r#"{"strips":[{"id":"a","chain":[{"id":"x","type":"dsp","effect":"chorus"}]}]}"#;
+    let unknown = r#"{"strips":[{"id":"a","chain":[{"id":"x","type":"dsp","effect":"wah_wah"}]}]}"#;
     assert!(
         graph
             .apply(program(unknown))

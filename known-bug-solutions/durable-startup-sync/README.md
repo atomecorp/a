@@ -57,18 +57,26 @@ bytes are available offline.
 
 ## Regression and acceptance
 
-Permanent checks: `tests/probes/ios_sync_restart.probe.mjs` (fresh schema, legacy
-repair, process interruption and restart before settlement),
-`ios_sync_recovery.probe.mjs`, `ios_sync_delivery.probe.mjs`,
-`ios_sync_batch_subscribe.probe.mjs`, `ios_sync_health.probe.mjs`,
-`tests/atome_server/ws_sync.rs`, native `local_atome_ws_sync::tests`,
-`tests/eve/websocket_recovery.test.mjs`, `sync_engine.test.mjs`,
-`workspace_bootstrap_nonblocking.test.mjs`, `sync_status.test.mjs`,
-`browser_workspace.test.mjs`, `auth_device.test.mjs`, and home/boot contracts.
+Permanent checks. The Swift iOS server and its probes were retired on 6 Nov. 2026
+(`7289b9f25`); every platform now runs the Rust local server, whose own tests replace them:
 
-The restart probe also checks saved contact phone arrays, the principal card,
+- `cargo test -p atome-server --lib local::local_atome_sync_restart_tests` (a replay cut
+  before it settles resumes from its durable cursor after a restart, a resent event is
+  not applied twice; an unchanged import pass queues nothing; tombstones stay out of lists).
+- `cargo test -p atome-server --lib local::local_atome_ws_sync_replay_tests` (bounded
+  subscription batches, acks only after the commit, a quiet reconnection).
+- `cargo test -p atome-server --lib local::local_atome_ws_sync_health_tests` (one ping in
+  flight, a silent socket replaced, a long restore on one connection).
+- `cargo test -p atome-vault -p atome-server --test worker_process --test ws_sync` (the account server's `/ws/sync`).
+- `tests/eve/websocket_recovery.test.mjs`, `tests/eve/sync_engine.test.mjs`,
+  `tests/eve/workspace_bootstrap_nonblocking.test.mjs`, `tests/eve/sync_status.test.mjs`,
+  `tests/eve/browser_workspace.test.mjs`, `tests/eve/auth_device.test.mjs`, and the
+  home/boot contracts.
+
+The retired restart probe also checked saved contact phone arrays, the principal card,
 calendar and recurrent appointment/alarm metadata, plus the four exact persistent
-outbound IDs in subsequent processes. Browser tests exercise real contact and
+outbound IDs in subsequent processes; the Rust restart test checks the generic replay
+cursor and projection those records go through. Browser tests exercise real contact and
 calendar CRUD through Atome.commit and IndexedDB, then delivery of those IDs.
 Personal-contact reconciliation tests retain manual fields and reject concurrent
 version changes. `tests/server/durable_event_retry.test.mjs` covers compaction,

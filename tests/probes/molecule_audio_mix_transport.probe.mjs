@@ -98,6 +98,8 @@ const loadedAssets = new Set();
 const identityCalls = [];
 const identityEnv = {
     WebAssembly,
+    // The executor maps page instants through the window's one system clock (R-128).
+    performance: globalThis.performance,
     atome: { tools: { v2CommandBus: { dispatch: () => ({ ok: true }) } } },
     Squirrel: { av: { audio: {
         get_backend: () => 'kira',

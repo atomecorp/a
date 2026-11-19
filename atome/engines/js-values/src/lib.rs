@@ -4,6 +4,8 @@
 // readers: atome-server (vault_router::js) and atome-calendar.
 use serde_json::Value as JsonValue;
 
+pub mod dates;
+
 pub fn truthy(value: Option<&JsonValue>) -> bool {
     match value {
         None | Some(JsonValue::Null) => false,
@@ -124,6 +126,7 @@ pub fn with(
 }
 
 const MAX_TIME_MS: f64 = 8.64e15;
+const DAY_MS: i64 = 86_400_000;
 
 /// `new Date(value).getTime()`, none when it is NaN: a number as it is, `null` the epoch, a
 /// boolean 0 or 1, a string read in ECMAScript's date-time format (a date alone in UTC, a date
@@ -167,13 +170,9 @@ fn date_text(text: &str) -> Option<i64> {
             (day, rest) = digits(after, 2)?;
         }
     }
-    let date = chrono::NaiveDate::from_ymd_opt(
-        i32::try_from(year).ok()?,
-        u32::try_from(month).ok()?,
-        u32::try_from(day).ok()?,
-    )?;
+    let days = dates::date_days(year, month, day)?;
     if rest.is_empty() {
-        return Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis());
+        return Some(days * DAY_MS);
     }
     let after = rest.strip_prefix(['T', 't', ' '])?;
     let (hour, after) = digits(after, 2)?;
@@ -193,16 +192,13 @@ fn date_text(text: &str) -> Option<i64> {
     }
     // 24:00 is the end of the day.
     let midnight = hour == 24 && minute == 0 && second == 0 && millis == 0;
-    let time = chrono::NaiveTime::from_hms_milli_opt(
-        u32::try_from(if midnight { 0 } else { hour }).ok()?,
-        u32::try_from(minute).ok()?,
-        u32::try_from(second).ok()?,
-        u32::try_from(millis).ok()?,
-    )?;
-    let wall = date.and_time(time) + chrono::TimeDelta::days(i64::from(midnight));
+    if !(hour < 24 || midnight) || minute > 59 || second > 59 {
+        return None;
+    }
+    let wall = days * DAY_MS + ((hour * 60 + minute) * 60 + second) * 1000 + millis;
     let ms = match rest {
         "" => local_instant(wall)?,
-        "Z" | "z" => wall.and_utc().timestamp_millis(),
+        "Z" | "z" => wall,
         offset => {
             let sign = match offset.as_bytes()[0] {
                 b'+' => 1,
@@ -214,42 +210,106 @@ fn date_text(text: &str) -> Option<i64> {
             if !after.is_empty() || hours > 23 || minutes > 59 {
                 return None;
             }
-            wall.and_utc().timestamp_millis() - sign * (hours * 60 + minutes) * 60_000
+            wall - sign * (hours * 60 + minutes) * 60_000
         }
     };
     (ms.unsigned_abs() as f64 <= MAX_TIME_MS).then_some(ms)
 }
 
-/// A wall time without an offset read in the server's local time (`TZ`), the earlier instant in
-/// a fold.
+/// A wall time without an offset read in the server's local time (`TZ`), the first instant of a
+/// fold as chrono gave it.
 #[cfg(not(target_arch = "wasm32"))]
-fn local_instant(wall: chrono::NaiveDateTime) -> Option<i64> {
+fn local_instant(wall_ms: i64) -> Option<i64> {
     Some(
-        wall.and_local_timezone(chrono::Local)
-            .earliest()?
-            .timestamp_millis(),
+        dates::local(dates::Instant::from_millis(wall_ms)?)
+            .first()?
+            .millis(),
     )
 }
 
 /// A wall time without an offset read in the browser's local time: `Date.parse` of its
-/// ECMAScript form, exact where an old zone's offset is not whole minutes (chrono rounds it).
+/// ECMAScript form, exact where an old zone's offset is not whole minutes.
 #[cfg(target_arch = "wasm32")]
-fn local_instant(wall: chrono::NaiveDateTime) -> Option<i64> {
-    use chrono::Datelike;
-    let year = wall.year();
-    let year = if (0..=9999).contains(&year) {
-        format!("{year:04}")
-    } else {
-        format!("{}{:06}", if year < 0 { '-' } else { '+' }, year.abs())
-    };
-    let ms = js_sys::Date::parse(&format!("{year}-{}", wall.format("%m-%dT%H:%M:%S%.3f")));
+fn local_instant(wall_ms: i64) -> Option<i64> {
+    let f = dates::Instant::from_millis(wall_ms)?.fields();
+    let ms = js_sys::Date::parse(&format!(
+        "{}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}",
+        dates::js_iso_year(f.year),
+        f.month,
+        f.day,
+        f.hour,
+        f.minute,
+        f.second,
+        f.nanos / 1_000_000
+    ));
     ms.is_finite().then_some(ms as i64)
 }
 
-/// `new Date(ms).toISOString()`.
+// The UTC fields of an instant of the Date range; the epoch's past it.
+fn date_fields(ms: i64) -> dates::Fields {
+    let ms = if ms.unsigned_abs() as f64 <= MAX_TIME_MS {
+        ms
+    } else {
+        0
+    };
+    dates::Instant {
+        seconds: ms.div_euclid(1000),
+        nanos: (ms.rem_euclid(1000) as u32) * 1_000_000,
+    }
+    .fields()
+}
+
+/// `new Date(ms).toUTCString()`; the epoch's past the Date range.
+pub fn utc_string(ms: i64) -> String {
+    let f = date_fields(ms);
+    format!(
+        "{}, {:02} {} {} {:02}:{:02}:{:02} GMT",
+        dates::weekday_name(f.weekday),
+        f.day,
+        dates::month_name(f.month),
+        dates::js_year(f.year),
+        f.hour,
+        f.minute,
+        f.second
+    )
+}
+
+/// `Date.prototype.toString` in the server's local time, without the zone's name (which the
+/// server does not know): `Tue Nov 18 2025 09:30:00 GMT+0100`, "Invalid Date" past chrono's range.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn local_string(ms: i64) -> String {
+    let Some((wall, offset)) = dates::Instant::from_millis(ms).and_then(dates::local_wall) else {
+        return "Invalid Date".into();
+    };
+    let f = wall.fields();
+    let sign = if offset < 0 { '-' } else { '+' };
+    // chrono's `%z`: the offset rounded to the nearest minute.
+    let minutes = (offset.unsigned_abs() + 30) / 60;
+    format!(
+        "{} {} {:02} {} {:02}:{:02}:{:02} GMT{sign}{:02}{:02}",
+        dates::weekday_name(f.weekday),
+        dates::month_name(f.month),
+        f.day,
+        dates::js_year(f.year),
+        f.hour,
+        f.minute,
+        f.second,
+        minutes / 60,
+        minutes % 60
+    )
+}
+
+/// `new Date(ms).toISOString()`; the epoch's past the Date range.
 pub fn iso(ms: i64) -> String {
-    chrono::DateTime::from_timestamp_millis(ms)
-        .unwrap_or_default()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string()
+    let f = date_fields(ms);
+    format!(
+        "{}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        dates::js_iso_year(f.year),
+        f.month,
+        f.day,
+        f.hour,
+        f.minute,
+        f.second,
+        f.nanos / 1_000_000
+    )
 }

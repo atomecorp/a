@@ -13,10 +13,17 @@ use std::sync::Arc;
 /// Providers whose key lives only on the server (never readable by the browser).
 pub const SERVER_VAULT_PROVIDERS: [&str; 5] = ["openai", "musicgpt", "runway", "spotify", "deezer"];
 /// Provider sessions (OAuth tokens and the provider's identity) of the person.
-pub const PROVIDER_VAULT_RECORDS: [&str; 5] = [
+pub const PROVIDER_VAULT_RECORDS: [&str; 12] = [
     "social.tiktok",
     "social.instagram",
     "social.facebook",
+    "social.threads",
+    "social.youtube",
+    "social.linkedin",
+    "social.bluesky",
+    "social.mastodon",
+    "social.telegram",
+    "social.discord",
     "music.spotify",
     "health.strava",
 ];

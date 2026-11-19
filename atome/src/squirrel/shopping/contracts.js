@@ -25,7 +25,7 @@ const definitions = {
     clear_checked: [{}, [], 'Remove every bought item from the list.', true],
     sync_nutrition: [{ activity_id: id }, ['activity_id'],
         'Recompute the list contributions of one nutrition activity: a planned meal adds its declared foods and portions; checked items are never touched.', true],
-    open: [{ label, category }, [], 'Open the shopping list on the current presentation surface; with label (and category), on that product\'s sheet.', false]
+    open: [{ label, category, scan: { type: 'boolean' } }, [], 'Open the shopping list on the current presentation surface; with label (and category), on that product\'s sheet; scan true starts the scan of a product\'s code at once (Enr. › Scanner).', false]
 };
 const itemSchema = { type: 'object', required: ['id', 'label', 'category', 'checked'], properties: {
     id: { type: 'string' }, label: { type: 'string' }, category: { type: 'string' }, food_group: { type: 'string' },

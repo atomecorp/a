@@ -3,6 +3,7 @@
 
 use super::commands;
 use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest};
+use base64::Engine;
 use serde_json::Value;
 
 #[tauri::command]
@@ -24,11 +25,30 @@ pub async fn audio_load_clip(
     .map_err(|error| format!("audio_load_clip_task_failed: {error}"))?
 }
 
+// The page sends a clip's bytes in base64 (`kira_audio_commands.js#buildNativeClipBytesPayload`), never a JSON array.
 #[tauri::command]
-pub async fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || commands::load_clip_from_bytes(&id, bytes))
-        .await
-        .map_err(|error| format!("audio_load_clip_from_bytes_task_failed: {error}"))?
+pub async fn audio_load_clip_from_bytes(id: String, bytes_base64: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(bytes_base64)
+            .map_err(|error| format!("audio_clip_bytes_base64_invalid: {error}"))?;
+        commands::load_clip_from_bytes(&id, bytes)
+    })
+    .await
+    .map_err(|error| format!("audio_load_clip_from_bytes_task_failed: {error}"))?
+}
+
+// A sound's length read from its container, never decoded (an upload's duration); its bytes in base64 as above.
+#[tauri::command]
+pub async fn audio_probe_duration_from_bytes(bytes_base64: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(bytes_base64)
+            .map_err(|error| format!("audio_clip_bytes_base64_invalid: {error}"))?;
+        commands::probe_duration_from_bytes(&bytes)
+    })
+    .await
+    .map_err(|error| format!("audio_probe_duration_from_bytes_task_failed: {error}"))?
 }
 
 #[tauri::command]
@@ -64,6 +84,8 @@ pub fn audio_play_instance(
         loop_start_seconds,
         loop_end_seconds,
         envelope: None,
+        reverse: false,
+        warp: None,
     };
     commands::play_instance(&asset_id, &voice_id, &request, strip_id.as_deref())
 }
@@ -104,8 +126,24 @@ pub fn audio_mix_levels() -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn audio_mix_readings() -> Result<Value, String> {
+    commands::mix_readings()
+}
+
+#[tauri::command]
 pub fn audio_mix_devices() -> Result<Value, String> {
     commands::mix_devices()
+}
+
+// The driver the engine plays through (Windows: WASAPI exclusive or an ASIO driver).
+#[tauri::command]
+pub fn audio_driver() -> Result<Value, String> {
+    atome_audio_engine::audio_driver::state()
+}
+
+#[tauri::command]
+pub fn audio_driver_set(driver: String, driver_name: Option<String>) -> Result<Value, String> {
+    atome_audio_engine::audio_driver::set(&driver, driver_name.as_deref())
 }
 
 // Reading and decoding a capture or a long impulse response stays off the UI thread.
@@ -163,6 +201,11 @@ pub fn audio_direct_apply(program: Value) -> Result<Value, String> {
 #[tauri::command]
 pub fn audio_direct_levels() -> Result<Value, String> {
     commands::direct_levels()
+}
+
+#[tauri::command]
+pub fn audio_direct_readings() -> Result<Value, String> {
+    commands::direct_readings()
 }
 
 #[tauri::command]
@@ -241,6 +284,27 @@ pub fn audio_record_start(
 
 #[tauri::command]
 pub fn audio_record_stop(session_id: String) -> Result<Value, String> {
+    commands::record_stop(&session_id)
+}
+
+// A take of a strip's REC point (R-183), stopped by `audio_record_strip_stop`.
+#[tauri::command]
+pub fn audio_record_strip_start(
+    paths: tauri::State<crate::ProjectPaths>,
+    session_id: String,
+    file_path: String,
+    strip_id: String,
+    device_id: Option<String>,
+) -> Result<Value, String> {
+    commands::dispatch(
+        "record_strip_start",
+        &serde_json::json!({ "sessionId": session_id, "filePath": file_path, "stripId": strip_id, "deviceId": device_id }),
+        Some(&paths.project_root),
+    )
+}
+
+#[tauri::command]
+pub fn audio_record_strip_stop(session_id: String) -> Result<Value, String> {
     commands::record_stop(&session_id)
 }
 

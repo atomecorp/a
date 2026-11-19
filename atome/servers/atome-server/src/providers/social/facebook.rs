@@ -8,14 +8,40 @@ use crate::vault_router::js;
 use serde_json::{Value as JsonValue, json};
 
 const VERSION: &str = "v25.0";
-const SCOPES: [&str; 3] = [
+// Publishing, and since R-190 the Page's comments and Messenger conversations (read by the
+// webhook, answered through `meta_inbox`).
+const SCOPES: [&str; 7] = [
     "pages_show_list",
     "pages_read_engagement",
     "pages_manage_posts",
+    "pages_manage_engagement",
+    "pages_read_user_content",
+    "pages_manage_metadata",
+    "pages_messaging",
 ];
 
-fn graph(path: &str) -> String {
-    format!("https://graph.facebook.com/{VERSION}{path}")
+/// A Page's post, photo or video removed with the Page's token.
+pub async fn remove(config: &Config, record: &JsonValue, remote: &JsonValue) -> Sd<()> {
+    let page = page_of(record, &text(remote.get("page_id")))?;
+    let id = ["video_id", "post_id", "photo_id"]
+        .iter()
+        .map(|key| text(remote.get(*key)))
+        .find(|id| !id.is_empty())
+        .ok_or_else(|| Se::new("social_update_unsupported"))?;
+    let token = text(page.get("access_token"));
+    let url = format!(
+        "{}?{}",
+        graph(config, &format!("/{id}")),
+        form(&[("access_token", token.as_str())])
+    );
+    net::removed(http::client().delete(url)).await
+}
+
+pub fn graph(config: &Config, path: &str) -> String {
+    format!(
+        "{}/{VERSION}{path}",
+        config.api("facebook", "https://graph.facebook.com")
+    )
 }
 
 fn text(value: Option<&JsonValue>) -> String {
@@ -26,7 +52,7 @@ fn text(value: Option<&JsonValue>) -> String {
 }
 
 pub fn configured(config: &Config) -> bool {
-    !config.get("FACEBOOK_APP_ID").is_empty() && !config.get("FACEBOOK_APP_SECRET").is_empty()
+    config.app("FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET")
 }
 
 pub fn authorize_url(config: &Config, state: &str, redirect: &str) -> String {
@@ -39,13 +65,14 @@ pub fn authorize_url(config: &Config, state: &str, redirect: &str) -> String {
         ("scope", &scope),
     ];
     format!(
-        "https://www.facebook.com/{VERSION}/dialog/oauth?{}",
+        "{}/{VERSION}/dialog/oauth?{}",
+        config.api("facebook", "https://www.facebook.com"),
         form(&pairs)
     )
 }
 
-fn get(path: &str, pairs: &[(&str, &str)]) -> reqwest::RequestBuilder {
-    http::client().get(format!("{}?{}", graph(path), form(pairs)))
+fn get(config: &Config, path: &str, pairs: &[(&str, &str)]) -> reqwest::RequestBuilder {
+    http::client().get(format!("{}?{}", graph(config, path), form(pairs)))
 }
 
 pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> Sd<JsonValue> {
@@ -55,6 +82,7 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
     );
     let short = net::fetch(
         get(
+            config,
             "/oauth/access_token",
             &[
                 ("client_id", id),
@@ -70,6 +98,7 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
     let short_token = text(short.get("access_token"));
     let long = net::fetch(
         get(
+            config,
             "/oauth/access_token",
             &[
                 ("grant_type", "fb_exchange_token"),
@@ -87,12 +116,20 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
     let token = js::string(&long["access_token"]);
     let (me, permissions, accounts) = tokio::try_join!(
         net::fetch(
-            get("/me", &[("fields", "id,name"), ("access_token", &token)]),
+            get(
+                config,
+                "/me",
+                &[("fields", "id,name"), ("access_token", &token)]
+            ),
             false
         ),
-        net::fetch(get("/me/permissions", &[("access_token", &token)]), false),
+        net::fetch(
+            get(config, "/me/permissions", &[("access_token", &token)]),
+            false
+        ),
         net::fetch(
             get(
+                config,
                 "/me/accounts",
                 &[
                     ("fields", "id,name,access_token,tasks"),
@@ -131,11 +168,11 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
     )
 }
 
-pub async fn revoke(record: &JsonValue) -> Sd<()> {
+pub async fn revoke(config: &Config, record: &JsonValue) -> Sd<()> {
     let token = js::text(record.get("access_token"));
     let request = http::client().delete(format!(
         "{}?{}",
-        graph("/me/permissions"),
+        graph(config, "/me/permissions"),
         form(&[("access_token", token.as_str())])
     ));
     net::fetch(request, false).await.map(|_| ())
@@ -161,7 +198,7 @@ pub fn public_pages(record: &JsonValue) -> JsonValue {
     )
 }
 
-fn page_of(record: &JsonValue, page_id: &str) -> Sd<JsonValue> {
+pub fn page_of(record: &JsonValue, page_id: &str) -> Sd<JsonValue> {
     let pages = record
         .get("pages")
         .and_then(JsonValue::as_array)
@@ -183,25 +220,7 @@ fn page_of(record: &JsonValue, page_id: &str) -> Sd<JsonValue> {
     Ok(page)
 }
 
-fn multipart(parts: &[(&str, Option<(&str, &str)>, Vec<u8>)]) -> (String, Vec<u8>) {
-    let boundary = format!("----atome{}", crate::providers::oauth::hex(12));
-    let mut body = Vec::new();
-    for (name, file, bytes) in parts {
-        body.extend(format!("--{boundary}\r\n").as_bytes());
-        match file {
-            Some((filename, mime)) => body.extend(
-                format!("Content-Disposition: form-data; name=\"{name}\"; filename=\"{}\"\r\nContent-Type: {mime}\r\n\r\n",
-                    filename.replace('"', "%22").replace(['\r', '\n'], " ")).as_bytes()),
-            None => body.extend(format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes()),
-        }
-        body.extend(bytes);
-        body.extend(b"\r\n");
-    }
-    body.extend(format!("--{boundary}--\r\n").as_bytes());
-    (format!("multipart/form-data; boundary={boundary}"), body)
-}
-
-async fn published(page: &JsonValue, remote: JsonValue) -> Sd<JsonValue> {
+async fn published(config: &Config, page: &JsonValue, remote: JsonValue) -> Sd<JsonValue> {
     let id = [remote.get("post_id"), remote.get("photo_id")]
         .into_iter()
         .map(text)
@@ -213,6 +232,7 @@ async fn published(page: &JsonValue, remote: JsonValue) -> Sd<JsonValue> {
     let token = js::text(page.get("access_token"));
     let url = net::fetch(
         get(
+            config,
             &format!("/{id}"),
             &[("fields", "permalink_url"), ("access_token", &token)],
         ),
@@ -245,11 +265,16 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
         let post = ctx
             .hooks
             .reaching(net::fetch(
-                net::form_post(&graph(&format!("/{page_id}/feed")), &fields),
+                net::form_post(&graph(ctx.config, &format!("/{page_id}/feed")), &fields),
                 true,
             ))
             .await?;
-        return published(&page, json!({ "post_id": text(post.get("id")) })).await;
+        return published(
+            ctx.config,
+            &page,
+            json!({ "post_id": text(post.get("id")) }),
+        )
+        .await;
     };
     let bytes = tokio::fs::read(&media.path)
         .await
@@ -264,14 +289,15 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
             parts.push(("caption", None, ctx.text.as_bytes().to_vec()));
         }
         parts.push(("access_token", None, page_token.as_bytes().to_vec()));
-        let (kind, body) = multipart(&parts);
+        let (kind, body) = net::multipart(&parts);
         ctx.hooks.publishing(json!({})).await?;
         let request = http::client()
-            .post(graph(&format!("/{page_id}/photos")))
+            .post(graph(ctx.config, &format!("/{page_id}/photos")))
             .header("Content-Type", kind)
             .body(body);
         let photo = ctx.hooks.reaching(net::fetch(request, true)).await?;
         return published(
+            ctx.config,
             &page,
             json!({ "photo_id": text(photo.get("id")), "post_id": text(photo.get("post_id")) }),
         )
@@ -287,7 +313,10 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
     ];
     let url = format!(
         "{}?{}",
-        graph(&format!("/{}/uploads", ctx.config.get("FACEBOOK_APP_ID"))),
+        graph(
+            ctx.config,
+            &format!("/{}/uploads", ctx.config.get("FACEBOOK_APP_ID"))
+        ),
         form(&pairs)
     );
     let session = net::fetch(http::client().post(url), false).await?;
@@ -296,7 +325,7 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
         return Err(Se::new("social_provider_rejected"));
     }
     let request = http::client()
-        .post(graph(&format!("/{session_id}")))
+        .post(graph(ctx.config, &format!("/{session_id}")))
         .header("Authorization", format!("OAuth {user_token}"))
         .header("file_offset", "0")
         .body(bytes);
@@ -316,7 +345,11 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
         ("fbuploader_video_file_chunk", uploaded["h"].clone()),
         ("access_token", json!(page_token)),
     ];
-    let url = format!("https://graph-video.facebook.com/{VERSION}/{page_id}/videos");
+    let url = format!(
+        "{}/{VERSION}/{page_id}/videos",
+        ctx.config
+            .api("facebook", "https://graph-video.facebook.com")
+    );
     let video = ctx
         .hooks
         .reaching(net::fetch(net::form_post(&url, &fields), true))
@@ -329,13 +362,14 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
         .accepted(json!({ "video_id": video_id, "page_id": page_id }))
         .await?;
     status(
+        ctx.config,
         ctx.record,
         &json!({ "video_id": video_id, "page_id": page_id }),
     )
     .await
 }
 
-pub async fn status(record: &JsonValue, remote: &JsonValue) -> Sd<JsonValue> {
+pub async fn status(config: &Config, record: &JsonValue, remote: &JsonValue) -> Sd<JsonValue> {
     if !js::truthy(remote.get("video_id")) {
         let status = if js::truthy(remote.get("post_id")) {
             "published"
@@ -349,6 +383,7 @@ pub async fn status(record: &JsonValue, remote: &JsonValue) -> Sd<JsonValue> {
     let id = js::text(remote.get("video_id"));
     let body = net::fetch(
         get(
+            config,
             &format!("/{id}"),
             &[("fields", "status"), ("access_token", &token)],
         ),
@@ -369,7 +404,12 @@ pub async fn status(record: &JsonValue, remote: &JsonValue) -> Sd<JsonValue> {
 
 /// A scheduled update (Q4 of 28 Oct. 2026): a Page's post takes its new text in place, a video
 /// its description.
-pub async fn update(record: &JsonValue, remote: &JsonValue, text_value: &str) -> Sd<JsonValue> {
+pub async fn update(
+    config: &Config,
+    record: &JsonValue,
+    remote: &JsonValue,
+    text_value: &str,
+) -> Sd<JsonValue> {
     let page = page_of(record, &js::text(remote.get("page_id")))?;
     let video = text(remote.get("video_id"));
     let id = [
@@ -392,6 +432,10 @@ pub async fn update(record: &JsonValue, remote: &JsonValue, text_value: &str) ->
         (field, json!(text_value)),
         ("access_token", page["access_token"].clone()),
     ];
-    net::fetch(net::form_post(&graph(&format!("/{id}")), &fields), true).await?;
+    net::fetch(
+        net::form_post(&graph(config, &format!("/{id}")), &fields),
+        true,
+    )
+    .await?;
     Ok(json!({ "status": "published", "remote": remote }))
 }

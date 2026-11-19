@@ -6,6 +6,7 @@ use super::meeting::Search;
 use super::{Directory, stored_card};
 use crate::social::news::db::{all, get, text};
 use crate::social::privacy_rules;
+use crate::social::relations::blocked_either_way;
 use crate::vault_router::js;
 use rusqlite::Connection;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
@@ -117,22 +118,28 @@ impl Directory {
                 &format!("{ENTRY_SELECT} ORDER BY lower(display_name), principal_id LIMIT 5000"),
                 &[],
             )?;
-            rows.iter()
-                .filter(|row| {
-                    let id = text(row.get("principal_id"));
-                    let name = text(row.get("display_name"));
-                    !name.is_empty()
-                        && id != reader
-                        && source.meeting.matches(
-                            stored_card(row).get(MEETING_KEY),
-                            &search,
-                            &name,
-                            &id,
-                        )
-                })
-                .take(limit)
-                .map(|row| publish(db, row, &reader))
-                .collect()
+            let mut found = Vec::new();
+            for row in &rows {
+                if found.len() == limit {
+                    break;
+                }
+                let id = text(row.get("principal_id"));
+                let name = text(row.get("display_name"));
+                // Two people of whom one blocked the other never meet, whoever blocked.
+                if !name.is_empty()
+                    && id != reader
+                    && source.meeting.matches(
+                        stored_card(row).get(MEETING_KEY),
+                        &search,
+                        &name,
+                        &id,
+                    )
+                    && !blocked_either_way(db, &reader, &id)?
+                {
+                    found.push(publish(db, row, &reader)?);
+                }
+            }
+            Ok(found)
         })
         .await
     }
@@ -162,6 +169,13 @@ impl Directory {
         let Some(source) = source.filter(|source| source.adult) else {
             return Err("meeting_adult_required".into());
         };
+        let (me, them) = (reader.to_string(), principal.clone());
+        if self
+            .db(move |db| blocked_either_way(db, &me, &them))
+            .await?
+        {
+            return Ok(None);
+        }
         let Some(row) = row.filter(|row| {
             source.meeting.matches(
                 stored_card(row).get(MEETING_KEY),

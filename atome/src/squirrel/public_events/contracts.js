@@ -1,4 +1,5 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
+import { SOCIAL_DESTINATION_PATTERN } from '../social/contracts.js';
 import { ACTIVITY_CATEGORY_SLUGS } from '../../shared/activity_categories.js';
 import { PUBLIC_EVENT_MAX_CATEGORIES, PUBLIC_EVENT_PRESENTATION_MAX_CHARS, PUBLIC_EVENT_REPORT_REASONS } from '../../shared/public_event_contract.js';
 
@@ -46,7 +47,7 @@ const definitions = {
         choose_poster: { type: 'boolean', description: 'Affiche › Import: open the import panel (then media_import.* chooses in it).' } }, [],
         'Set the fields of the event panel shown (events.open): title, date, repetition, categories, place, presentation, price, ticket link, poster, Annon., Contacts. Nothing is saved until events.save.', false, 'control'],
     save: [{}, [], 'Garder: save the event panel shown; a public event goes out to everyone around. Confirm with the user first.', true, 'write'],
-    share: [{ event_id: id, destinations: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', pattern: '^(tiktok|instagram|facebook:profile|facebook:page:[0-9]{1,40})$' } } },
+    share: [{ event_id: id, destinations: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', pattern: SOCIAL_DESTINATION_PATTERN } } },
         ['event_id', 'destinations'], 'Diffuser › Réseaux by voice: prepare a public event of the user (its poster and words) for the user\'s connected social networks (social.accounts lists them); returns the job to publish with social.publish.', false, 'read'],
     open: [{ event_id: id, categories, creation_id: fields.creation_id, mine: { type: 'boolean', description: 'Show the list « Mes annonces » instead.' } }, [],
         'Show the event panel to declare an event (its categories chosen, a creation as its poster), one of the user\'s public events, or (mine) the list of the user\'s public events with their status.', false, 'control']

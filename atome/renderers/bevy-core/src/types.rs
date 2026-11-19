@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 pub use crate::components::*;
 pub use crate::types_ops::*;
-pub use crate::types_procedural::AtomeProceduralSdf;
+pub use crate::types_procedural::{AtomeProceduralSdf, MYSTIC_MAX_TILES, MysticRows};
 
 pub fn default_opacity() -> f32 {
     1.0
@@ -449,6 +449,9 @@ pub struct AtomeRenderNode {
     pub selected: Option<bool>,
     #[serde(default)]
     pub filters: Option<AtomeColorFilters>,
+    /// The media effects of the strip carrying it (R-184, `media_fx`), in chain order.
+    #[serde(default)]
+    pub effects: Option<Vec<crate::media_fx::AtomeMediaEffect>>,
     #[serde(default)]
     pub transition: Option<AtomeTransition>,
     #[serde(default)]

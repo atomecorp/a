@@ -1,4 +1,3 @@
-use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, Transaction};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
@@ -85,7 +84,7 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
     repair_local_media_references(&tx)?;
     tx.execute(
         "INSERT INTO local_repairs (name, done_at) VALUES (?1, ?2)",
-        rusqlite::params![PRE_CONTRACT_REPAIRS, Utc::now().to_rfc3339()],
+        rusqlite::params![PRE_CONTRACT_REPAIRS, atome_js_values::dates::now_rfc3339()],
     )?;
     tx.commit()
 }
@@ -209,7 +208,7 @@ pub(super) fn register_stream(
             local_user_id,
             remote_user_id,
             stream_id,
-            Utc::now().to_rfc3339()
+            atome_js_values::dates::now_rfc3339()
         ],
     )
     .map_err(|error| error.to_string())?;
@@ -299,7 +298,7 @@ fn persist_event(
             .and_then(JsonValue::as_str)
             .unwrap_or("");
         let timestamp = if timestamp.is_empty() {
-            Utc::now().to_rfc3339()
+            atome_js_values::dates::now_rfc3339()
         } else {
             timestamp.to_string()
         };
@@ -356,7 +355,7 @@ fn persist_event(
             remote_user_id,
             stream,
             sequence,
-            Utc::now().to_rfc3339()
+            atome_js_values::dates::now_rfc3339()
         ],
     )
     .map_err(|error| error.to_string())?;

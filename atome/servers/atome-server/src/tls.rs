@@ -7,7 +7,7 @@
 // gives native code no root store to read at all (rustls-native-certs finds none
 // there): its roots are Mozilla's, shipped with the app as the browsers carry them.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::handshake::client::Response;
@@ -45,18 +45,30 @@ fn system_roots() -> rustls_native_certs::CertificateResult {
     rustls_native_certs::load_certs_from_paths(None, dir)
 }
 
+// The system's roots, read once per process: on macOS each read walks the keychain, and a
+// domain search reading them for each of its OVH calls took 26 s where the same calls made
+// directly took under 3 s (2026-11-18). A restart reads the system's updated authorities again.
+fn roots() -> Result<Arc<RootCertStore>, String> {
+    static ROOTS: OnceLock<Result<Arc<RootCertStore>, String>> = OnceLock::new();
+    ROOTS
+        .get_or_init(|| {
+            let mut roots = RootCertStore::empty();
+            roots.add_parsable_certificates(system_roots().certs);
+            if roots.is_empty() {
+                return Err("tls_roots_missing".into());
+            }
+            Ok(Arc::new(roots))
+        })
+        .clone()
+}
+
 // `alpn`: the protocols offered, in order (HTTP: h2 then http/1.1; WebSocket: none).
 pub fn client_config(alpn: &[&[u8]]) -> Result<Arc<ClientConfig>, String> {
-    let mut roots = RootCertStore::empty();
-    roots.add_parsable_certificates(system_roots().certs);
-    if roots.is_empty() {
-        return Err("tls_roots_missing".into());
-    }
     let mut config =
         ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
             .with_safe_default_protocol_versions()
             .map_err(|error| error.to_string())?
-            .with_root_certificates(roots)
+            .with_root_certificates(roots()?)
             .with_no_client_auth();
     config.alpn_protocols = alpn.iter().map(|protocol| protocol.to_vec()).collect();
     Ok(Arc::new(config))

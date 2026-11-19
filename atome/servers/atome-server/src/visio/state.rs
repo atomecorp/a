@@ -6,7 +6,7 @@ use axum::extract::ws::Message;
 use indexmap::{IndexMap, IndexSet};
 use mediasoup::prelude::*;
 use serde_json::{Value as JsonValue, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::Sender;
 
 /// The `/ws/api` connection a visio frame came from: its account, its place in the live registry,
@@ -97,11 +97,15 @@ pub(super) struct Consumed {
     pub transport_id: String,
 }
 
-/// One connection in a room. `serial` tells a peer apart from a later one under the same id.
+/// One connection in a room. `serial` tells a peer apart from a later one under the same id. `shown` is what the frames
+/// say of it: its account in a call, its pseudonym of the channel in a CB room (lot L3, never its account); `apart`: the
+/// peers it never hears nor is heard by (a block either way, CB rooms only).
 pub(super) struct Peer {
     pub id: String,
     pub serial: u64,
     pub user: String,
+    pub shown: String,
+    pub apart: HashSet<String>,
     pub sender: Sender<Message>,
     pub consumers: IndexMap<String, Consumed>,
     pub producers: IndexMap<String, Produced>,
@@ -111,6 +115,13 @@ pub(super) struct Peer {
 pub(super) struct Room {
     pub router: Router,
     pub peers: IndexMap<String, Peer>,
+    /// A CB channel's room (`cbr_…`, lot L3): pseudonyms, the floor before any microphone, entry by membership.
+    pub cb: bool,
+}
+
+/// Whether `room_id` names a CB channel's room.
+pub(super) fn cb_room(room_id: &str) -> bool {
+    room_id.starts_with("cbr_")
 }
 
 /// The room and peer a connection is in (`_visioRoomId`, `_visioPeerId`), and the serial of the
@@ -141,7 +152,8 @@ pub(super) fn event(room_id: Option<&str>, data: JsonValue) -> JsonValue {
 }
 
 impl State {
-    /// `notifyRoom`: the frames to every peer of the room but `except`.
+    /// `notifyRoom`: the frames to every peer of the room but `except` (the peer the frame tells of), and but those kept
+    /// apart from it.
     pub fn notify_room(
         &self,
         room_id: &str,
@@ -154,6 +166,7 @@ impl State {
         room.peers
             .values()
             .filter(|peer| Some(peer.id.as_str()) != except)
+            .filter(|peer| except.is_none_or(|from| !peer.apart.contains(from)))
             .map(|peer| (peer.sender.clone(), event(Some(room_id), data.clone())))
             .collect()
     }
@@ -165,7 +178,7 @@ impl State {
         if let Some(room) = self.rooms.get(room_id) {
             for peer in room.peers.values() {
                 for id in peer.producers.keys() {
-                    let data = json!({ "type": "producerClosed", "producer_id": id, "peer_user_id": peer.user });
+                    let data = json!({ "type": "producerClosed", "producer_id": id, "peer_user_id": peer.shown });
                     frames.extend(self.notify_room(room_id, &data, Some(&peer.id)));
                 }
             }
@@ -198,7 +211,7 @@ impl State {
         peer.producers.clear();
         peer.transports.clear();
         let empty = room.peers.is_empty();
-        let data = json!({ "type": "participantLeft", "peer_id": peer_id, "user_id": peer.user });
+        let data = json!({ "type": "participantLeft", "peer_id": peer_id, "user_id": peer.shown });
         let mut frames = self.notify_room(room_id, &data, Some(peer_id));
         if empty {
             frames.extend(self.close_room(room_id));

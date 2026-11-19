@@ -114,6 +114,9 @@ pub struct AtomeStylePatch {
     pub playback_progress: Option<Option<f32>>,
     #[serde(default)]
     pub filters: Option<AtomeColorFilters>,
+    /// The media effects of the strip, the whole chain; an empty one removes them.
+    #[serde(default)]
+    pub effects: Option<Vec<crate::media_fx::AtomeMediaEffect>>,
     #[serde(default)]
     pub transition: Option<AtomeTransition>,
     #[serde(default)]
@@ -196,4 +199,6 @@ pub enum AtomeRenderOp {
     SceneEffects(AtomeSceneEffectsPatch),
     ProjectView(crate::project_view::AtomeProjectViewPatch),
     ProjectSpace(crate::project_view::AtomeProjectSpacePatch),
+    /// A `.cube` file for the media effects' LUTs (`media_fx/lut.rs`).
+    Lut(crate::media_fx::lut::AtomeLutPatch),
 }

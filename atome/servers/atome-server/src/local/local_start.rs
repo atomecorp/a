@@ -122,10 +122,6 @@ pub async fn prepare(
         .route("/api/debug-log", post(debug_log_handler))
         .route("/api/db/status", get(db_status_handler))
         .route(
-            "/api/eve/ai/provider-completion",
-            post(eve_ai_provider_completion_handler),
-        )
-        .route(
             "/api/local-files",
             get(local_file_read_handler).post(local_file_write_handler),
         )
@@ -201,7 +197,7 @@ pub async fn start_server(
                 err
             );
             record_recent_error(json!({
-                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "timestamp": atome_js_values::dates::now_rfc3339(),
                 "source": "axum",
                 "component": "startup",
                 "error": format!("bind 127.0.0.1:3000 failed: {}", err),
@@ -217,7 +213,7 @@ pub async fn serve(listener: tokio::net::TcpListener, app: Router) {
     if let Err(err) = axum::serve(listener, app).await {
         eprintln!("ERROR: Axum server stopped unexpectedly: {}", err);
         record_recent_error(json!({
-            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "timestamp": atome_js_values::dates::now_rfc3339(),
             "source": "axum",
             "component": "runtime",
             "error": format!("serve failed: {}", err),

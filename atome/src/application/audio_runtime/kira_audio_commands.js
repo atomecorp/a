@@ -29,6 +29,7 @@ export const normalizeKiraVoiceEnvelope = (input) => {
     if (!input || typeof input !== 'object') return null;
     const durationSeconds = Number(input.durationSeconds ?? input.duration_seconds);
     if (!(durationSeconds > 0) || !Number.isFinite(durationSeconds)) return null;
+    const decayStart = optionalNumber(input.decayStartSeconds ?? input.decay_start_seconds);
     return {
         offsetSeconds: Math.max(0, finiteNumber(input.offsetSeconds ?? input.offset_seconds, 0)),
         durationSeconds,
@@ -39,7 +40,22 @@ export const normalizeKiraVoiceEnvelope = (input) => {
         // A cell's attack (from the clip time its cell started) and release (to the voice's end).
         attackStartSeconds: finiteNumber(input.attackStartSeconds ?? input.attack_start_seconds, 0),
         attackSeconds: Math.max(0, finiteNumber(input.attackSeconds ?? input.attack_seconds, 0)),
-        releaseSeconds: Math.max(0, finiteNumber(input.releaseSeconds ?? input.release_seconds, 0))
+        releaseSeconds: Math.max(0, finiteNumber(input.releaseSeconds ?? input.release_seconds, 0)),
+        // The rest of a cell's ADSR: after the attack, down to the sustain level in the decay.
+        decayStartSeconds: Number.isFinite(decayStart) ? decayStart : null,
+        decaySeconds: Math.max(0, finiteNumber(input.decaySeconds ?? input.decay_seconds, 0)),
+        sustainLevel: clamp(input.sustainLevel ?? input.sustain_level ?? 1, 0, 1)
+    };
+};
+
+// A warped voice's time map (mix-graph warp_voice.rs): `[[clip_seconds, source_seconds]…]` and its pitch; the engine
+// validates the map and refuses a voice whose map it cannot play.
+const normalizeKiraVoiceWarp = (warp) => {
+    if (warp === undefined || warp === null) return null;
+    if (typeof warp !== 'object' || !Array.isArray(warp.points)) throw new Error('kira_voice_warp_points_required');
+    return {
+        points: warp.points.map((point) => [Number(point?.[0]), Number(point?.[1])]),
+        pitchSemitones: finiteNumber(warp.pitchSemitones ?? warp.pitch_semitones, 0)
     };
 };
 
@@ -58,7 +74,10 @@ export const normalizeKiraPlayInstancePayload = (input = {}) => {
         loopStartSeconds: optionalNonNegativeNumber(source.loopStartSeconds ?? source.loop_start_seconds),
         loopEndSeconds: optionalNonNegativeNumber(source.loopEndSeconds ?? source.loop_end_seconds),
         // Mixer strip whose sub-track plays the voice (`<track_id>:audio`).
-        stripId: safeString(source.stripId ?? source.strip_id) || null
+        stripId: safeString(source.stripId ?? source.strip_id) || null,
+        // Played backwards, from its window's end to its start.
+        reverse: source.reverse === true,
+        warp: normalizeKiraVoiceWarp(source.warp)
     };
 };
 
@@ -86,7 +105,9 @@ export const buildTauriKiraAudioPayload = (command = '', input = {}) => {
             rate: payload.rate,
             loopStartSeconds: payload.loopStartSeconds,
             loopEndSeconds: payload.loopEndSeconds,
-            stripId: payload.stripId
+            stripId: payload.stripId,
+            reverse: payload.reverse,
+            warp: payload.warp
         };
     }
     if (normalizedCommand === KIRA_AUDIO_COMMANDS.STOP_INSTANCE) {
@@ -118,4 +139,19 @@ export const buildFacadeKiraAudioPayload = (command = '', input = {}) => {
         return { voice_id: payload.voiceId };
     }
     return input && typeof input === 'object' ? { ...input } : {};
+};
+
+// A clip's bytes for a native engine (Tauri, iOS): one base64 string, the one binary form a script message carries,
+// never a JSON array of numbers (a 90 MB AIFF sent as `Array.from(bytes)` grew into gigabytes and killed the iOS app,
+// 16 Nov. 2026). `Uint8Array.prototype.toBase64` is the encoder of every engine's WebView (WebKit 18.2+, Chromium 140+).
+export const buildNativeClipBytesPayload = (id, bytes) => {
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) throw new Error('native_clip_bytes_required');
+    if (typeof bytes.toBase64 !== 'function') throw new Error('native_clip_bytes_base64_encoder_missing');
+    return { id, bytesBase64: bytes.toBase64() };
+};
+
+// A sound's bytes for `audio_probe_duration_from_bytes` (its length read from its container, never decoded).
+export const buildNativeProbeDurationPayload = (bytes) => {
+    const { bytesBase64 } = buildNativeClipBytesPayload('', bytes);
+    return { bytesBase64 };
 };

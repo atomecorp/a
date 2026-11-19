@@ -15,7 +15,7 @@ export const siteProjectId = siteId => (String(siteId || '').startsWith('site_')
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 // The top-level paths atome.one already serves, and the system words kept for later (Q7).
 export const RESERVED_SITE_SLUGS = Object.freeze(new Set([
-    'api', 'ws', 'atome', 'eve', 'src', 'vendor', 'assets', 'auth', 'ios', 'health', 'healthz', 'dev', 'client-log', 'application',
+    'api', 'ws', 'atome', 'eve', 'music', 'src', 'vendor', 'assets', 'auth', 'ios', 'health', 'healthz', 'dev', 'client-log', 'application',
     'css', 'js', 'shared', 'squirrel', 'utils', 'wasm', 'well-known', 'admin', 'login', 'logout', 'signup', 'static', 'www', 'mail',
     'help', 'support', 'legal', 'terms', 'privacy', 'about', 'contact', 'sites', 'site', 'blog', 'docs', 'status', 'app', 'apps',
     'download', 'downloads', 'store', 'shop', 'billing', 'account', 'settings', 'public', 'media', 'uploads', 'cdn', 'test', 'robots',

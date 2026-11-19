@@ -144,30 +144,6 @@ pub fn apply_purchase(
     Ok(json!({ "purchaseRef": reference, "created": inserted == 1 }))
 }
 
-/// The account-creation payment is still simulated: it opens one real period of the base
-/// plan, recorded with source `simulated`.
-pub fn apply_simulated_plan(
-    db: &Connection,
-    principal: &str,
-    now: i64,
-) -> Result<JsonValue, String> {
-    let product = &catalog::catalog()["plans"][0];
-    let product_id = product["productId"].as_str().unwrap_or_default();
-    let purchase = Purchase {
-        source: "simulated".into(),
-        transaction_id: format!("{principal}:{now}"),
-        product_id: product_id.into(),
-        period_start_ms: Some(now),
-        period_end_ms: Some(now + catalog::period_ms()),
-        ..Purchase::default()
-    };
-    apply_purchase(db, principal, &purchase, now)?;
-    Ok(
-        json!({ "mode": "simulated", "productId": product_id, "amountCents": product["priceCents"],
-        "currency": product["currency"], "period": product["period"] }),
-    )
-}
-
 /// The account that holds a store subscription (or one-time purchase): renewals and
 /// restores of the same original transaction stay with it.
 pub fn owner_of_original(

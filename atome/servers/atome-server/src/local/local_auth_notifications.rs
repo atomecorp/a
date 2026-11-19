@@ -87,7 +87,7 @@ pub(crate) fn notification_storage(
                     action,
                     principal,
                     stored.to_string(),
-                    Utc::now().timestamp_millis()
+                    atome_js_values::dates::now_ms()
                 ],
             )
             .map_err(|_| "notifications_storage_unavailable")?;
@@ -117,7 +117,7 @@ pub(crate) fn notification_storage(
             let blocked = if let Some(principal) = principal {
                 db.query_row("SELECT EXISTS(SELECT 1 FROM auth_notification_inbox WHERE principal_id=?1 AND action='terminal'
                     AND json_extract(payload,'$.room_id')=?2 AND json_extract(payload,'$.expires_at')>?3)",
-                    rusqlite::params![principal,payload["room_id"].as_str().unwrap_or_default(),Utc::now().timestamp_millis()],
+                    rusqlite::params![principal,payload["room_id"].as_str().unwrap_or_default(),atome_js_values::dates::now_ms()],
                     |row| row.get::<_,bool>(0)).map_err(|_| "notifications_storage_unavailable")?
             } else {
                 true

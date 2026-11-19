@@ -259,22 +259,13 @@ impl Storage {
                 continue;
             };
             let description = described.get(&name);
-            // Node's `stats.mtime`: `mtimeMs` (seconds and nanoseconds in a double)
-            // rounded to the millisecond.
-            let mtime: chrono::DateTime<chrono::Utc> =
-                meta.modified().map_err(|e| e.to_string())?.into();
-            let millis = (mtime.timestamp() as f64 * 1e3
-                + f64::from(mtime.timestamp_subsec_nanos()) / 1e6
-                + 0.5)
-                .floor() as i64;
-            let modified =
-                chrono::DateTime::from_timestamp_millis(millis).ok_or("mtime_out_of_range")?;
+            let modified = modified_iso(meta.modified().map_err(|e| e.to_string())?)?;
             files.push(json!({
                 "id": description.and_then(|row| js::first(row, &["atome_id"]).cloned()),
                 "name": display_name(description, &name),
                 "file_name": name,
                 "size": meta.len(),
-                "modified": modified.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                "modified": modified,
                 "owner_id": user_id,
                 "access": "owner",
                 "shared": false,
@@ -486,4 +477,22 @@ pub async fn assemble(directory: &Path, count: u64, output: &Path) -> Result<(),
     tokio::io::AsyncWriteExt::flush(&mut file)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Node's `stats.mtime.toISOString()`: `mtimeMs` (seconds and nanoseconds in a double) rounded
+/// to the millisecond.
+pub(crate) fn modified_iso(time: std::time::SystemTime) -> Result<String, String> {
+    let (seconds, nanos) = match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since) => (since.as_secs() as i64, since.subsec_nanos()),
+        Err(before) => {
+            let before = before.duration();
+            match before.subsec_nanos() {
+                0 => (-(before.as_secs() as i64), 0),
+                nanos => (-(before.as_secs() as i64) - 1, 1_000_000_000 - nanos),
+            }
+        }
+    };
+    let millis = (seconds as f64 * 1e3 + f64::from(nanos) / 1e6 + 0.5).floor() as i64;
+    js::dates::Instant::from_millis(millis).ok_or("mtime_out_of_range")?;
+    Ok(js::iso(millis))
 }

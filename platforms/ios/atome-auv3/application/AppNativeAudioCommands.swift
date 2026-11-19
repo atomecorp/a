@@ -27,6 +27,12 @@ extension AppNativeAudioController {
                 case "audio_duck_stop":
                     self.releaseAudioSessionConsumer("duck")
                     self.complete(completion, payload: ["success": true, "ducking": false])
+                // Whether another app's audio plays (Apple Music, Spotify, a podcast): the Sport's beeps keep quiet under it
+                // (music_playing.js, user 17 Nov. 2026).
+                case "audio_other_playing":
+                    let session = AVAudioSession.sharedInstance()
+                    let playing = session.isOtherAudioPlaying || session.secondaryAudioShouldBeSilencedHint
+                    self.complete(completion, payload: ["success": true, "playing": playing])
 
                 case "audio_wake_start":
                     self.wakeCaptureFailed = false

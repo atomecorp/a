@@ -46,24 +46,22 @@ const attachPageDiagnostics = (page, report, userLabel) => {
     });
 };
 
-const loginOrCreateUser = async (page, prefix, index) => page.evaluate(async ({ key, order }) => {
-    const phone = `+1555${String(Date.now()).slice(-7)}${order}`;
-    const password = `probe_${key}_${order}_password`;
-    const username = `probe_${key}_${order}`;
-    const api = window.AdoleAPI || null;
-    if (!api?.auth?.login || !api?.auth?.create) return { ok: false, error: 'auth_api_missing' };
-    const created = await api.auth.create(phone, password, username, { autoLogin: true });
-    const createOk = !!(
-        created?.fastify?.success
-        || created?.tauri?.success
-        || created?.login?.fastify?.success
-        || created?.login?.tauri?.success
-    );
-    if (createOk) return { ok: true, phone, username, created };
-    const logged = await api.auth.login(phone, password, username);
-    const loginOk = !!(logged?.fastify?.success || logged?.tauri?.success);
-    return { ok: loginOk, phone, username, created, logged };
-}, { key: prefix, order: index });
+// A new phone account per user, through the phone link (Auth V1; `auth.login` / `auth.create` are gone since 27 Sep.):
+// on a test server with the SMS mock, the link comes back in the WebSocket frame (`developmentLink`).
+const loginOrCreateUser = async (page, link, index) => {
+    const phone = `+1555${String(Date.now()).slice(-6)}${index}`;
+    const started = await page.evaluate(async (number) => {
+        const api = window.AdoleAPI?.auth;
+        if (!api?.startPhoneLogin) return { ok: false, error: 'auth_phone_login_missing' };
+        const result = await api.startPhoneLogin(number);
+        const paid = result?.paymentRequired === true ? await api.payPhoneLogin({ method: 'paypal' }) : null;
+        return { ok: true, session: Boolean(paid?.session) };
+    }, phone);
+    if (!started.ok) return started;
+    for (let i = 0; i < 60 && !started.session && !link(); i += 1) await page.waitForTimeout(100);
+    const ok = started.session || await page.evaluate(async (url) => (await window.AdoleAPI.auth.completePhoneLogin(url))?.ok === true, link());
+    return { ok, phone, username: phone };
+};
 
 const cleanupProjects = async (page, projects) => page.evaluate(async (items) => {
     const deleted = [];
@@ -78,9 +76,20 @@ const cleanupProjects = async (page, projects) => page.evaluate(async (items) =>
 
 const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => {
     const context = await browser.newContext({ viewport: { width: 1320, height: 860 } });
+    // The app reaches the test server it was served by (an isolated one, tests/parcours/serveur_isole.mjs), as the
+    // R-108 session does (r108_web_session.mjs).
+    const appUrl = new URL(APP_URL);
+    await context.route('**/server_config.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ fastify: {
+        host: appUrl.hostname, port: Number(appUrl.port || 80), serverInfoPath: '/api/server-info', syncWsPath: '/ws/sync', apiWsPath: '/ws/api' } }) }));
+    await context.addInitScript(() => { window.__SQUIRREL_FORCE_FASTIFY__ = true; });
     const page = await context.newPage();
     const userLabel = `user_${userIndex}`;
     attachPageDiagnostics(page, report, userLabel);
+    let developmentLink = '';
+    page.on('websocket', (ws) => ws.on('framereceived', (frame) => {
+        const match = String(frame.payload).match(/"developmentLink":"([^"]+)"/);
+        if (match) developmentLink = match[1];
+    }));
     const userReport = { label: userLabel, projects: [] };
     try {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -88,13 +97,14 @@ const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => 
             ok: !!window.AdoleAPI && window.__authCheckComplete === true
         }), 45000, 100);
         if (!ready.ok) throw new Error(`api_not_ready:${JSON.stringify(ready.last)}`);
-        const login = await loginOrCreateUser(page, prefix, userIndex);
+        const login = await loginOrCreateUser(page, () => developmentLink, userIndex);
         if (!login?.ok) throw new Error(`login_or_create_failed:${JSON.stringify(login)}`);
         userReport.login = { phone: login.phone, username: login.username };
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+        // Signed in, the app installs its mutation pipeline after the auth check (r108_web_session.mjs waits the same).
         const boot = await waitFor(page, () => ({
-            ok: !!window.AdoleAPI && window.__authCheckComplete === true
-        }), 45000, 100);
+            ok: !!window.AdoleAPI && window.__authCheckComplete === true && typeof window.Atome?.commitBatch === 'function'
+        }), 120000, 100);
         if (!boot.ok) throw new Error(`post_login_boot_failed:${JSON.stringify(boot.last)}`);
         for (let projectIndex = 0; projectIndex < PROJECTS_PER_USER; projectIndex += 1) {
             const project = await ensureProject(page, `${prefix} ${userLabel} project ${projectIndex + 1}`);

@@ -17,11 +17,12 @@ fn utf16_len(text: &str) -> usize {
 }
 
 // `Number.isFinite(Date.parse(text))` for the ISO forms a client writes.
-fn parses_as_date(text: &str) -> bool {
-    chrono::DateTime::parse_from_rfc3339(text).is_ok()
-        || chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S%.f").is_ok()
-        || chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M").is_ok()
-        || chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
+pub(crate) fn parses_as_date(text: &str) -> bool {
+    use atome_js_values::dates;
+    dates::rfc3339(text).is_some()
+        || dates::naive(text, "%Y-%m-%dT%H:%M:%S%.f").is_some()
+        || dates::naive(text, "%Y-%m-%dT%H:%M").is_some()
+        || dates::date(text, "%Y-%m-%d").is_some()
 }
 
 // `normalizeOwnNotification`: a calendar or system notice, from and to its author.

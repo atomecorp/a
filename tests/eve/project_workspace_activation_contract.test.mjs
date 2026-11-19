@@ -3,16 +3,15 @@ import { JSDOM } from 'jsdom';
 import { test, vi } from 'vitest';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
-import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
-import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
-import {
-    clearAllProjectScenes,
-    getProjectSceneState,
-    renderProjectScene
-} from '../../eVe/domains/rendering/project_scene_runtime.js';
-import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
+// Loaded ahead, like the view surface below: the runtimes the activation reaches are transformed outside its budget.
+import '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
+import '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
 import { contactSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js';
+// The activation imports the structured-view surface lazily: loaded here, its first transform (seconds on a loaded
+// host) is not counted in the activation's own time budget.
+import '../../eVe/domains/rendering/project_view_surface_runtime.js';
 
 const previewRuntime = vi.hoisted(() => ({
     warmProjectPreviewCapture: vi.fn(async () => ({ ok: true }))
@@ -266,6 +265,8 @@ test('Project workspace activation restores the project surface and main menu', 
             force: true,
             staleFirst: true,
             forceProjectSurface: true,
+            // A project left in its free canvas takes the canvas at once (R-204): nothing held.
+            holdForeground: false,
             viewModePrepared: true,
             reason: 'workspace_activation'
         }
@@ -499,6 +500,8 @@ test('Project workspace activation from dashboard claims the project surface ins
             force: true,
             staleFirst: true,
             forceProjectSurface: true,
+            // A project left in its free canvas takes the canvas at once (R-204): nothing held.
+            holdForeground: false,
             viewModePrepared: true,
             reason: 'workspace_activation'
         }

@@ -197,6 +197,41 @@ réponses s'inscrivent en §8.
 - **D-S3 (29 oct.)** **IN secondaire** : en plus de l'IN de tête (indispensable), un module **IN** s'insère n'importe où
   dans une chaîne et y **mélange** une autre source (micro, tranche, instrument). Intégration visuelle : maquette S5.
 
+## 8bis. Décisions du 16 nov. 2026 (challenge des briques du synthé, R-186 ; toi : « Oui, tout »)
+
+- **Q1 — Un seul moteur de voix** : une chaîne de voix générique (VoiceGraph, Rust) préparée une fois et instanciée
+  N fois sans allocation ; le Sampler, l'oscillateur et le bruit en sont des sources. Le Sampler garde zones et
+  streaming, sa voix figée (`atome-instrument/src/voice.rs` : segment → ADSR VCA) passe dans ce moteur.
+- **Q2 — Lot 1** : oscillateur complet (largeur d'impulsion, sync, FM, unisson désaccordé), bruit blanc/rose, ADSR
+  source (courbes), LFO (formes, sync tempo), vélocité/note/molette, SVF (passe-bas/haut/bande, résonance), VCA,
+  constante/échelle/mélange/multiplication. Wavetable et granulaire ensuite.
+- **Q3 — Taux de modulation** : à la trame pour hauteur/FM de l'oscillateur, coupure du SVF, VCA ; le reste toutes
+  les 32 trames.
+- **Q4 — Premier instrument** : préréglage « Analogique » (2 oscillateurs, filtre, 2 enveloppes, LFO) dans
+  Capture › Instruments.
+- **Q5 — Web en direct** : l'AudioWorklet (chemin direct Web) fait partie de ce chantier.
+- **Q6 — Maquettes** : M1 instrument déplié, M2 oscillateur ouvert, M3 LFO branché sur un réglage, M4 SVF modulé,
+  M5 Capture › Instruments ; sur le gabarit validé de la console (R-171/R-183 : panneau soudé, sans ✕).
+- **M1 (16 nov.) — variante B** : l'IN d'un instrument s'ouvre en panneau soudé (sources / mise en forme /
+  modulateurs en rangées, + pour ajouter, une brique touchée ouvre son réglage dans le même panneau) ; la variante
+  A (colonne + liseré, S1 du 29 oct.) est abandonnée. Maquettes `temp/synth_2026-11-16/mockups/`.
+- **Rack à la Drambo (16 nov., proposition)** : demande « inspire-toi de Drambo ». Drambo : modules en rack de gauche
+  à droite dans l'ordre du signal, + → navigateur par familles, module déposé dans un trou branché automatiquement aux
+  modules d'avant selon le type, réglage modulable touché → mode connexion (sources possibles affichées) → molette de
+  profondeur posée à côté de la cible ; pas de retour instantané. Transposé (maquettes D1–D5, P2) : chaîne de modules
+  sur une rangée lue de gauche à droite, toujours en vue dans le panneau de l'IN ; liste des modules par familles sous
+  la chaîne (comme le + des effets) ; dépôt = case qui s'ouvre (R2) + branchement automatique ; réglage tenu = mode
+  connexion (glyphes allumés) ; profondeur = outil-curseur posé après la cible ; « Entrée » du module = même mode
+  pour la source du son ; pas de câbles. **Validé le 16 nov. (« Oui, code tout »)**.
+- **Code (16 nov.)** — fait : [x] noyau JS (`kernel/synth_schema.js`, `synth_rack.js`, `synth_presets.js`) ; [x] commandes
+  `audio_fx.synth_*` + `instrument_create { synth }` ; [x] rack de la console à l'IN (D1–D5 : chaîne, + et familles,
+  module touché/porté-déposé, réglages, Entrée/FM, mode connexion, profondeur, plage balayée ; P2 = même panneau relayé
+  en moins de colonnes) ; [x] M5 « Nouveau » à l'IN, sources par appui long ; [x] tuile Analogique de Capture ›
+  Instruments. [x] commande `brick_param` (valeur entendue pendant le geste) et événement `tempo` ; [x] VCA niveau × gain ; [x] briques
+  en plus (impulsion+largeur, sync, unisson, AD/courbes, 24 dB, drive, hasard, pression, pente, LFO
+  scie/hasard/tempo/retard), tests `atome-instrument/tests/synth_bricks.rs`. [x] WASM Web reconstruit (16 nov., 18:36) ; [x] jeu en direct mesuré sur le Web
+  (`temp/synth_2026-11-16/probes/listen_web.probe.mjs` 10/10).
+
 ## 9. Maquettes (`temp/synth/mockups/`, générateur `gen_s1.mjs` sur le prélude des maquettes effets)
 
 - **S1** instrument dans sa tranche — `s1a_instrument_replie.png`, `s1b_instrument_deplie.png`. Retouchée le 29 oct.

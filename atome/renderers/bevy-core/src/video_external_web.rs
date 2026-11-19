@@ -36,8 +36,13 @@ use std::any::TypeId;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
+    media_fx::{
+        image_draw::{MediaFxClock, MediaFxLutPlaceholder, resolve_lut},
+        lut::AtomeLutLibrary,
+        media_fx_shader_source, media_fx_uniform_bytes,
+    },
     types::{AtomeColorFilters, AtomeTransition},
-    video_external_texture::AtomeVideoExternalTexture,
+    video_external_texture::{AtomeVideoExternalTexture, AtomeVideoFxFrame},
 };
 
 const VIDEO_EXTERNAL_SHADER: &str = include_str!("../assets/shaders/video_external.wgsl");
@@ -66,6 +71,7 @@ struct VideoExternalTexturePipeline {
 struct PreparedVideoExternalTextureBindGroup {
     _external_texture: wgpu::ExternalTexture,
     _opacity_buffer: Buffer,
+    _fx_buffer: Buffer,
     bind_group: BindGroup,
 }
 
@@ -112,7 +118,10 @@ fn video_params_bytes(
 pub fn build_web_external_texture_renderer(app: &mut App) {
     let shader = {
         let mut shaders = app.world_mut().resource_mut::<Assets<Shader>>();
-        shaders.add(Shader::from_wgsl(VIDEO_EXTERNAL_SHADER, file!()))
+        shaders.add(Shader::from_wgsl(
+            media_fx_shader_source(VIDEO_EXTERNAL_SHADER),
+            file!(),
+        ))
     };
     let mask_fallback = {
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
@@ -189,6 +198,27 @@ fn init_video_external_texture_pipeline(
                 binding: 4,
                 visibility: ShaderStages::FRAGMENT,
                 ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+            // The media effects of the video's strip (media_fx_stack.wgsl) and their LUT.
+            BindGroupLayoutEntry {
+                binding: 5,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 6,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: true },
+                    view_dimension: TextureViewDimension::D3,
+                    multisampled: false,
+                },
                 count: None,
             },
         ],
@@ -273,15 +303,21 @@ fn prepare_video_external_texture_bind_groups(
     pipeline_cache: Res<PipelineCache>,
     gpu_images: Res<RenderAssets<GpuImage>>,
     mask_fallback: Res<VideoExternalMaskFallback>,
+    lut_placeholder: Res<MediaFxLutPlaceholder>,
+    luts: Res<AtomeLutLibrary>,
+    clock: Res<MediaFxClock>,
     mut prepared: ResMut<PreparedVideoExternalTextureBindGroups>,
-    videos: Query<(&MainEntity, &AtomeVideoExternalTexture)>,
+    videos: Query<(&MainEntity, &AtomeVideoExternalTexture, &AtomeVideoFxFrame)>,
 ) {
     prepared.0.clear();
-    // Binding 3 is mandatory and may still be uploading on the first frame.
-    let Some(fallback_image) = gpu_images.get(&mask_fallback.0) else {
+    // Bindings 3 and 6 are mandatory and may still be uploading on the first frame.
+    let (Some(fallback_image), Some(lut_placeholder)) = (
+        gpu_images.get(&mask_fallback.0),
+        gpu_images.get(&lut_placeholder.0),
+    ) else {
         return;
     };
-    for (main_entity, video) in &videos {
+    for (main_entity, video, frame) in &videos {
         let Some(source) = hidden_video_source_for_id(&video.id) else {
             continue;
         };
@@ -308,6 +344,21 @@ fn prepare_video_external_texture_bind_groups(
         let opacity_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("atome_video_external_texture_params"),
             contents: &params_uniform,
+            usage: BufferUsages::UNIFORM,
+        });
+        let (lut_view, lut) = match frame.fx.as_ref() {
+            Some((stack, _)) => resolve_lut(stack, &luts, &gpu_images, lut_placeholder),
+            None => (&lut_placeholder.texture_view, None),
+        };
+        let fx_bytes = match frame.fx.as_ref() {
+            Some((stack, size)) => {
+                media_fx_uniform_bytes(Some(stack), *size, video.uv_rect, clock.0, lut)
+            }
+            None => media_fx_uniform_bytes(None, [1.0, 1.0], video.uv_rect, clock.0, None),
+        };
+        let fx_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("atome_video_media_fx_params"),
+            contents: &fx_bytes,
             usage: BufferUsages::UNIFORM,
         });
         // Both masked and unmasked videos use the same bindings.
@@ -340,6 +391,14 @@ fn prepare_video_external_texture_bind_groups(
                     binding: 4,
                     resource: BindingResource::Sampler(&pipeline.sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: fx_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: BindingResource::TextureView(lut_view),
+                },
             ],
         );
         prepared.0.insert(
@@ -347,6 +406,7 @@ fn prepare_video_external_texture_bind_groups(
             PreparedVideoExternalTextureBindGroup {
                 _external_texture: external_texture,
                 _opacity_buffer: opacity_buffer,
+                _fx_buffer: fx_buffer,
                 bind_group,
             },
         );

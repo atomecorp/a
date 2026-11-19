@@ -3,14 +3,8 @@ import { createWebSocketAdapter } from '../adole.js';
 import { mergeGuestProfileProperties, personalProfileFromProperties } from '../../../../shared/profile_sharing.js';
 import { getSessionState, getGuestWorkspace, setGuestWorkspace } from './session.js';
 import { adapters, getPrimaryBackend } from './auth_core.js';
+import { bytesToBase64 } from '../../../shared/scalars.js';
 import { completeBrowserGuestAdoption, guestAdoptionPayload, listGuestFiles } from './guest_workspace_store.js';
-
-const bytesToBase64 = (bytes) => {
-    let value = '';
-    const view = new Uint8Array(bytes);
-    for (let offset = 0; offset < view.length; offset += 0x8000) value += String.fromCharCode(...view.subarray(offset, offset + 0x8000));
-    return globalThis.btoa(value);
-};
 
 const adoptRemoteGuestPayload = async (adapter, fromUserId, toUserId, payload, files, resolvedOperationId) => {
     const json = JSON.stringify(payload);

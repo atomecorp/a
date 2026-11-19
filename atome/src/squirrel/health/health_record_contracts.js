@@ -18,7 +18,7 @@ const command = (action, persistent, description, input, required = []) => Objec
 export const HEALTH_RECORD_KIND_NAMES = Object.freeze(['identity', 'history', 'allergy', 'vaccination', 'consultation', 'exam', 'prescription', 'follow_up', 'document']);
 export const HEALTH_RECORD_SCREENS = Object.freeze(['rubric', 'identity', 'allergies', 'treatments', 'consultations', 'exams', 'prescriptions', 'follow_ups',
     'results', 'documents', 'entry', 'share', 'import', 'verify', 'csv', 'supplements', 'supplement', 'intakes', 'catalogue', 'protocol', 'alerts',
-    'templates', 'template', 'template_send', 'medications', 'medication', 'medicine_catalogue', 'history']);
+    'templates', 'template', 'template_send', 'medications', 'medication', 'medicine_catalogue', 'history', 'treatment', 'treatment_line']);
 const fields = { type: 'object', additionalProperties: false, properties: Object.fromEntries([
     ...['title', 'date', 'sampled', 'received', 'professional', 'notes', 'birth_date', 'blood_group', 'sex', 'physician', 'reaction'].map(key => [key, { type: 'string', maxLength: 4000 }]),
     ['source', { type: 'string', enum: ['declared', 'professional', 'document'] }], ['state', { type: 'string', maxLength: 24 }],
@@ -27,8 +27,8 @@ const fields = { type: 'object', additionalProperties: false, properties: Object
 export const HEALTH_RECORD_COMMANDS = Object.freeze([
     command('open', false, 'Show a screen of the Health record to the person in the app (the record\'s rubric, a rubric\'s entries, an entry, share, results, supplements, medicines and their intakes and history, protocols, templates).',
         { screen: { type: 'string', enum: HEALTH_RECORD_SCREENS }, person_id: person, entry_id: id, kind: { type: 'string', enum: HEALTH_RECORD_KIND_NAMES },
-            report_id: id, proposal_id: id, product_id: id, template_id: id,
-            item_kind: { type: 'string', enum: ['supplement', 'medication'], description: 'Prises and Historique: the supplements\' or the medicines\'.' } }, ['screen']),
+            report_id: id, proposal_id: id, product_id: id, template_id: id, treatment_id: id,
+            item_kind: { type: 'string', enum: ['supplement', 'medication', 'cosmetic', 'activity', 'nutrition'], description: 'Prises and Historique: the supplements\' or the medicines\'; a treatment\'s new line: its kind.' } }, ['screen']),
     command('close', false, 'Close the Health record screen shown.', {}),
     command('entries', false, 'List the entries of one rubric of a person\'s record (newest first).', { person_id: person, kind: { type: 'string', enum: HEALTH_RECORD_KIND_NAMES } }),
     command('entry_save', true, 'Add an entry, or a new version of one (the previous version is kept): its fields as the person typed them; a field left out is « non renseigné ».',

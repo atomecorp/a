@@ -59,3 +59,7 @@ assert.equal(after.scene.byId.has('delete_refresh_a'), false, 'deleted atome sho
 assert.equal(after.scene.byId.has('delete_refresh_b'), true, 'unrelated atome should remain in the render scene');
 
 clearProjectScene('project_delete_refresh');
+
+console.log('project_scene_delete_refresh.probe: PASS');
+// The imported runtime keeps its app-lifetime timers (audio core interval, WebSocket reconnect) alive.
+process.exit(0);

@@ -1,7 +1,7 @@
 // The server's own routes, answered as Fastify answers them: its versions and
 // health (server/http_status_routes.js, server/http_server_hooks.js `/__whoami`,
 // `/healthz`), its identity and the signed challenge (server/auth_routes_server.js,
-// server_identity.rs), the iOS app association and the phone-link page, the central
+// server_identity.rs), the iOS app association, the phone-link page and the domain links, the central
 // database's status, and `server_config.json` (server/http_dev_routes.js).
 use crate::http::cors::{self, CorsPolicy};
 use crate::http::fastify_reply;
@@ -69,9 +69,20 @@ enum Route {
     VerifyPreflight,
     AppAssociation,
     AuthLink,
+    DomainLink(&'static str),
     DbStatus,
     DbStats,
     ServerConfig,
+}
+
+// A domain link (R-192, eVe/domains/dashboard/dashboard_domain.js) opens the Web app on that domain: a browser keeps the
+// link's fragment (an invitation's `#invite=`) across this redirect. The iOS app takes the link itself (the association).
+fn domain_link(location: &'static str) -> Response {
+    let mut response = StatusCode::FOUND.into_response();
+    let headers = response.headers_mut();
+    headers.insert(header::LOCATION, HeaderValue::from_static(location));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 fn route(method: &Method, path: &str) -> Option<Route> {
@@ -86,6 +97,8 @@ fn route(method: &Method, path: &str) -> Option<Route> {
         "/api/server/verify" if method == Method::POST => Route::Verify,
         "/api/server/verify" if method == Method::OPTIONS => Route::VerifyPreflight,
         "/.well-known/apple-app-site-association" if read => Route::AppAssociation,
+        "/eve" if read => Route::DomainLink("/?domain=eve"),
+        "/music" if read => Route::DomainLink("/?domain=music"),
         "/api/db/status" if read => Route::DbStatus,
         "/api/db/stats" if read => Route::DbStats,
         "/server_config.json" if read => Route::ServerConfig,
@@ -420,7 +433,7 @@ impl Status {
                 let mut response = fastify_reply::json(
                     StatusCode::OK,
                     &json!({ "applinks": { "apps": [], "details": [
-                        { "appID": "2W25PVZ57F.one.atome.app", "paths": ["/auth/v/*"] }] } }),
+                        { "appID": "2W25PVZ57F.one.atome.app", "paths": ["/auth/v/*", "/eve", "/music"] }] } }),
                 );
                 response.headers_mut().insert(
                     header::CACHE_CONTROL,
@@ -429,6 +442,7 @@ impl Status {
                 response
             }
             Route::AuthLink => self.auth_link(request.uri()).await,
+            Route::DomainLink(location) => domain_link(location),
             Route::DbStatus => {
                 let (status, body) = self.db_status().await;
                 fastify_reply::json(status, &body)

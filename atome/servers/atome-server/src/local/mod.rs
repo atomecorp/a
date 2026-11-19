@@ -60,7 +60,6 @@ macro_rules! eprintln {
     };
 }
 
-mod local_ai_proxy;
 pub mod local_atome;
 mod local_atome_extended;
 #[cfg(test)]
@@ -74,11 +73,15 @@ mod local_atome_sync_bootstrap;
 mod local_atome_sync_commands;
 mod local_atome_sync_media;
 mod local_atome_sync_progress;
+#[cfg(test)]
+mod local_atome_sync_restart_tests;
 mod local_atome_sync_worker;
 mod local_atome_ws_subscriptions;
 mod local_atome_ws_sync;
 #[cfg(test)]
 mod local_atome_ws_sync_health_tests;
+#[cfg(test)]
+mod local_atome_ws_sync_replay_tests;
 pub mod local_auth;
 mod local_byte_ranges;
 mod local_file_transfer;
@@ -94,7 +97,6 @@ pub mod local_vault;
 mod local_ws_file;
 mod local_ws_sync_socket;
 mod static_asset_cache;
-use local_ai_proxy::*;
 use local_byte_ranges::*;
 use local_files::*;
 pub use local_paths::*;

@@ -44,7 +44,8 @@ test('Malformed voice tool arguments return a refusal without execution and perm
         } });
     const voice = await session.createVoiceTools({ signal: new AbortController().signal,
         deliver: async outputs => deliveries.push(outputs) });
-    const draw = voice.tools.find(tool => tool.name !== 'atome_tool_search');
+    // The voice session's own tools (search, the spoken confirmation of rule 22) come first; the drawing tool is the runtime one.
+    const draw = voice.tools.find(tool => !['atome_tool_search', 'atome_confirm'].includes(tool.name));
     for (const name of ['atome_tool_search', draw.name]) {
         await voice.execute({ name, call_id: `bad-${name}`, arguments: '{"input":"unfinished' });
         expect(session.snapshot()).toMatchObject({ phase: 'idle', error: '' });

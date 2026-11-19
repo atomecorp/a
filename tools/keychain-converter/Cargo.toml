@@ -22,7 +22,7 @@ path = "../../tests/keychain_converter/main.rs"
 [dependencies]
 argon2 = "0.5"
 base64.workspace = true
-chrono = { version = "0.4", default-features = false, features = ["std"] }
+atome-js-values = { path = "../../atome/engines/js-values" }
 percent-encoding = "2"
 ring = "0.17"
 serde.workspace = true

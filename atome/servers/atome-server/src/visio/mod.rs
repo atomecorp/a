@@ -99,6 +99,10 @@ pub async fn answer(
     if SIGNALING.contains(&action) {
         return visio.signal(&caller, action, &input).await;
     }
+    // A CB channel's room is the channel's (lot L3): no call is made, planned or rung in it.
+    if signaling::field(&input, &["room_id", "roomId"]).is_some_and(|room| state::cb_room(&room)) {
+        return Err("Access denied".into());
+    }
     input["deviceKey"] = json!(caller.device_key);
     visio.command(&caller.user, action, &input).await
 }
@@ -121,6 +125,73 @@ pub async fn closed(live: u64) {
     if let Some((room_id, (user, frames))) = left {
         state::send(frames).await;
         visio.peer_left(&room_id, &user).await;
+    }
+}
+
+/// The floor of a CB channel ended for `principal` (released, left, expired; social/cb/channel_actions.rs): the SFU pauses
+/// their microphone at once, whatever their device does, and the room hears it.
+pub async fn cb_floor_lost(room_id: &str, principal: &str) {
+    let Ok(visio) = running() else {
+        return;
+    };
+    let producers: Vec<(String, mediasoup::prelude::Producer, String)> = {
+        let state = visio.state();
+        state
+            .rooms
+            .get(room_id)
+            .filter(|room| room.cb)
+            .map(|room| {
+                room.peers
+                    .values()
+                    .filter(|peer| peer.user == principal)
+                    .flat_map(|peer| {
+                        peer.producers.iter().map(|(id, produced)| {
+                            (peer.id.clone(), produced.producer.clone(), id.clone())
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    for (peer_id, producer, id) in producers {
+        if producer.paused() || producer.pause().await.is_err() {
+            continue;
+        }
+        let shown = peer_id.clone();
+        let data = serde_json::json!({ "type": "producerPaused", "producer_id": id, "kind": producer.kind(),
+            "peer_user_id": shown });
+        let frames = visio.state().notify_room(room_id, &data, Some(&peer_id));
+        state::send(frames).await;
+    }
+}
+
+/// `principal` left the CB channel of `room_id`: their peer leaves its room (no entry outlives the channel's membership).
+pub async fn cb_evict(room_id: &str, principal: &str) {
+    let Ok(visio) = running() else {
+        return;
+    };
+    let left = {
+        let mut state = visio.state();
+        let peer = state
+            .rooms
+            .get(room_id)
+            .filter(|room| room.cb)
+            .and_then(|room| room.peers.values().find(|peer| peer.user == principal))
+            .map(|peer| (peer.id.clone(), peer.serial));
+        let Some((peer_id, serial)) = peer else {
+            return;
+        };
+        for seat in state.seats.values_mut() {
+            if seat.room_id.as_deref() == Some(room_id) && seat.peer_id.as_deref() == Some(&peer_id)
+            {
+                seat.room_id = None;
+                seat.peer_id = None;
+            }
+        }
+        state.close_peer(room_id, &peer_id, serial)
+    };
+    if let Some((_, frames)) = left {
+        state::send(frames).await;
     }
 }
 

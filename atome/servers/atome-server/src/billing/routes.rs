@@ -12,12 +12,13 @@ use serde_json::{Value as JsonValue, json};
 
 const APPLE: &str = "/api/billing/apple/notifications";
 const GOOGLE: &str = "/api/billing/google/rtdn";
+const STRIPE: &str = "/api/billing/stripe/webhook";
 // The routes' own `bodyLimit`.
 const BODY_LIMIT: usize = 256 * 1024;
 const RETRYABLE: [&str; 2] = ["billing_store_unavailable", "billing_store_unconfigured"];
 
 pub fn claims(request: &Request) -> bool {
-    request.method() == Method::POST && [APPLE, GOOGLE].contains(&request.uri().path())
+    request.method() == Method::POST && [APPLE, GOOGLE, STRIPE].contains(&request.uri().path())
 }
 
 pub async fn answer(billing: &Billing, request: Request) -> Response {
@@ -31,6 +32,30 @@ pub async fn answer(billing: &Billing, request: Request) -> Response {
             "Request body is too large",
         ));
     };
+    if parts.uri.path() == STRIPE {
+        // Stripe signs the raw bytes: they are checked before being read.
+        let signature = parts
+            .headers
+            .get("stripe-signature")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        let (status, reply) = match billing.stripe_event(signature, &bytes).await {
+            Ok(handled) => (StatusCode::OK, json!({ "ok": true, "handled": handled })),
+            Err(error) => {
+                let code = if error.starts_with("money_") {
+                    error.as_str()
+                } else {
+                    "billing_notification_failed"
+                };
+                eprintln!("[billing] stripe event refused {}", json!({ "code": code }));
+                (
+                    StatusCode::BAD_REQUEST,
+                    json!({ "ok": false, "error": code }),
+                )
+            }
+        };
+        return fastify_reply::json(status, &reply);
+    }
     let content_type = parts
         .headers
         .get(header::CONTENT_TYPE)

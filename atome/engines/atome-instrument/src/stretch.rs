@@ -8,8 +8,13 @@
 // Its latency is never heard: the sample is known ahead, so at the note the
 // stretcher is primed — fed the opening, its output latency rendered and
 // dropped — and the first output frame is the segment's first frame.
+// The stretcher is Signalsmith's, ported to Rust (stretch/engine.rs, stretch/stft.rs), so it runs on every
+// platform, the Web's wasm32 included.
 
-use signalsmith_stretch::Stretch;
+mod engine;
+mod stft;
+
+use engine::Stretcher;
 
 // The live window: 2048 frames, hop 512.
 const WINDOW: usize = 2048;
@@ -22,26 +27,19 @@ pub const LOWEST_RATIO: f32 = 1.0 / 16.0;
 pub const HIGHEST_RATIO: f32 = 16.0;
 
 pub struct VoiceStretch {
-    inner: Stretch,
+    inner: Stretcher,
     input_latency: usize,
     output_latency: usize,
-    interleaved_in: Vec<f32>,
-    interleaved_out: Vec<f32>,
+    capacity: usize,
+    dropped_left: Vec<f32>,
+    dropped_right: Vec<f32>,
     pending: f64,
 }
-
-// SAFETY: `Stretch` is `Send`; nothing reachable through `&VoiceStretch` touches
-// it (the latencies are copied at construction), so shared references are inert.
-#[allow(
-    unsafe_code,
-    reason = "a shared VoiceStretch exposes nothing of its stretcher"
-)]
-unsafe impl Sync for VoiceStretch {}
 
 impl VoiceStretch {
     // Off the audio thread: the stretcher and every buffer it will use.
     pub fn new(max_block: usize) -> Self {
-        let inner = Stretch::new(2, WINDOW, HOP);
+        let inner = Stretcher::new(WINDOW, HOP);
         let input_latency = inner.input_latency();
         let output_latency = inner.output_latency();
         let most_input = (max_block as f32 / LOWEST_RATIO) as usize + 2;
@@ -50,15 +48,16 @@ impl VoiceStretch {
             inner,
             input_latency,
             output_latency,
-            interleaved_in: vec![0.0; most_input.max(priming) * 2],
-            interleaved_out: vec![0.0; max_block.max(output_latency) * 2],
+            capacity: most_input.max(priming),
+            dropped_left: vec![0.0; output_latency],
+            dropped_right: vec![0.0; output_latency],
             pending: 0.0,
         }
     }
 
     // Source frames the voice's input buffers must hold (a block, or the priming).
     pub fn input_capacity(&self) -> usize {
-        self.interleaved_in.len() / 2
+        self.capacity
     }
 
     // The stretcher's factor for a segment's `duration` read at `speed` × its rate.
@@ -87,41 +86,20 @@ impl VoiceStretch {
     pub fn prime(&mut self, opening: (&[f32], &[f32]), ahead: (&[f32], &[f32]), factor: f32) {
         self.inner.reset();
         self.pending = 0.0;
-        let opened = interleave(opening, &mut self.interleaved_in);
-        self.inner
-            .seek(&self.interleaved_in[..opened], 1.0 / factor as f64);
-        let fed = interleave(ahead, &mut self.interleaved_in);
-        let dropped = self.output_latency * 2;
+        self.inner.seek([opening.0, opening.1], 1.0 / factor as f64);
         self.inner.process(
-            &self.interleaved_in[..fed],
-            &mut self.interleaved_out[..dropped],
+            [ahead.0, ahead.1],
+            [&mut self.dropped_left, &mut self.dropped_right],
         );
     }
 
     // Stretches planar `input` into planar `left`/`right` (overwritten).
     pub fn process(&mut self, input: (&[f32], &[f32]), left: &mut [f32], right: &mut [f32]) {
-        let fed = interleave(input, &mut self.interleaved_in);
-        let frames = left.len();
-        self.inner.process(
-            &self.interleaved_in[..fed],
-            &mut self.interleaved_out[..frames * 2],
-        );
-        for (index, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
-            *l = self.interleaved_out[index * 2];
-            *r = self.interleaved_out[index * 2 + 1];
-        }
+        self.inner.process([input.0, input.1], [left, right]);
     }
 
     // Output frames still ringing once the input has ended.
     pub fn tail_frames(&self) -> usize {
         self.output_latency
     }
-}
-
-fn interleave((left, right): (&[f32], &[f32]), out: &mut [f32]) -> usize {
-    for (index, (l, r)) in left.iter().zip(right.iter()).enumerate() {
-        out[index * 2] = *l;
-        out[index * 2 + 1] = *r;
-    }
-    left.len() * 2
 }

@@ -10,7 +10,7 @@ import WebKit
 import AVFoundation
 import OSLog
 
-public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, TransportDataDelegate {
+public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol {
     var audioUnit: AUAudioUnit?
     var webView: WKWebView!
     
@@ -133,7 +133,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     if let au = audioUnit as? auv3Utils {
             au.mute = false  // CORRECTION: Démarrer NON muté pour entendre l'audio
             _isMuted = false
-            au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
             print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
         }
 
@@ -252,17 +251,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         return UInt8(max(0, min(127, Int(round(noteNumber)))))
     }
 
-    // MARK: - Transport Data Delegate
-    
-    public func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
-        // Send transport data to WebView via WebViewManager
-        WebViewManager.sendTransportDataToJS(
-            isPlaying: isPlaying,
-            playheadPosition: playheadPosition,
-            sampleRate: sampleRate
-        )
-    }
-    
     // MARK: - Utility Methods
     
     func getHostSampleRate() -> Double? {

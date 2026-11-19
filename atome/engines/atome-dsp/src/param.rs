@@ -10,6 +10,14 @@ pub enum Unit {
     Ratio,
     Pan,
     Plain,
+    // One of a series (a character, a space, a shape): the value is the index
+    // into `choices`, whose keys name each option for the UI and the MCP.
+    Choice,
+    // Semitones (pitch, formant) and degrees (an angle, a phase).
+    Semitones,
+    Degrees,
+    // A whole number (bands, bits, a MIDI note, a tempo): set one by one.
+    Count,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,6 +28,7 @@ pub struct ParamSpec {
     pub max: f32,
     pub default: f32,
     pub unit: Unit,
+    pub choices: &'static [&'static str],
 }
 
 impl ParamSpec {
@@ -38,11 +47,52 @@ impl ParamSpec {
             max,
             default,
             unit,
+            choices: &[],
         }
+    }
+
+    // A choice among `choices` (keys, never shown text), `default` its index.
+    pub const fn choice(
+        id: u32,
+        key: &'static str,
+        choices: &'static [&'static str],
+        default: usize,
+    ) -> Self {
+        Self {
+            id,
+            key,
+            min: 0.0,
+            max: (choices.len() - 1) as f32,
+            default: default as f32,
+            unit: Unit::Choice,
+            choices,
+        }
+    }
+
+    // The option a choice value designates (rounded, clamped).
+    pub fn index(&self, value: f32) -> usize {
+        self.clamp(value).round() as usize
     }
 
     pub fn clamp(&self, value: f32) -> f32 {
         value.clamp(self.min, self.max)
+    }
+
+    // A choice or a whole number moves in steps: it is set, never modulated.
+    pub fn modulatable(&self) -> bool {
+        !matches!(self.unit, Unit::Choice | Unit::Count)
+    }
+
+    // The value a modulation `amount` (Σ depth × control) gives from `base`,
+    // saturated to the range. The amount is in the parameter's own unit, except
+    // a frequency, modulated in octaves (+1 doubles it).
+    #[inline]
+    pub fn modulate(&self, base: f32, amount: f32) -> f32 {
+        let value = match self.unit {
+            Unit::Hertz => base * amount.exp2(),
+            _ => base + amount,
+        };
+        self.clamp(value)
     }
 }
 

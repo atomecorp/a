@@ -5,6 +5,7 @@
 // requests for 30 days. A number without account counts like any other, and every
 // answer leaves after the same floor, so neither tells whether a number has an account.
 use crate::auth::accounts;
+use crate::vault_router::js;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value as JsonValue, json};
 
@@ -23,18 +24,16 @@ const SUSPENSION_MS: i64 = 30 * DAY_MS;
 pub const FLOOR_MS: i64 = 400;
 
 pub fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 // `timeOf`: SQLite's `datetime('now')` (UTC without a zone) or an ISO date.
-fn time_of(text: &str) -> Option<i64> {
-    let text = crate::vault_router::js::trim(text);
-    if let Ok(time) = chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S") {
-        return Some(time.and_utc().timestamp_millis());
+pub(crate) fn time_of(text: &str) -> Option<i64> {
+    let text = js::trim(text);
+    if let Some(time) = js::dates::naive(text, "%Y-%m-%d %H:%M:%S") {
+        return Some(time.millis());
     }
-    chrono::DateTime::parse_from_rfc3339(text)
-        .map(|time| time.timestamp_millis())
-        .ok()
+    js::dates::rfc3339(text).map(|time| time.utc.millis())
 }
 
 fn sql_error(error: rusqlite::Error) -> String {
@@ -42,11 +41,10 @@ fn sql_error(error: rusqlite::Error) -> String {
 }
 
 // Whether a run of BLOCKS blocks received within BLOCK_WINDOW_MS ended less than SUSPENSION_MS ago.
-fn suspended(db: &Connection, sender: &str, at: i64) -> Result<bool, String> {
-    let since = chrono::DateTime::from_timestamp_millis(at - BLOCK_WINDOW_MS - SUSPENSION_MS)
+pub(crate) fn suspended(db: &Connection, sender: &str, at: i64) -> Result<bool, String> {
+    let since = js::dates::Instant::from_millis(at - BLOCK_WINDOW_MS - SUSPENSION_MS)
         .ok_or("guard_time_out_of_range")?
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+        .sql();
     let mut statement = db
         .prepare_cached(
             "SELECT updated_at FROM sync_share_policies

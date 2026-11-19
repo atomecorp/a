@@ -333,7 +333,7 @@ impl Coaches {
         {
             return Ok(None);
         }
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         let (from, until) = (now - DAY_MS, now + HORIZON_DAYS * DAY_MS);
         let states = self
             .router
@@ -389,7 +389,7 @@ impl Coaches {
         let (Some(entry), Some(offered)) = (entry, offered) else {
             return Ok(json!({ "ok": false, "error": "coach_not_found" }));
         };
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         let slots = contract::free_slots(
             &offered["coaching"],
             &Span::list(&offered["busy"]),

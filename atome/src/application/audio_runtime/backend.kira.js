@@ -1,4 +1,6 @@
 import {
+  buildNativeClipBytesPayload,
+  buildNativeProbeDurationPayload,
   buildTauriKiraAudioPayload,
   KIRA_AUDIO_COMMANDS,
   normalizeKiraPlayInstancePayload,
@@ -162,9 +164,7 @@ import { loadAudioKernels } from './audio_kernels.js';
             duration_seconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : null
           };
         }
-        // Send as Array for Tauri JSON serialization (Tauri v1 requires this)
-        // TODO: When migrating to Tauri v2, use raw bytes via IPC binary channel
-        return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) });
+        return invoke('audio_load_clip_from_bytes', buildNativeClipBytesPayload(id, bytes));
       })
       .catch(function (e) {
         emitError('fetch+load(' + id + ')', e);
@@ -226,7 +226,7 @@ import { loadAudioKernels } from './audio_kernels.js';
             }
             catch (e) { emitError('wasm load(' + id + ')', e); throw e; }
           }
-          return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) }).catch(function (e) {
+          return invoke('audio_load_clip_from_bytes', buildNativeClipBytesPayload(id, bytes)).catch(function (e) {
             emitError('load_clip_from_bytes(' + id + ')', e);
             throw e;
           });
@@ -235,6 +235,19 @@ import { loadAudioKernels } from './audio_kernels.js';
           return loadClipFromUrl(id, url);
         }
         return false;
+      });
+    },
+
+    // A sound's length read from its container, never decoded nor loaded as a clip (an upload's duration).
+    probe_duration(arg) {
+      var bytes = arg && arg.bytes;
+      return ensureRuntimeMode({ audioManager: false }).then(function () {
+        if (mode === 'wasm') {
+          if (!wasm || typeof wasm.audio_probe_duration !== 'function') throw new Error('audio_wasm_probe_duration_missing');
+          return { success: true, duration_seconds: Number(wasm.audio_probe_duration(bytes)) };
+        }
+        if (mode === 'tauri') return invoke('audio_probe_duration_from_bytes', buildNativeProbeDurationPayload(bytes));
+        throw new Error('audio_probe_duration_runtime_missing');
       });
     },
 
@@ -354,6 +367,16 @@ import { loadAudioKernels } from './audio_kernels.js';
       return invoke('audio_mix_levels', {}).then(function (r) { return (r && r.levels) || []; });
     },
 
+    // The live measurements of the mix's dsp modules: [{ module_id, values }].
+    mix_readings() {
+      if (mode === 'wasm') {
+        return wasm && wasmAudioManagerReady
+          ? Promise.resolve(Array.from(wasm.audio_mix_readings(), function (r) { return { module_id: r.module_id, values: Array.from(r.values) }; }))
+          : Promise.resolve([]);
+      }
+      return invoke('audio_mix_readings', {}).then(function (r) { return (r && r.readings) || []; });
+    },
+
     mix_cut_tail(moduleId) {
       return ensureRuntimeMode({ audioManager: true }).then(function () {
         return mode === 'wasm' ? wasm.audio_mix_cut_tail(moduleId) : invoke('audio_mix_cut_tail', { moduleId: moduleId });
@@ -401,8 +424,28 @@ import { loadAudioKernels } from './audio_kernels.js';
 
     mix_live_push(arg) {
       if (mode !== 'wasm' || !wasm || !wasmAudioManagerReady || !arg) return false;
-      wasm.audio_mix_live_push(String(arg.deviceId || ''), arg.pcm);
+      wasm.audio_mix_live_push(String(arg.deviceId || ''), arg.pcm, Number(arg.startFrame));
       return true;
+    },
+
+    // A take of a strip's REC point on the Web (R-183, audio-wasm record.rs); native engines record it themselves.
+    mix_record_start(arg) {
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        if (mode !== 'wasm') throw new Error('mix_record_web_only');
+        return wasm.audio_mix_record_start(String(arg.stripId), arg.deviceId ? String(arg.deviceId) : undefined);
+      });
+    },
+
+    mix_record_drain(arg) {
+      return Promise.resolve().then(function () { return wasm.audio_mix_record_drain(String(arg.stripId)); });
+    },
+
+    mix_record_stop(arg) {
+      return Promise.resolve().then(function () { return wasm.audio_mix_record_stop(String(arg.stripId)); });
+    },
+
+    mix_record_release(arg) {
+      return Promise.resolve().then(function () { return wasm.audio_mix_record_release(String(arg.stripId)); });
     },
 
     mix_module_state(moduleId) {

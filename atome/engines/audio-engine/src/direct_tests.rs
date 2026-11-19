@@ -93,19 +93,19 @@ fn the_host_input_reaches_the_strip_that_listens_to_it() {
     let frames = BUFFER_FRAMES as usize;
     let silent = vec![0.0f32; frames];
     assert!(
-        !push_host_input(&silent, &silent),
+        !push_host_input(&silent, &silent, 0),
         "nobody listens yet: the dry input stays"
     );
     super::live_input::sync_direct(vec![(device, input)]).expect("listen");
     let mut left = vec![0.0f32; frames];
     left[0] = 0.5;
     assert!(
-        push_host_input(&left, &left),
+        push_host_input(&left, &left, 0),
         "a strip listens: the chain plays the input"
     );
     let mut out = vec![0.0f32; frames * 2];
     render.mix_interleaved(&mut out, 2);
     assert!((out[0] - 0.25).abs() < 1.0e-3, "frame 0 = {}", out[0]);
     super::live_input::sync_direct(Vec::new()).expect("unlisten");
-    assert!(!push_host_input(&silent, &silent));
+    assert!(!push_host_input(&silent, &silent, 0));
 }

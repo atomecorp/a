@@ -58,10 +58,19 @@ pub fn hex(bytes: usize) -> String {
     buffer.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// A loopback `http://` origin (RFC 8252 §7.3), the only plain one a redirect may use: a probe's
+/// fake providers on this machine.
+pub fn loopback(base: &str) -> bool {
+    let host = base
+        .strip_prefix("http://")
+        .map(|rest| rest.split(['/', ':']).next().unwrap_or(""));
+    matches!(host, Some("127.0.0.1" | "localhost"))
+}
+
 /// The redirect a network's application registers, on the operator's public origin.
 pub fn redirect_uri(base: &str, network: &str) -> Done<String> {
     let base = base.trim_end_matches('/');
-    if !base.starts_with("https://") {
+    if !base.starts_with("https://") && !loopback(base) {
         return Err(social("social_not_configured"));
     }
     Ok(format!("{base}/api/social/oauth/callback/{network}"))
@@ -93,6 +102,44 @@ impl OAuth {
         authorize: impl FnOnce(&str, &str) -> String,
         complete: Complete,
     ) -> Done<JsonValue> {
+        let (state, redirect, answer) = self.begin(principal, network, base, complete)?;
+        Ok(Self::told(answer, authorize(&state, &redirect)))
+    }
+
+    /// `start` for a network whose official page is reached only after a call made with the
+    /// attempt's state (atproto's pushed authorization request): a failed call ends the attempt.
+    pub async fn start_pushed(
+        self: &Arc<Self>,
+        principal: &str,
+        network: &str,
+        base: &str,
+        authorize: impl FnOnce(String, String) -> BoxFuture<'static, Result<String, String>>,
+        complete: Complete,
+    ) -> Done<JsonValue> {
+        let (state, redirect, answer) = self.begin(principal, network, base, complete)?;
+        match authorize(state.clone(), redirect).await {
+            Ok(url) => Ok(Self::told(answer, url)),
+            Err(code) => {
+                if let Some(attempt) = self.attempts().remove(&state) {
+                    attempt.settle(failure(&code));
+                }
+                Err(social(&code))
+            }
+        }
+    }
+
+    fn told(mut answer: JsonValue, url: String) -> JsonValue {
+        answer["authorization_url"] = json!(url);
+        answer
+    }
+
+    fn begin(
+        self: &Arc<Self>,
+        principal: &str,
+        network: &str,
+        base: &str,
+        complete: Complete,
+    ) -> Done<(String, String, JsonValue)> {
         let now = now_ms();
         let mut attempts = self.attempts();
         attempts.retain(|_, attempt| {
@@ -130,10 +177,9 @@ impl OAuth {
                 oauth.attempts().remove(&timed);
             }
         });
-        Ok(
-            json!({ "attempt_id": attempt_id, "authorization_url": authorize(&state, &redirect),
-            "expires_at": now + ATTEMPT_TTL_MS }),
-        )
+        let answer = json!({ "attempt_id": attempt_id, "authorization_url": null,
+            "expires_at": now + ATTEMPT_TTL_MS });
+        Ok((state, redirect, answer))
     }
 
     fn find(

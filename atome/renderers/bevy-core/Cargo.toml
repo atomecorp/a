@@ -25,6 +25,9 @@ bevy = { workspace = true, features = [
 serde.workspace = true
 serde_bytes = "0.11"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+# scene3d atomes: the scene a USD file describes, received encoded (the USD reader is its own WASM module,
+# platforms/web/usd-wasm, so openusd stays out of this renderer).
+atome-usd = { path = "../../engines/atome-usd" }
 
 [dev-dependencies]
 # Les tests de RETRAIT verifient la deserialisation : il faut donc un

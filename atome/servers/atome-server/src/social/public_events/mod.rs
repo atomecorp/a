@@ -144,7 +144,7 @@ impl PublicEvents {
         {
             return Ok(());
         }
-        let word = json!({ "status": status, "reason": reason, "at": iso(chrono::Utc::now().timestamp_millis()) });
+        let word = json!({ "status": status, "reason": reason, "at": iso(atome_js_values::dates::now_ms()) });
         let event = json!({ "kind": "set", "atome_id": atome_id,
             "payload": { "props": { "publication_status": word.to_string() } },
             "actor": { "type": "user", "id": owner } });
@@ -199,7 +199,7 @@ impl PublicEvents {
             return self.leave(atome_id).await;
         };
         let event = event_of(atome_id, &properties);
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         let until = now + contract::HORIZON_DAYS * DAY_MS;
         // Whether its start is a date, and its occurrences over the horizon (their dates written by
         // `toISOString`, an end missing as its start).

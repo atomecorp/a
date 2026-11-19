@@ -1,4 +1,5 @@
 use super::*;
+use atome_bevy_renderer_core::media_fx::lut::AtomeLutPatch;
 use atome_bevy_renderer_core::{
     AtomeLayerPatch, AtomeParentPatch, AtomeProjectSpacePatch, AtomeProjectViewPatch,
     AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeResourcePatch, AtomeSceneEffectsPatch,
@@ -46,6 +47,7 @@ enum WebAtomeRenderOp {
     SceneEffects { patch: AtomeSceneEffectsPatch },
     ProjectView { patch: AtomeProjectViewPatch },
     ProjectSpace { patch: AtomeProjectSpacePatch },
+    Lut { patch: AtomeLutPatch },
 }
 
 impl From<WebAtomeRenderOp> for AtomeRenderOp {
@@ -67,6 +69,7 @@ impl From<WebAtomeRenderOp> for AtomeRenderOp {
             WebAtomeRenderOp::SceneEffects { patch } => AtomeRenderOp::SceneEffects(patch),
             WebAtomeRenderOp::ProjectView { patch } => AtomeRenderOp::ProjectView(patch),
             WebAtomeRenderOp::ProjectSpace { patch } => AtomeRenderOp::ProjectSpace(patch),
+            WebAtomeRenderOp::Lut { patch } => AtomeRenderOp::Lut(patch),
         }
     }
 }
@@ -374,4 +377,17 @@ pub(crate) fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {
         *cell.borrow_mut() = WebRendererDiagnostics::default();
         previous
     })
+}
+
+/// Makes an encoded scene (the USD module's `read_usd_scene`, `atome_usd::codec`) the scene of every scene3d node
+/// whose `source` is `source` (bevy-core scene3d/).
+#[wasm_bindgen]
+pub fn register_atome_bevy_scene3d_source(
+    source: String,
+    scene_bytes: &[u8],
+) -> Result<(), JsValue> {
+    atome_bevy_renderer_core::scene3d::register_scene3d_source(source, scene_bytes)
+        .map_err(|error| JsValue::from_str(&error))?;
+    request_web_redraw();
+    Ok(())
 }

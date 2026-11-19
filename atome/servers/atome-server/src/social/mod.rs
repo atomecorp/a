@@ -1,6 +1,7 @@
 // The communication services Fastify kept in the central database
 // (server/notificationStack.js, communication_relations.js, communication_push.js and
 // their neighbours), ported one by one, each on its own connection to that database.
+pub mod cb;
 pub mod coaches;
 pub(crate) mod conditions;
 mod contact_book;
@@ -10,6 +11,7 @@ pub mod directory;
 pub mod live;
 pub mod message_guard;
 mod message_store;
+pub mod moderation;
 pub mod news;
 mod notice;
 pub mod notification_stack;
@@ -53,6 +55,8 @@ pub struct Social {
     pub shop: shop::Shop,
     pub coaches: coaches::Coaches,
     pub surfaces: surfaces::Surfaces,
+    // The CB sociale's `cb` family (cb/): zones, the recording notice, its reports and blocks, the bottles.
+    pub cb: cb::Cb,
     // The devices following the streams (/ws/sync), told each committed event.
     pub sync: Arc<SyncRuntime>,
 }
@@ -85,7 +89,7 @@ impl Social {
             news: news::News::new(
                 Central::open(central)?,
                 router.clone(),
-                storage,
+                storage.clone(),
                 NotificationStack::new(Central::open(central)?),
             ),
             directory: directory::Directory::new(
@@ -118,6 +122,13 @@ impl Social {
                 Central::open(central)?,
                 router.clone(),
                 sync.clone(),
+            ),
+            cb: cb::Cb::new(
+                Central::open(central)?,
+                router.clone(),
+                sync.clone(),
+                storage.clone(),
+                notifier()?,
             ),
             sharing: sharing::Sharing::new(
                 Central::open(central)?,

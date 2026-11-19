@@ -53,11 +53,11 @@ const definitions = {
         { unlocked: { type: 'array', items: brick }, skipped: { type: 'array', items: { type: 'object', properties: {
             rule_id: { type: 'string' }, reason: { type: 'string' } } } }, tier: { type: 'number' } }],
     'objectives.list': [{}, [], false,
-        'List the user\'s own health objectives (projects) with their goal, measurable target and progress counts.',
+        'List the user\'s own objectives (projects: health ones and the creative parcours, `creative` naming what a parcours is made for) with their goal, measurable target and progress counts.',
         { objectives: { type: 'array', items: { type: 'object', properties: { objective_id: { type: 'string' }, name: { type: 'string' },
             goal: { type: 'string' }, catalog_id: { type: 'string' }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA, tier: { type: 'number' },
             aim: { type: ['string', 'null'] }, deadline: { type: ['object', 'null'] }, challenge: { type: ['object', 'null'] }, closed: { type: ['object', 'null'] }, sessions: count,
-            today: { type: 'object' }, exercises: { type: 'array', items: { type: 'string' } } } } } }],
+            today: { type: 'object' }, exercises: { type: 'array', items: { type: 'string' } }, creative: { type: 'string' } } } } }],
     'objective.target.set': [{ objective_id: { type: 'string', minLength: 1, maxLength: 200 }, monitor_id: { type: 'string', minLength: 1, maxLength: 64 },
         comparator: { type: 'string', enum: ['gte', 'lte'] }, value: { type: 'number', minimum: 0 }, sessions_only: { type: 'boolean' } }, ['objective_id'], true,
         'Set or adjust the measurable target of one of the user\'s health objectives: a health monitor (e.g. steps, sleep) with '
@@ -124,6 +124,10 @@ const definitions = {
         'Make one selected health monitor the favourite the eVe Pro home\'s Moniteur tile shows (favorite true; another favourite is '
         + 'replaced, there is only one), or no longer the favourite (false: the tile then shows no monitor).',
         { ids: { type: 'array', items: { type: 'string' } }, favorite: { type: 'string' } }],
+    'monitors.cycle': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, cycle: { type: 'boolean' } }, ['id', 'cycle'], true,
+        'Make one selected health monitor take part (cycle true) or no longer take part (false) in the turn of the eVe Pro home\'s '
+        + 'Moniteur tile, which shows the monitors one after another (« ne fais plus défiler le pouls »). It stays in the Moniteur.',
+        { ids: { type: 'array', items: { type: 'string' } }, still: { type: 'array', items: { type: 'string' } } }],
     'ongoing.open': [{ key: { type: 'string', minLength: 1, maxLength: 200 } }, [], false,
         'Show on the home the activities under way (a Sport exercise, a nap, a meditation, a breathing, a relaxation, running or '
         + 'paused): the one named by key (else the last chosen, else the first) large with its time, a row for each. Writes nothing.',

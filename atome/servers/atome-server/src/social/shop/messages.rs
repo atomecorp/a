@@ -110,7 +110,7 @@ impl Shop {
         let action = opening(user);
         let name = Self::name_of(directory, user).await;
         let properties = json!({ "message_id": message_id, "from_id": user, "from_name": clip(Some(&json!(name)), 80),
-            "to_user_id": target, "timestamp": js::iso(chrono::Utc::now().timestamp_millis()), "subject": subject,
+            "to_user_id": target, "timestamp": js::iso(atome_js_values::dates::now_ms()), "subject": subject,
             "message": body, "atome_ids": [], "kind": "message", "listing_id": row["listing_id"],
             "priority": "normal", "action": action });
         let inbox = js::with(

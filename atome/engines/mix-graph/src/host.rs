@@ -105,6 +105,10 @@ impl MixHost {
         self.graph.levels()
     }
 
+    pub fn readings(&self) -> Vec<crate::ModuleReading> {
+        self.graph.readings()
+    }
+
     pub fn cut_tail(&mut self, module_id: &str) -> Result<(), String> {
         self.graph.cut_tail(module_id)
     }

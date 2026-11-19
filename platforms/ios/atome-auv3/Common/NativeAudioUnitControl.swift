@@ -19,4 +19,6 @@ public protocol NativeAudioUnitControl: AnyObject {
     func stopAudioSlot(_ slotId: String)
     /// Remove all auxiliary audio slots (keeps main slot)
     func clearAuxSlots()
+    /// One MIDI message (1–3 bytes) for the host's MIDI output, sent at the next render quantum.
+    func sendHostMIDIOutput(_ bytes: [UInt8])
 }

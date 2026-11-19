@@ -1,6 +1,5 @@
 use super::local_atome::{LocalAtomeState, WsResponse, handle_events_message};
 use super::local_atome_extended::{can_access, request_id, response};
-use chrono::Utc;
 use serde_json::{Value as JsonValue, json};
 
 pub async fn handle_sync_message(
@@ -149,7 +148,7 @@ pub async fn handle_sync_message(
             for id in &ids {
                 let _ = db.execute(
                     "UPDATE atomes SET sync_status = 'synced', last_sync = ?1 WHERE atome_id = ?2",
-                    rusqlite::params![Utc::now().to_rfc3339(), id.as_str()],
+                    rusqlite::params![atome_js_values::dates::now_rfc3339(), id.as_str()],
                 );
             }
             response(

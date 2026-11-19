@@ -1,9 +1,14 @@
 // The social actions (server/social/social_operations.js, ported): every entry point — eVe
 // panels, runtime tools, MCP — lands here through the person's `/ws/api` provider channel.
 use super::jobs::{self, Hooks, Job, Store};
+use super::linked::Linked;
 use super::net::{Sd, Se};
-use super::sessions::{self, Network, Session};
-use super::{Config, Ctx, Files, Media, facebook, instagram, media, plan, tiktok};
+use super::network::Network;
+use super::sessions::{self, Session};
+use super::{
+    Config, Ctx, Files, Media, facebook, instagram, limits, linkedin, media, plan, reply, tiktok,
+    wording,
+};
 use crate::providers::catalog;
 use crate::providers::credentials::Credentials;
 use crate::providers::generation::now_ms;
@@ -14,8 +19,6 @@ use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-const ASSISTED_OUTCOMES: [&str; 4] = ["handed_off", "exported", "cancelled", "failed"];
-
 /// What one social request works with.
 #[derive(Clone)]
 pub struct Env {
@@ -24,10 +27,11 @@ pub struct Env {
     pub files: Files,
     pub principal: String,
     pub store: Store,
+    pub linked: Arc<Linked>,
 }
 
 /// `String(value || '')`.
-fn field(object: &JsonValue, key: &str) -> String {
+pub(super) fn field(object: &JsonValue, key: &str) -> String {
     let value = object.get(key);
     if js::truthy(value) {
         js::text(value)
@@ -44,12 +48,12 @@ fn truthy_or_null(object: &JsonValue, key: &str) -> JsonValue {
         .unwrap_or(JsonValue::Null)
 }
 
-fn server_route(delivery: &JsonValue) -> bool {
+pub(super) fn server_route(delivery: &JsonValue) -> bool {
     delivery.get("route") == Some(&json!("direct"))
         || delivery.get("transfer") == Some(&json!("provider_inbox"))
 }
 
-fn public_delivery(delivery: &JsonValue) -> JsonValue {
+pub(super) fn public_delivery(delivery: &JsonValue) -> JsonValue {
     let remote = delivery
         .get("remote")
         .filter(|r| js::truthy(Some(r)))
@@ -76,7 +80,8 @@ fn public_delivery(delivery: &JsonValue) -> JsonValue {
             .cloned()
             .unwrap_or(json!(0))
     };
-    json!({ "destination": delivery.get("destination"), "network": delivery.get("network"), "route": delivery.get("route"),
+    json!({ "destination": delivery.get("destination"), "network": delivery.get("network"),
+        "account": truthy_or_null(delivery, "account"), "route": delivery.get("route"),
         "transfer": truthy_or_null(delivery, "transfer"), "status": delivery.get("status"), "error": truthy_or_null(delivery, "error"),
         "provider_code": truthy_or_null(delivery, "provider_code"), "detail": truthy_or_null(delivery, "detail"),
         "notes": delivery.get("notes").filter(|n| js::truthy(Some(n))).cloned().unwrap_or(json!([])),
@@ -86,11 +91,11 @@ fn public_delivery(delivery: &JsonValue) -> JsonValue {
         "fallback": truthy_or_null(delivery, "fallback") })
 }
 
-fn read<R>(job: &Job, read: impl FnOnce(&JsonValue) -> R) -> R {
+pub(super) fn read<R>(job: &Job, read: impl FnOnce(&JsonValue) -> R) -> R {
     read(&job.lock().expect("social job"))
 }
 
-fn delivery_of(job: &Job, destination: &str) -> Option<JsonValue> {
+pub(super) fn delivery_of(job: &Job, destination: &str) -> Option<JsonValue> {
     read(job, |job| job["deliveries"].get(destination).cloned())
 }
 
@@ -115,7 +120,7 @@ async fn prepare_delivery(job: &Job, destination: &str, store: &Store) -> Sd<()>
             field(job, "id"),
         )
     });
-    let limits = media::limits(&network, &field(&probe, "kind"));
+    let limits = limits::limits(&network, &field(&probe, "kind"));
     let (violations, steps) = media::assess(&network, &probe);
     if !violations.is_empty() {
         return Err(Se::detail("social_media_constraint", &violations.join(",")));
@@ -167,21 +172,6 @@ async fn prepare_delivery(job: &Job, destination: &str, store: &Store) -> Sd<()>
         delivery.insert("variant".into(), JsonValue::Object(shown));
     });
     Ok(())
-}
-
-/// TikTok's caption limits, in UTF-16 units.
-fn check_text(job: &JsonValue, delivery: &JsonValue) -> Option<&'static str> {
-    let length = field(&job["content"], "text").encode_utf16().count();
-    let (tiktok, kind) = (
-        delivery.get("network") == Some(&json!("tiktok")),
-        field(job, "kind"),
-    );
-    let limit = match kind.as_str() {
-        "video" => media::TIKTOK_VIDEO_CAPTION,
-        "image" => media::TIKTOK_PHOTO_DESCRIPTION,
-        _ => return None,
-    };
-    (tiktok && length > limit).then_some("caption_too_long")
 }
 
 fn content_kind(content: &JsonValue) -> Option<&'static str> {
@@ -239,6 +229,7 @@ async fn prepare(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
         let destination = field(planned, "destination");
         let routed = js::truthy(planned.get("route"));
         let delivery = json!({ "destination": planned.get("destination"), "network": planned.get("network"),
+            "account": truthy_or_null(planned, "account"),
             "route": truthy_or_null(planned, "route"), "transfer": truthy_or_null(planned, "transfer"),
             "notes": planned.get("notes").filter(|n| js::truthy(Some(n))).cloned().unwrap_or(json!([])),
             "status": if routed { "ready" } else { "failed" }, "error": truthy_or_null(planned, "error"),
@@ -281,15 +272,19 @@ async fn prepare(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
                 });
             }
         }
-        let text_error = read(&job, |job| {
+        // The network's text limit for the kind (TikTok's caption, Bluesky's 300 characters…).
+        let fit = read(&job, |job| {
             let delivery = &job["deliveries"][&destination];
-            if js::truthy(delivery.get("route")) && server_route(delivery) {
-                check_text(job, delivery)
-            } else {
-                None
-            }
+            let sent = js::truthy(delivery.get("route")) && server_route(delivery);
+            let text = field(&job["content"], "text");
+            sent.then(|| wording::fit(&field(delivery, "network"), &field(job, "kind"), &text))
         });
-        if let Some(detail) = text_error {
+        if fit == Some(wording::Fit::Shorter) {
+            jobs::delivery(&job, &destination, |d| {
+                d.insert("notes".into(), json!(["text_too_long"]))
+            });
+        }
+        if let Some(wording::Fit::Over(detail)) = fit {
             jobs::delivery(&job, &destination, |delivery| {
                 delivery.extend([
                     ("status".into(), json!("failed")),
@@ -388,7 +383,7 @@ async fn media_for(job: &Job, destination: &str, env: &Env) -> Sd<Option<Media>>
         .map(|e| format!(".{}", e.to_string_lossy()))
         .unwrap_or_default();
     let mime = field(&variant, "mime");
-    let public_url = (kind == "image" && network != "facebook")
+    let public_url = limits::pulled(&network, &kind)
         .then(|| {
             env.store
                 .public
@@ -406,15 +401,13 @@ async fn media_for(job: &Job, destination: &str, env: &Env) -> Sd<Option<Media>>
     }))
 }
 
-pub(super) async fn connected(network: Network, env: &Env) -> Sd<(Session, JsonValue)> {
-    let mut session = sessions::load(network, &env.vault, &env.config).await?;
-    if session.state != "connected" {
-        return Err(Se::new(if session.state == "expired" {
-            "social_session_expired"
-        } else {
-            "social_not_connected"
-        }));
-    }
+pub(super) async fn connected(
+    network: Network,
+    account: Option<&str>,
+    env: &Env,
+) -> Sd<(Session, JsonValue)> {
+    let session = sessions::load(network, account, &env.vault, &env.config).await?;
+    let mut session = sessions::connected_only(session)?;
     let view = sessions::describe(&mut session, &env.config).await;
     Ok((session, view))
 }
@@ -426,18 +419,30 @@ pub(super) fn record(session: &Session) -> Sd<&JsonValue> {
         .ok_or_else(|| Se::new("social_not_connected"))
 }
 
+fn account_of(delivery: &JsonValue) -> Option<String> {
+    Some(field(delivery, "account")).filter(|a| !a.is_empty())
+}
+
 async fn send(env: Env, job: Job, destination: String, hooks: Hooks) -> Sd<JsonValue> {
     let plan = delivery_of(&job, &destination).unwrap_or(JsonValue::Null);
     let network = Network::of(&field(&plan, "network"))?;
-    let (session, view) = connected(network, &env).await?;
+    let account = account_of(&plan);
+    let (session, view) = connected(network, account.as_deref(), &env).await?;
     let media = media_for(&job, &destination, &env).await?;
     let plan = delivery_of(&job, &destination).unwrap_or(JsonValue::Null);
-    let text = read(&job, |job| field(&job["content"], "text"));
     let options = plan
         .get("options")
         .filter(|o| js::truthy(Some(o)))
         .cloned()
         .unwrap_or(json!({}));
+    let text = read(&job, |job| {
+        wording::sent(
+            network.name(),
+            &field(job, "kind"),
+            &field(&job["content"], "text"),
+            &options,
+        )
+    })?;
     let ctx = Ctx {
         config: &env.config,
         record: record(&session)?,
@@ -449,11 +454,11 @@ async fn send(env: Env, job: Job, destination: String, hooks: Hooks) -> Sd<JsonV
         remote: plan.get("remote").cloned().unwrap_or(JsonValue::Null),
         hooks: &hooks,
     };
-    match network {
-        Network::TikTok => tiktok::publish(&ctx).await,
-        Network::Instagram => instagram::publish(&ctx).await,
-        Network::Facebook => facebook::publish(&ctx).await,
+    let result = network.publish(&ctx).await?;
+    if network == Network::LinkedIn {
+        linkedin::remember(&env.vault, &session.account, &result).await?;
     }
+    Ok(result)
 }
 
 async fn publish(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
@@ -514,16 +519,17 @@ fn destinations(job: &Job) -> Vec<String> {
 
 async fn check(env: &Env, job: &Job, destination: &str, delivery: &JsonValue) -> Sd<JsonValue> {
     let network = Network::of(&field(delivery, "network"))?;
-    let (session, view) = connected(network, env).await?;
+    let (session, view) = connected(network, account_of(delivery).as_deref(), env).await?;
     let record = record(&session)?;
     let remote = delivery["remote"].clone();
+    let config = &env.config;
     match network {
-        Network::TikTok => tiktok::status(record, &remote, &view).await,
-        Network::Facebook => facebook::status(record, &remote).await,
-        Network::Instagram => {
+        Network::TikTok => tiktok::status(config, record, &remote, &view).await,
+        Network::Facebook => facebook::status(config, record, &remote).await,
+        Network::Instagram | Network::Threads | Network::YouTube | Network::Mastodon => {
             let hooks = Hooks::new(env.store.clone(), job.clone(), destination);
             let ctx = Ctx {
-                config: &env.config,
+                config,
                 record,
                 plan: delivery,
                 media: None,
@@ -533,8 +539,16 @@ async fn check(env: &Env, job: &Job, destination: &str, delivery: &JsonValue) ->
                 remote,
                 hooks: &hooks,
             };
-            instagram::status(&ctx, delivery.get("status") == Some(&json!("unconfirmed"))).await
+            let verify = delivery.get("status") == Some(&json!("unconfirmed"));
+            match network {
+                Network::Instagram => instagram::status(&ctx, verify).await,
+                Network::Threads => super::threads::status(&ctx, verify).await,
+                Network::YouTube => super::youtube::status(&ctx).await,
+                _ => super::mastodon::status(&ctx).await,
+            }
         }
+        // The others publish at once: a delivery left open is only confirmed by the person.
+        _ => Ok(json!({ "status": delivery.get("status"), "remote": remote })),
     }
 }
 
@@ -642,72 +656,6 @@ async fn cancel(payload: &JsonValue, env: &Env) -> Sd<JsonValue> {
     Ok(listed(&job))
 }
 
-/// The client reports what happened to an assisted transfer (share sheet, copied text, export).
-/// atome cannot see into the other app: `handed_off` is the most it ever records, never
-/// `published`.
-async fn record_outcome(payload: &JsonValue, env: &Env, handoff: bool) -> Sd<JsonValue> {
-    let store = &env.store;
-    let (job, _held) = store.acquire(&field(payload, "job_id")).await?;
-    let destination = field(payload, "destination");
-    let delivery =
-        delivery_of(&job, &destination).ok_or_else(|| Se::new("social_destination_invalid"))?;
-    let outcome = payload
-        .get("outcome")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("");
-    let status = delivery
-        .get("status")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("");
-    let patch = if handoff {
-        let assisted = !server_route(&delivery)
-            && (js::truthy(delivery.get("route"))
-                || js::truthy(delivery.pointer("/fallback/route")));
-        if !assisted
-            || !ASSISTED_OUTCOMES.contains(&outcome)
-            || !["ready", "failed", "cancelled"].contains(&status)
-        {
-            return Err(Se::new("social_request_invalid"));
-        }
-        let told = payload
-            .get("error")
-            .and_then(JsonValue::as_str)
-            .unwrap_or("");
-        let error = match outcome {
-            "failed"
-                if ["social_app_unavailable", "social_handoff_unavailable"].contains(&told) =>
-            {
-                json!(told)
-            }
-            "failed" => json!("social_handoff_unavailable"),
-            _ => JsonValue::Null,
-        };
-        let target = payload
-            .get("target")
-            .and_then(JsonValue::as_str)
-            .map_or(JsonValue::Null, |t| json!(js::slice(t, 200)));
-        json!({ "status": outcome, "error": error, "target": target, "updated_at": now_ms() })
-    } else {
-        if status != "unconfirmed" || !["published", "not_published"].contains(&outcome) {
-            return Err(Se::new("social_request_invalid"));
-        }
-        let (status, error) = if outcome == "published" {
-            ("published", JsonValue::Null)
-        } else {
-            ("failed", json!("social_publish_unconfirmed"))
-        };
-        json!({ "status": status, "error": error, "confirmed_by": "user", "updated_at": now_ms() })
-    };
-    jobs::delivery(&job, &destination, |delivery| {
-        delivery.extend(patch.as_object().cloned().unwrap_or_default())
-    });
-    store.release_if_settled(&job, false).await?;
-    store.write(&job).await?;
-    Ok(public_delivery(
-        &delivery_of(&job, &destination).unwrap_or(JsonValue::Null),
-    ))
-}
-
 /// `handleSocialAction`.
 pub async fn handle(
     env: &Env,
@@ -718,20 +666,24 @@ pub async fn handle(
     let name = action.strip_prefix("social.").unwrap_or(action);
     let attempt = field(payload, "attempt_id");
     match name {
-        "connect.start" => {
-            return sessions::connect(
-                oauth,
-                &field(payload, "network"),
-                &env.principal,
-                &env.vault,
-                &env.config,
-            );
-        }
+        "connect.start" => return sessions::connect(oauth, payload, env).await,
         "connect.await" => return Ok(oauth.wait(&env.principal, &attempt, None).await),
         "connect.cancel" => {
             return Ok(json!({ "cancelled": oauth.cancel(&env.principal, &attempt, None) }));
         }
-        "handoff" | "confirm" => return record_outcome(payload, env, name == "handoff").await,
+        "handoff" | "confirm" => {
+            return super::outcome::record(payload, env, name == "handoff").await;
+        }
+        // R-190: the shapes Rust owns, each read field by field by its handler.
+        "accounts" => {
+            return Ok(json!({ "networks": sessions::accounts(&env.vault, &env.config).await }));
+        }
+        "disconnect" => return sessions::disconnect(payload, env).await,
+        "account.enable" => return sessions::enable(payload, env).await,
+        "credentials.save" => return sessions::credentials(payload, env).await,
+        "reply" => return reply::reply(payload, env).await,
+        "thread.read" => return reply::thread(payload, env).await,
+        "delete" => return super::removal::delete(payload, env).await,
         _ => {}
     }
     let schema = catalog::command("social", name).map(|command| &command["input_schema"]);
@@ -739,10 +691,6 @@ pub async fn handle(
         return Err(Se::new("social_request_invalid"));
     }
     match name {
-        "accounts" => Ok(json!({ "accounts": sessions::accounts(&env.vault, &env.config).await })),
-        "disconnect" => {
-            sessions::disconnect(&field(payload, "network"), &env.vault, &env.config).await
-        }
         "prepare" => prepare(payload, env).await,
         "publish" => publish(payload, env).await,
         "status" => status(payload, env).await,

@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const BUDGET = 437;
+const BUDGET = 346;
 const ROOTS = ['atome/src', 'eVe', 'server'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'target', 'build', 'temp']);
 const SKIP_PATHS = [/^atome\/src\/js\//, /\.min\.js$/, /\.bundle\.js$/];

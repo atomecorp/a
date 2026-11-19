@@ -19,7 +19,7 @@ import {
     updateSection,
     updateTrack,
     mixTrackBusId,
-    setMixOutput,
+    addMixModule,
     validateTimeline
 } from '../../eVe/intuition/tools/molecule/kernel/index.js';
 
@@ -97,7 +97,7 @@ test('Sections own their Tracks and remain structurally ordered', () => {
         kind: 'audio',
         name: 'Voice'
     });
-    timeline = setMixOutput(timeline, { strip_id: 'audio_b:audio', destination: { kind: 'bus', id: 'group_b' } });
+    timeline = addMixModule(timeline, { strip_id: 'audio_b:audio', module_id: 'audio_b:audio:aux', type: 'aux', destination: { kind: 'bus', id: 'group_b' }, params: { send: 1, pass: 0 } });
     assert.deepEqual(timeline.sections.map((section) => section.section_id), ['section_a', 'section_b']);
     assert.equal(mixTrackBusId(timeline, 'audio_b'), 'group_b');
     assert.equal(timeline.tracks.filter((track) => track.section_id === 'section_b').at(-1).empty_slot, true);
@@ -240,7 +240,7 @@ test('Track transfers preserve a moved bus route and drop an orphaned route', ()
     source = addTrack(source, {
         track_id: 'voice', section_id: 'section_a', kind: 'audio', name: 'Voice'
     });
-    source = setMixOutput(source, { strip_id: 'voice:audio', destination: { kind: 'bus', id: 'bus' } });
+    source = addMixModule(source, { strip_id: 'voice:audio', module_id: 'voice:audio:aux', type: 'aux', destination: { kind: 'bus', id: 'bus' }, params: { send: 1, pass: 0 } });
     source = addClip(source, {
         clip_id: 'voice_clip', track_id: 'voice', kind: 'audio',
         source: { type: 'atome', atome_id: 'voice_source' },
@@ -300,7 +300,7 @@ test('Tracks move between Sections while preserving both trailing empty Tracks',
     timeline = addTrack(timeline, {
         track_id: 'voice_a', section_id: 'section_a', kind: 'audio', name: 'Voice'
     });
-    timeline = setMixOutput(timeline, { strip_id: 'voice_a:audio', destination: { kind: 'bus', id: 'bus_a' } });
+    timeline = addMixModule(timeline, { strip_id: 'voice_a:audio', module_id: 'voice_a:audio:aux', type: 'aux', destination: { kind: 'bus', id: 'bus_a' }, params: { send: 1, pass: 0 } });
     timeline = moveTrack(timeline, {
         track_id: 'voice_a', target_section_id: 'section_b', target_index: 0
     });

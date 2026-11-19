@@ -285,6 +285,7 @@ extension auv3Utils {
         let activeInputLatencyFrames = recordingInputLatencyFrames
         let activeOutputLatencyFrames = recordingOutputLatencyFrames
         let activeTimelineOriginFrame = readExactRecordingTimelineOrigin()
+        let activeCaptureClock = takeRecordingCaptureClock()
         recordingState = .idle
 
         var duration: Double = 0
@@ -397,7 +398,8 @@ extension auv3Utils {
                 "output_latency_frames": activeOutputLatencyFrames,
                 "roundtrip_latency_frames": activeInputLatencyFrames + activeOutputLatencyFrames,
                 "record_offset_frames_applied": activeInputLatencyFrames + activeOutputLatencyFrames,
-                "discontinuity_frames": discontinuityFrames
+                "discontinuity_frames": discontinuityFrames,
+                "capture_clock": activeCaptureClock ?? NSNull()
             ])
         }
 
@@ -474,6 +476,9 @@ extension auv3Utils {
                                 frames: frameCount,
                                 interleaved: interleaved,
                                 isFloat32: isFloat32)
+        if timestamp.pointee.mFlags.contains(.hostTimeValid) {
+            noteRecordingCaptureClock(hostTime: timestamp.pointee.mHostTime)
+        }
         return true
     }
 

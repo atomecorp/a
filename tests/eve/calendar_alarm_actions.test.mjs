@@ -3,7 +3,7 @@ vi.mock('../../atome/src/squirrel/apis/unified/adole_api/session.js', () => ({ g
 vi.mock('../../atome/src/squirrel/atome/mcp.js', () => ({ handleAtomeMCPRequestAsync: vi.fn(async () => ({ result: { ok: true } })) }));
 const notices = vi.hoisted(() => ({ add: vi.fn(), invoke: vi.fn(), online: vi.fn(async () => true) }));
 // The server's reach decides whether a reminder is sent now or waits for `restore` (calendar_alarm_delivery.js#publish).
-vi.mock('../../atome/src/squirrel/apis/unified/adole_connection.js', () => ({ checkConnection: notices.online }));
+vi.mock('../../atome/src/squirrel/apis/unified/adole_connection.js', async importOriginal => ({ ...await importOriginal(), checkConnection: notices.online }));
 vi.mock('../../eVe/intuition/tools/communication.js', () => ({ addNotification: notices.add }));
 vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGateway: notices.invoke }));
 // A new event takes the active life profiles (calendar_api.js#createEvent); none is active here.

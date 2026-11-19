@@ -89,6 +89,7 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
         .by_id
         .remove(id)
         .ok_or_else(|| format!("bevy_despawn_entity_missing:{id}"))?;
+    crate::browser_texture::atome_left_scene(id);
     remove_selection_overlay(world, entity);
     crate::animated_png::remove_animation(world, entity);
     remove_shape_shadow_overlay(world, entity);
@@ -466,5 +467,6 @@ pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), Strin
         AtomeRenderOp::ProjectSpace(patch) => {
             crate::project_view::apply_project_space(world, patch)
         }
+        AtomeRenderOp::Lut(patch) => crate::media_fx::lut::apply_lut(world, patch),
     }
 }

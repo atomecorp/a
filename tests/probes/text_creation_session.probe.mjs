@@ -31,10 +31,12 @@ test('text creation keyboard bridge stays hidden while preserving focus', () => 
     });
 
     assert.equal(el.tagName, 'TEXTAREA');
+    // The hidden text service's own editor (hidden_text_service_runtime.js#DEFAULT_EDITOR_STYLE): hidden by painting
+    // nothing, never by being moved away or made transparent — WebKit then refuses the space-bar caret drag (iOS).
     assert.equal(el.style.position, 'fixed');
-    assert.equal(el.style.left, '-10000px');
-    assert.equal(el.style.opacity, '0');
-    assert.equal(el.style.width, '1px');
+    assert.equal(el.style.color, 'transparent');
+    assert.equal(el.style.pointerEvents, 'none', 'desktop clicks pass through to the shared canvas');
+    assert.equal(el.style.opacity, '1');
     assert.equal(el.style.padding, '0px');
     assert.equal(document.activeElement, el);
 });

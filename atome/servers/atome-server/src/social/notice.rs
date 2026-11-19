@@ -65,7 +65,7 @@ impl NotificationStack {
             _ => format!(
                 "{}_{}_{}",
                 js::string(&kind),
-                chrono::Utc::now().timestamp_millis(),
+                atome_js_values::dates::now_ms(),
                 &uuid::Uuid::new_v4().simple().to_string()[..6]
             ),
         };

@@ -73,8 +73,10 @@ impl Envelope {
         self.stage == Stage::Idle
     }
 
+    // The level at the next frame: the envelope as a control source (a voice's
+    // amplitude or filter contour).
     #[inline]
-    fn next(&mut self) -> f32 {
+    pub fn tick(&mut self) -> f32 {
         let sustain = self.values[SUSTAIN as usize];
         match self.stage {
             Stage::Idle => {}
@@ -118,7 +120,7 @@ impl Processor for Envelope {
 
     fn process(&mut self, block: &mut StereoBlock) {
         for (left, right) in block.left.iter_mut().zip(block.right.iter_mut()) {
-            let gain = self.next();
+            let gain = self.tick();
             *left *= gain;
             *right *= gain;
         }

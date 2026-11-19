@@ -158,9 +158,7 @@ fn laid_out(text: &str) -> String {
 /// `POST /dev/snapshot`: the body's `state`, its last 500 `logs` and its `meta` written to
 /// `snapshot-<time>.json` in `directory`.
 pub async fn snapshot(directory: &Path, body: Option<JsonValue>) -> Response {
-    let now = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-        .to_string();
+    let now = atome_js_values::iso(atome_js_values::dates::now_ms());
     let file = directory.join(format!("snapshot-{}.json", now.replace([':', '.'], "-")));
     // `request.body && typeof request.body === 'object'`: an object or an array.
     let payload = body.filter(|body| body.is_object() || body.is_array());

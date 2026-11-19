@@ -300,9 +300,7 @@ impl DirectMessages {
                 json!({ "duplicate": true, "message_id": id, "receiver_id": target }),
             ));
         }
-        let timestamp = chrono::Utc::now()
-            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-            .to_string();
+        let timestamp = atome_js_values::iso(atome_js_values::dates::now_ms());
         let field = |key: &str| or(params.get(key), JsonValue::Null);
         let mut properties = json!({ "message_id": id, "from_id": user, "from_name": sender["username"],
             "from_phone": or(sender.get("phone"), JsonValue::Null), "to_user_id": target, "timestamp": timestamp,

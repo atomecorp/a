@@ -4,7 +4,9 @@
 // long video, outlasts a model call), then the canonical reply envelope.
 use super::credentials::Credentials;
 use super::http::{Done, Failure};
-use super::{Attached, Link, Providers, failed, models, music, openai, realtime, speech};
+use super::{
+    Attached, Link, Providers, failed, models, music, openai, realtime, speech, translate,
+};
 use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -161,20 +163,20 @@ async fn run<L: Link>(
         .await;
     }
     if action == "models" {
-        let own = if provider == "openai" {
-            vault.read("openai").await?.filter(|key| !key.is_empty())
+        // OpenAI's catalog on the platform key (R-120: a person's own key is no longer used).
+        let on_shared = provider == "openai";
+        shared.store(on_shared, Ordering::Relaxed);
+        let key = if on_shared {
+            providers
+                .shared
+                .claim(principal, action)
+                .await?
+                .map(|(key, _)| key)
         } else {
             payload
                 .get("key")
                 .filter(|key| js::truthy(Some(key)))
                 .map(js::string)
-        };
-        let on_shared = provider == "openai" && own.is_none();
-        shared.store(on_shared, Ordering::Relaxed);
-        let key = match own {
-            Some(key) => Some(key),
-            None if on_shared => providers.shared.claim(principal, action).await?,
-            None => None,
         };
         let Some(key) = key else {
             return Err("no_ai_key_configured".into());
@@ -242,33 +244,62 @@ async fn run<L: Link>(
             },
         )
     };
+    // A person's own OpenAI key is no longer taken (R-120); one stored earlier can still be removed.
     if action == "credential.store" {
-        let candidate = js::id(message.get("key"));
-        let validation = super::http::send(
-            super::http::client()
-                .get(format!("{}/models", openai::ROOT))
-                .header("Authorization", format!("Bearer {candidate}")),
-        )
-        .await?;
-        if !validation.status().is_success() {
-            return Err(super::http::failure(validation).await);
-        }
-        link.check(principal).await?;
-        let stored = vault.store("openai", &candidate).await?;
-        close_all().await?;
-        attached.abort_openai(principal, request_id);
-        return Ok(stored);
+        return Err("provider_operation_not_allowed".into());
     }
     if action == "credential.remove" {
         close_all().await?;
         attached.abort_openai(principal, request_id);
         return Ok(vault.remove("openai").await?);
     }
-    let own = vault.read("openai").await?.filter(|key| !key.is_empty());
-    shared.store(own.is_none(), Ordering::Relaxed);
-    let key = match &own {
-        Some(key) => Some(key.clone()),
-        None => providers.shared.claim(principal, action).await?,
+    // A bottle's message translated for its reader (translate.rs): its rights and its author's refusal are read before
+    // any key is claimed, and a message already in the reader's language asks no provider.
+    if action == "translate" {
+        let wanted = translate::request(&payload)?;
+        let found = translate::source(&providers.central, principal, &wanted).await?;
+        if let Some(same) = translate::unchanged(&found, &wanted) {
+            return Ok(json!({ "data": same }));
+        }
+        shared.store(true, Ordering::Relaxed);
+        let Some((key, hold)) = providers.shared.claim(principal, action).await? else {
+            return Err("no_ai_key_configured".into());
+        };
+        let (data, usage) = translate::run(
+            link,
+            principal,
+            &found,
+            &wanted,
+            &key,
+            request_id,
+            &attached.hosted,
+            &providers.bottle_media,
+        )
+        .await?;
+        if let Some(usage) = usage {
+            providers
+                .shared
+                .record_tokens(
+                    principal,
+                    &usage,
+                    hold.as_deref(),
+                    ("openai", super::catalog::first_model(), 0),
+                    action,
+                )
+                .await?;
+        }
+        return Ok(json!({ "data": data }));
+    }
+    if action == "chat" {
+        shared.store(true, Ordering::Relaxed);
+        return super::chat_dispatch::chat(providers, principal, &payload).await;
+    }
+    // Every AI call runs on the platform key and is paid on the ledger (R-120); a key a person
+    // stored earlier stays in their vault, unused.
+    shared.store(true, Ordering::Relaxed);
+    let (key, hold) = match providers.shared.claim(principal, action).await? {
+        Some((key, hold)) => (Some(key), hold),
+        None => (None, None),
     };
     if action == "credential.status" {
         return Ok(json!({ "configured": key.is_some() }));
@@ -305,11 +336,23 @@ async fn run<L: Link>(
         &attached.hosted,
     )
     .await?;
-    // Usage on the platform key is metered per seat; an own key is not.
-    if own.is_none()
-        && let Some(usage) = usage
-    {
-        providers.shared.record_tokens(principal, &usage).await?;
+    // Usage on the platform key is metered per seat and paid (billing/usage.rs).
+    if let Some(usage) = usage {
+        let model = data
+            .get("model")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+            .to_string();
+        providers
+            .shared
+            .record_tokens(
+                principal,
+                &usage,
+                hold.as_deref(),
+                ("openai", &model, 0),
+                action,
+            )
+            .await?;
     }
     Ok(json!({ "data": data }))
 }

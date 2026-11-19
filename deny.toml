@@ -18,6 +18,19 @@ ignore = [
     { id = "RUSTSEC-2024-0375", reason = "atty unmaintained: build-time only, via planus-translation (mediasoup-sys build script)" },
     { id = "RUSTSEC-2024-0384", reason = "instant unmaintained: via fastrand 1 / futures-lite 1 in mediasoup, no known vulnerability" },
     { id = "RUSTSEC-2024-0436", reason = "paste 0.1 unmaintained: proc-macro via bitpattern / h264-profile-level-id in mediasoup" },
+    # All eight come only through zip 8 required by openusd (^8.2 up to openusd 0.8, user decisions 17 and 18 Nov. 2026);
+    # they concern extraction to disk, the stream reader, or AES and legacy decoders that are not compiled
+    # (default-features = false, deflate only), none of which atome-usd and openusd use: a usdz is read in memory
+    # (ZipArchive::new(Cursor) then by_name), in WASM without a file system on the Web. Drop them when openusd moves to zip 9,
+    # and drop 0545 / 0547 at once if the `aes-crypto` or `legacy-zip` feature is ever enabled.
+    { id = "RUSTSEC-2026-0367", reason = "zip 8 extract keeps SUID/SGID bits: extract is never called (usdz read in memory, atome-usd/openusd)" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 8 extract writes symlinks outside the destination: extract is never called (usdz read in memory)" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 8 extract applies permissions through symlinks: extract is never called (usdz read in memory)" },
+    { id = "RUSTSEC-2026-0429", reason = "zip 8 extract aborts on a large symlink entry: extract is never called (usdz read in memory)" },
+    { id = "RUSTSEC-2026-0545", reason = "zip 8 AES entries unauthenticated when truncated: AES is not compiled (default-features = false, deflate only)" },
+    { id = "RUSTSEC-2026-0546", reason = "zip 8 extract writes outside the destination through symlink targets: extract is never called (usdz read in memory)" },
+    { id = "RUSTSEC-2026-0547", reason = "zip 8 Shrink/Reduce/Implode decoders preallocate: legacy-zip is not compiled (default-features = false, deflate only)" },
+    { id = "RUSTSEC-2026-0548", reason = "zip 8 ZipStreamReader trusts local-header names: ZipStreamReader is never called (ZipArchive::by_name only)" },
 ]
 
 [licenses]

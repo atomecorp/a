@@ -42,8 +42,8 @@ extension WebViewManager {
 
     // Scrub and playback fire these several times per frame, and wake-phrase standby
     // reads the microphone every 80 ms: three log lines each flood the console (and
-    // slow the app while Xcode is attached). Their failures are still logged.
-    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance", "audio_wake_read"]
+    // slow the app while Xcode is attached); a Sport session asks every second whether music plays. Their failures are still logged.
+    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance", "audio_wake_read", "audio_other_playing"]
 
     static func sendNativeInvokeResponse(requestId: String,
                                                  payload: [String: Any]? = nil,
@@ -74,8 +74,22 @@ extension WebViewManager {
             }
             return
         }
+        if command == "billing_app_transaction" {
+            PurchaseManager.shared.appTransaction { response, error in
+                sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
+            }
+            return
+        }
         if command == "auth_link_take" {
             sendNativeInvokeResponse(requestId: requestId, payload: AuthLinkInbox.take())
+            return
+        }
+        if command == "shared_files_take" {
+            sendNativeInvokeResponse(requestId: requestId, payload: SharedFileInbox.take())
+            return
+        }
+        if command == "domain_link_take" {
+            sendNativeInvokeResponse(requestId: requestId, payload: DomainLinkInbox.take())
             return
         }
         if command == "auth_device_key" {
@@ -123,12 +137,12 @@ extension WebViewManager {
         }
     }
 
-    public static func sendBridgeJSON(_ dict: [String: Any]) {
+    public static func sendBridgeJSON(_ dict: [String: Any], label: String = "bridge.json") {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return }
         // Inject raw JSON object (already valid JS), matching FileSystemBridge usage
         let js = "window.AUv3API && AUv3API._receiveFromSwift(\(json));"
-        performIPC(label: "bridge.json", priority: .normal) {
+        performIPC(label: label, priority: .normal) {
             self.webView?.evaluateJavaScript(js, completionHandler: nil)
         }
     }
@@ -164,8 +178,16 @@ extension WebViewManager {
         }
     }
 
+    // Streams that only carry the latest value of a state: in the extension, one per label is delivered at most
+    // every `priority.baseInterval`, a newer value replacing a waiting one. Every other message — a native call's
+    // answer, a MIDI message, a recording event, a host transport change — is delivered, in order, never dropped
+    // (R-179, 15 Nov. 2026: replacing the newer message cancelled answers, `record_done` and MIDI notes).
+    static let latestValueIPCLabels: Set<String> = [
+        "host.time", "sampleRate", "viewport.safeArea", "safe-mode", "fn.updateAudioState", "fn.updateTestState"
+    ]
+
     private static func executeIPC(label: String, priority: IPCPriority, block: @escaping () -> Void) {
-        if !runningInExtension {
+        if !runningInExtension || !latestValueIPCLabels.contains(label) {
             DispatchQueue.main.async(execute: block)
             return
         }

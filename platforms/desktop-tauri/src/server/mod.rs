@@ -160,7 +160,7 @@ pub async fn start_server(
             tokio::spawn(async move {
                 if let Err(err) = page_preview::serve(preview).await {
                     local::record_recent_error(json!({
-                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                        "timestamp": atome_js_values::dates::now_rfc3339(),
                         "source": "axum",
                         "component": "page_preview",
                         "error": err,
@@ -169,7 +169,7 @@ pub async fn start_server(
             });
         }
         Err(err) => local::record_recent_error(json!({
-            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "timestamp": atome_js_values::dates::now_rfc3339(),
             "source": "axum",
             "component": "page_preview",
             "error": format!("bind {PAGE_PREVIEW_ADDRESS} failed: {err}"),

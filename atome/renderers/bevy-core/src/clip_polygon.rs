@@ -510,6 +510,7 @@ mod clip_polygon_tests {
             playback_progress: None,
             selected: None,
             filters: None,
+            effects: None,
             transition: None,
             procedural: None,
             progress_ring: None,

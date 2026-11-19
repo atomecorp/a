@@ -7,7 +7,6 @@ use super::local_atome::{
 pub(crate) use super::local_atome_sync_bootstrap::enqueue_current_user_state_sync;
 pub(crate) use super::local_atome_sync_bootstrap::schedule_current_user_state_sync;
 use super::local_atome_sync_media::upload_outbound_media;
-use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use rusqlite::Connection;
 use serde_json::{Value as JsonValue, json};
@@ -242,11 +241,11 @@ fn retry_at(attempts: i64, final_fail: bool) -> Option<String> {
     if final_fail {
         return None;
     }
+    let now = atome_js_values::dates::Instant::now();
     Some(
-        Utc::now()
-            .checked_add_signed(chrono::Duration::milliseconds(compute_backoff_ms(attempts)))
-            .unwrap_or_else(Utc::now)
-            .to_rfc3339(),
+        now.plus_millis(compute_backoff_ms(attempts))
+            .unwrap_or(now)
+            .rfc3339(),
     )
 }
 
@@ -465,7 +464,7 @@ async fn deliver_item(state: &LocalAtomeState, remote_url: &str, item: SyncQueue
                     "INSERT INTO remote_bootstrap_delivered (remote_user_id, atome_id, digest, delivered_at)
                      VALUES (?1, ?2, ?3, ?4)
                      ON CONFLICT(remote_user_id, atome_id) DO UPDATE SET digest = excluded.digest, delivered_at = excluded.delivered_at",
-                    rusqlite::params![remote_user_id, atome_id, digest, Utc::now().to_rfc3339()],
+                    rusqlite::params![remote_user_id, atome_id, digest, atome_js_values::dates::now_rfc3339()],
                 );
             }
         }

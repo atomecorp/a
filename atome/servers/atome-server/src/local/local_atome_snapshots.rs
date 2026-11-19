@@ -3,7 +3,6 @@
 // events, and create its `snapshot` event, through the event commit (`handle_events_message`).
 use super::super::local_atome::{LocalAtomeState, WsResponse, handle_events_message};
 use super::{can_access, request_id, response};
-use chrono::Utc;
 use rusqlite::OptionalExtension;
 use serde_json::{Value as JsonValue, json};
 use uuid::Uuid;
@@ -365,7 +364,7 @@ async fn create_snapshot(
             rusqlite::params![
                 field("atome_id").as_deref().unwrap_or(target_id), field("project_id"), snapshot.to_string(), field("label"),
                 field("snapshot_type").as_deref().unwrap_or("manual"), json!({"type": "user", "id": user_id}).to_string(),
-                user_id, Utc::now().to_rfc3339()
+                user_id, atome_js_values::dates::now_rfc3339()
             ],
         ).map(|_| db.last_insert_rowid())
     };

@@ -161,7 +161,11 @@ pub(crate) fn device_name(device: &cpal::Device) -> Result<String, cpal::Error> 
 // is an error: the take must not silently come from another microphone.
 pub(super) fn input_device(name: Option<&str>) -> Result<cpal::Device, String> {
     let host = cpal::default_host();
-    if let Some(wanted) = name.map(str::trim).filter(|value| !value.is_empty()) {
+    // `default` names the platform's default input, as on the Web.
+    if let Some(wanted) = name
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "default")
+    {
         let devices = host
             .input_devices()
             .map_err(|e| format!("audio_input_devices_unavailable: {e}"))?;
@@ -188,11 +192,6 @@ pub fn start_with_options(
     device_name: Option<String>,
 ) -> Result<(), String> {
     super::wake_capture::stop()?;
-    let mut sessions = SESSIONS.lock().map_err(|e| format!("Lock error: {e}"))?;
-    if sessions.contains_key(session_id) {
-        return Err(format!("Session '{session_id}' already active"));
-    }
-
     let (input_rate, input_channels) = recorder_capture::input_format(device_name.as_deref())?;
     let actual_sample_rate = if sample_rate > 0 {
         sample_rate
@@ -204,6 +203,38 @@ pub fn start_with_options(
     } else {
         input_channels
     };
+    start_session(
+        session_id,
+        abs_wav_path,
+        actual_sample_rate,
+        actual_channels,
+        output_format,
+        move |sink| {
+            recorder_capture::open(
+                device_name.as_deref(),
+                actual_sample_rate,
+                actual_channels,
+                buffer_hint,
+                sink,
+            )
+        },
+    )
+}
+
+// A take written as `open` feeds its sink: a device input, or a strip's REC
+// point (recorder_strip.rs).
+pub(super) fn start_session(
+    session_id: &str,
+    abs_wav_path: &str,
+    actual_sample_rate: u32,
+    actual_channels: u16,
+    output_format: OutputFormat,
+    open: impl FnOnce(TakeSink) -> Result<recorder_capture::Capture, String> + Send + 'static,
+) -> Result<(), String> {
+    let mut sessions = SESSIONS.lock().map_err(|e| format!("Lock error: {e}"))?;
+    if sessions.contains_key(session_id) {
+        return Err(format!("Session '{session_id}' already active"));
+    }
 
     // Ensure parent directory exists
     if let Some(parent) = Path::new(abs_wav_path).parent() {
@@ -225,7 +256,6 @@ pub fn start_with_options(
     let sr = actual_sample_rate;
     let ch = actual_channels;
     let fmt = output_format;
-    let buf_hint = buffer_hint;
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
     // Spawn a thread that owns the input (a cpal Stream is !Send, so it must
@@ -260,7 +290,7 @@ pub fn start_with_options(
                 clock: Arc::clone(&capture_clock_thread),
                 channels: usize::from(ch.max(1)),
             };
-            let stream = recorder_capture::open(device_name.as_deref(), sr, ch, buf_hint, sink)?;
+            let stream = open(sink)?;
             Ok::<_, String>((stream, writer_stop, writer_handle))
         })();
 

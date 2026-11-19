@@ -79,32 +79,6 @@ struct Config {
     settings: Settings,
 }
 
-// Fastify's central database (database/driver.js): its path, a relative one read
-// from Fastify's directory as better-sqlite3 reads it. The vault router shares it.
-fn central_database(
-    settings: &Settings,
-    project_root: &std::path::Path,
-) -> Result<PathBuf, String> {
-    if ["LIBSQL_URL", "TURSO_DATABASE_URL"]
-        .iter()
-        .any(|name| settings.get(name).is_some())
-    {
-        return Err("vault_router_requires_sqlite:libsql_is_set".into());
-    }
-    let path = settings
-        .get("SQLITE_PATH")
-        .or_else(|| settings.get("ADOLE_SQLITE_PATH"))
-        .map_or_else(
-            || project_root.join("database_storage").join("adole.db"),
-            PathBuf::from,
-        );
-    Ok(if path.is_absolute() {
-        path
-    } else {
-        project_root.join("server").join(path)
-    })
-}
-
 fn config() -> Result<Config, String> {
     let project_root = std::env::current_dir().map_err(|e| e.to_string())?;
     if !project_root.join("server").join("server.js").is_file() {
@@ -148,7 +122,7 @@ fn config() -> Result<Config, String> {
             vault_binary.display()
         ));
     }
-    let central = central_database(&settings, &project_root)?;
+    let central = settings.central_database(&project_root)?;
     // Before anything opens it: the tables, columns and migrations Fastify's `initDatabase` made.
     atome_server::central_schema::prepare(&central, &project_root)?;
     let preview_port = port(
@@ -221,22 +195,6 @@ async fn run() -> Result<i32, String> {
         user_root: config.user_root.clone(),
         uploads_tmp: config.project_root.join("data").join("uploads_tmp"),
     });
-    // The bytes of deletions no longer undoable (media/trash.rs): erased at start, then daily.
-    let trash_root = config.user_root.clone();
-    tokio::spawn(async move {
-        let mut daily = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-        loop {
-            daily.tick().await;
-            let root = trash_root.clone();
-            let purged = tokio::task::spawn_blocking(move || {
-                atome_server::media::trash::purge(&root, atome_server::media::trash::KEEP)
-            })
-            .await;
-            if let Ok(Err(error)) = purged {
-                eprintln!("[media] trash purge failed: {error}");
-            }
-        }
-    });
     let router = VaultRouter::new(
         vaults.clone(),
         Central::open(&config.central)?,
@@ -262,6 +220,79 @@ async fn run() -> Result<i32, String> {
         storage.clone(),
         sync.clone(),
     )?;
+    // The bottles' video switch, the setting `cb.bottle_video` (off, testers or all): off unless set.
+    social.cb.set_bottle_video(
+        atome_server::social::cb::bottles::BottleVideo::from_settings(&config.settings),
+    );
+    // The CB's channels: 55 listeners, 45 s of floor, unless `cb.channel_listeners` and `cb.floor_max_ms` say otherwise.
+    social
+        .cb
+        .set_channel_limits(atome_server::social::cb::channels::Limits::from_settings(
+            &config.settings,
+        ));
+    // The Appel: an invitation of 21 s, a pair not put in touch again for 21 days, unless `cb.call_invite_ms` and
+    // `cb.call_pair_days` say otherwise.
+    social
+        .cb
+        .calls
+        .set_limits(atome_server::social::cb::random_call::Limits::from_settings(&config.settings));
+    // An Appel's takes cut at the silence for its live translation: 600 ms of packets quieter than -40 dBov, unless
+    // `cb.call_silence_dbov` and `cb.call_silence_ms` say otherwise.
+    atome_server::social::cb::live_translate::segments::set_call_cut(
+        atome_server::social::cb::live_translate::segments::CallCut::from_settings(
+            &config.settings,
+        ),
+    );
+    // The takes of the CB's voices: kept 21 days, a report holding 13 minutes, unless the settings say otherwise.
+    social
+        .cb
+        .set_recording_limits(atome_server::social::cb::recordings::Limits::from_settings(
+            &config.settings,
+        ));
+    // Sealed at rest (AES-256-GCM, `ATOME_CB_RECORDINGS_KEY`): without a key in production, the CB records nothing and
+    // refuses its floor.
+    social
+        .cb
+        .recordings
+        .set_sealer(atome_server::social::cb::recordings::seal::from_settings(
+            &config.settings,
+            &config.project_root,
+        )?);
+    // The Appel's pairs put in touch, kept in `cb_call_pairs` under a keyed fingerprint whose key is derived from the
+    // recordings' one; without that key, kept in memory only and forgotten at a restart.
+    let call_pairs_key = atome_server::social::cb::recordings::seal::call_pairs_key(
+        &config.settings,
+        &config.project_root,
+    );
+    if call_pairs_key.is_none() {
+        eprintln!("[cb] cb call pairs: no key, pairs kept in memory only");
+    }
+    social.cb.calls.set_pair_key(call_pairs_key);
+    // The bytes of deletions no longer undoable (media/trash.rs) and the CB sociale's bottles past
+    // their life, with their copies (social/cb/bottles.rs), and the takes past their 21 days
+    // (social/cb/recordings): erased at start, then daily.
+    let trash_root = config.user_root.clone();
+    let purged_social = social.clone();
+    tokio::spawn(async move {
+        let mut daily = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+        loop {
+            daily.tick().await;
+            let root = trash_root.clone();
+            let purged = tokio::task::spawn_blocking(move || {
+                atome_server::media::trash::purge(&root, atome_server::media::trash::KEEP)
+            })
+            .await;
+            if let Ok(Err(error)) = purged {
+                eprintln!("[media] trash purge failed: {error}");
+            }
+            if let Err(error) = purged_social.cb.purge_bottles().await {
+                eprintln!("[cb] bottles purge failed: {error}");
+            }
+            if let Err(error) = purged_social.cb.purge_recordings().await {
+                eprintln!("[cb] recordings purge failed: {error}");
+            }
+        }
+    });
     // The calls' SFU: its worker starts once, before the server listens.
     atome_server::visio::start(
         &config.settings,
@@ -278,6 +309,15 @@ async fn run() -> Result<i32, String> {
         storage.clone(),
         Central::open(&config.central)?,
     )?);
+    // The CB's and the Appel's live translation (R-173 lot TR) reaches the providers through its bridge.
+    atome_server::providers::live_translate::Bridge::install(
+        &social.cb.live,
+        providers.clone(),
+        &config.settings,
+    );
+    // The linked social accounts' 60 s polling (R-190): with none linked, a tick makes no call.
+    let (polling, polled_social) = (providers.clone(), social.clone());
+    tokio::spawn(async move { polling.social_poll(&polled_social.notifier).await });
     // The A/B probes' reference Fastify reaches the vaults, the vault router, `/ws/sync` and the
     // social services through the control socket, which only it uses.
     let control_directory = config

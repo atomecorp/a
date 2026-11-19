@@ -183,9 +183,34 @@ async fn answer(
             .await;
     }
     let readable = matches!(*request.method(), Method::GET | Method::HEAD);
-    if readable && uri.path().starts_with("/api/social/") {
+    // A bottle's clean copy, through its link (social/cb/bottles.rs).
+    if readable && uri.path().starts_with("/api/cb/bottle-media/") {
         let headers = request.headers().clone();
-        if let Some(mut response) = web.ws_api.providers.route(uri.path(), uri.query()).await {
+        if let Some(mut response) = web.ws_api.social.cb.media_route(uri.path()).await {
+            web.cors
+                .decorate(uri.path(), &headers, response.headers_mut());
+            return response;
+        }
+    }
+    if uri.path().starts_with("/api/social/") {
+        let headers = request.headers().clone();
+        // The Meta webhook (R-190): its body is read whole, for its signature.
+        if uri.path() == "/api/social/webhook/meta" {
+            let Ok(body) = axum::body::to_bytes(request.into_body(), 4 * 1024 * 1024).await else {
+                return axum::response::IntoResponse::into_response((
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "too large",
+                ));
+            };
+            let notifier = &web.ws_api.social.notifier;
+            let providers = &web.ws_api.providers;
+            return providers
+                .social_webhook(notifier, &method, &headers, uri.query(), &body)
+                .await;
+        }
+        if readable
+            && let Some(mut response) = web.ws_api.providers.route(uri.path(), uri.query()).await
+        {
             web.cors
                 .decorate(uri.path(), &headers, response.headers_mut());
             return response;

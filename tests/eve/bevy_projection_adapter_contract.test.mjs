@@ -153,7 +153,8 @@ test('Bevy projection maps backdrop blur scene effects to Rust payloads', () => 
 test('Default Bevy renderer adapter registry declares the currently supported kinds', () => {
     assert.deepEqual(
         BEVY_RENDERER_ADAPTER_DEFINITIONS.map((adapter) => adapter.kind),
-        ['shape', 'text', 'image', 'video', 'audio_waveform', 'media_window', 'progress_ring', 'procedural_sdf']
+        // scene3d: a 3D scene played in the project (R-194, bevy_scene3d_source_runtime.js).
+        ['shape', 'text', 'image', 'video', 'audio_waveform', 'media_window', 'progress_ring', 'scene3d', 'procedural_sdf']
     );
     assert.deepEqual(
         createDefaultBevyRendererAdapterRegistry().list().map((adapter) => adapter.kind),

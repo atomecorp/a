@@ -312,3 +312,42 @@ test('a connection in time says nothing more and never fails afterwards', async 
         expect(h.api.getState()).toMatchObject({ connected: true, error: '' });
     } finally { await h.dispose(); vi.useRealTimers(); }
 });
+
+test('dismissed, she hangs up for real, then says her farewell naming the wake phrase', async () => {
+    const h = harness();
+    try {
+        await h.api.open(); await h.flush();
+        const { dismissal } = h.session.options;
+        // The local voice path hangs up on the person's own words, never on a mention inside a longer request.
+        expect(dismissal.matches('raccroche')).toBe(true);
+        expect(dismissal.matches('Au revoir, merci')).toBe(true);
+        expect(dismissal.matches('tu peux partir maintenant')).toBe(true);
+        expect(dismissal.matches('écris au revoir à Paul dans un message pour demain')).toBe(false);
+        const leaving = h.api.hangUp({ source: 'assistant_tool', reason: 'user_dismissed' });
+        await h.flush(); await h.advance(); await h.advance();
+        await leaving;
+        expect(h.controller.close).toHaveBeenCalledWith({ reason: 'user_dismissed' });
+        expect(h.api.getState().active).toBe(false);
+        expect(h.voiceLines.say.mock.calls.at(-1)[0]).toBe('eve.voice.assistant.idle_hang_up');
+    } finally { await h.dispose(); }
+});
+
+// The car calls her while she is open on the phone (user, 18 Nov. 2026): the phone's session would pause once
+// the phone locks and hang up on a silence; the car takes it over as its own session, without waiting for the
+// phone's scene to clear (a locked phone gives that clearing no frame).
+test('a CarPlay call while open on the phone becomes the car\'s session, kept while the phone is locked', async () => {
+    let clearScene = null;
+    const h = harness(undefined, undefined, { clearScene: () => new Promise(resolve => { clearScene = resolve; }) });
+    try {
+        await h.api.open({ source: 'tap', surface: 'screen' }); await h.flush();
+        expect(h.session.options).toMatchObject({ keepWhenHidden: false, hangUpWhenSilent: true });
+        const conversationId = h.api.getState().conversation.id;
+        await h.api.open({ source: 'carplay', surface: 'voice' }); await h.flush();
+        expect(h.controller.close).toHaveBeenCalledOnce();
+        expect(h.session.options).toMatchObject({ keepWhenHidden: true, hangUpWhenSilent: false });
+        expect(h.api.getState()).toMatchObject({ active: true, surface: 'voice', connected: true, conversation: { id: conversationId } });
+        // A second call from the car (its scene active again) only listens: no new session.
+        await h.api.open({ source: 'carplay', surface: 'voice' }); await h.flush();
+        expect(h.controller.close).toHaveBeenCalledOnce();
+    } finally { clearScene?.(); await h.dispose(); }
+});

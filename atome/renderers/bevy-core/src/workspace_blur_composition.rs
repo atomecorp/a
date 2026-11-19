@@ -1,6 +1,9 @@
 //! Ordered snapshots inside the shared 2D pass. A material never samples the
 //! attachment it is drawing into, itself, or a later item in the sorted phase.
-use super::{WORKSPACE_BACKDROP_DOWNSCALE, backdrop_blur_lod, pyramid::BlurPyramid};
+use super::{
+    WORKSPACE_BACKDROP_DOWNSCALE, backdrop_blur_lod, pyramid::BlurPyramid,
+    snapshot::SnapshotReduction,
+};
 use crate::{
     backdrop_surface::BackdropSurfaceMaterial, procedural_sdf::ProceduralSdfMaterial,
     workspace_backdrop::AtomeWorkspaceBackdrop,
@@ -8,7 +11,6 @@ use crate::{
 use bevy::{
     core_pipeline::{
         Core2d, Core2dSystems,
-        blit::{BlitPipeline, BlitPipelineKey},
         core_2d::{Transparent2d, main_opaque_pass_2d, main_transparent_pass_2d},
     },
     ecs::schedule::ScheduleCleanupPolicy,
@@ -46,7 +48,7 @@ struct SampleRegions(HashMap<Entity, SampleRegion>);
 #[derive(Component)]
 struct SnapshotPipeline {
     pipeline: CachedRenderPipelineId,
-    key: BlitPipelineKey,
+    key: Option<bevy::camera::CompositingSpace>,
     source: TextureViewId,
     pyramid: TextureViewId,
     bind_group: BindGroup,
@@ -179,10 +181,10 @@ fn prepare_snapshots(
     mut commands: Commands,
     backdrop: Res<AtomeWorkspaceBackdrop>,
     gpu_images: Res<RenderAssets<GpuImage>>,
-    blit: Res<BlitPipeline>,
+    reduction: Res<SnapshotReduction>,
     device: Res<RenderDevice>,
     cache: Res<PipelineCache>,
-    mut pipelines: ResMut<SpecializedRenderPipelines<BlitPipeline>>,
+    mut pipelines: ResMut<SpecializedRenderPipelines<SnapshotReduction>>,
     views: Query<(Entity, &ViewTarget, Option<&SnapshotPipeline>)>,
 ) {
     let Some(pyramid) = gpu_images.get(backdrop.image.id()) else {
@@ -190,18 +192,13 @@ fn prepare_snapshots(
     };
     for (entity, target, previous) in &views {
         let source = target.main_texture_view();
-        let key = BlitPipelineKey {
-            target_format: pyramid.texture_descriptor.format,
-            blend_state: None,
-            samples: 1,
-            source_space: target.compositing_space,
-        };
+        let key = target.compositing_space;
         if previous.is_some_and(|p| {
             p.source == source.id() && p.pyramid == pyramid.texture_view.id() && p.key == key
         }) {
             continue;
         }
-        let pipeline = pipelines.specialize(&cache, &blit, key);
+        let pipeline = pipelines.specialize(&cache, &reduction, key);
         let mip_zero = pyramid.texture.create_view(&TextureViewDescriptor {
             label: Some("ordered_backdrop_mip_zero"),
             base_mip_level: 0,
@@ -213,7 +210,7 @@ fn prepare_snapshots(
             key,
             source: source.id(),
             pyramid: pyramid.texture_view.id(),
-            bind_group: blit.create_bind_group(&device, source, &cache),
+            bind_group: reduction.bind_group(&device, &cache, source),
             mip_zero,
         });
     }

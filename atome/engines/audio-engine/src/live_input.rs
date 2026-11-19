@@ -54,26 +54,50 @@ pub fn input_devices() -> Vec<InputDevice> {
         name: super::host_output::HOST_INPUT_ID.to_string(),
         channels: 2,
     });
-    host.into_iter()
-        .chain(
-            cpal::default_host()
-                .input_devices()
-                .map(|devices| {
-                    devices
-                        .filter_map(|device| {
-                            let name = super::recorder::device_name(&device).ok()?;
-                            let channels = device.default_input_config().ok()?.channels();
-                            Some(InputDevice {
-                                id: name.clone(),
-                                name,
-                                channels,
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default(),
-        )
+    host.into_iter().chain(system_inputs()).collect()
+}
+
+// Under ASIO the playing driver is the one input (asio_duplex.rs).
+#[cfg(target_os = "windows")]
+fn system_inputs() -> Vec<InputDevice> {
+    if !matches!(
+        super::windows_driver::current(),
+        super::windows_driver::Driver::Asio(_)
+    ) {
+        return cpal_inputs();
+    }
+    super::windows_driver::asio_input_devices()
+        .into_iter()
+        .map(|(name, channels)| InputDevice {
+            id: name.clone(),
+            name,
+            channels,
+        })
         .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn system_inputs() -> Vec<InputDevice> {
+    cpal_inputs()
+}
+
+fn cpal_inputs() -> Vec<InputDevice> {
+    cpal::default_host()
+        .input_devices()
+        .map(|devices| {
+            devices
+                .filter_map(|device| {
+                    let name = super::recorder::device_name(&device).ok()?;
+                    let channels = device.default_input_config().ok()?.channels();
+                    Some(InputDevice {
+                        id: name.clone(),
+                        name,
+                        channels,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -91,7 +115,8 @@ where
 {
     let mut frames: Vec<Frame> = Vec::with_capacity(CALLBACK_FRAMES);
     let mut resampled: Vec<Frame> = Vec::with_capacity(CALLBACK_FRAMES * 2);
-    move |data: &[T], _| {
+    move |data: &[T], info: &cpal::InputCallbackInfo| {
+        let host_ns = super::scheduled_backend::capture_host_ns(info) as f64;
         frames.clear();
         for chunk in data.chunks(channels.max(1)).take(frames.capacity()) {
             let left = f32::from_sample(chunk[0]);
@@ -109,8 +134,9 @@ where
             resampler.process(&frames, &mut resampled);
             &resampled
         };
+        // Each push carries its capture instant: a take's REC point is placed by it (R-183).
         for input in &inputs {
-            input.push(pushed);
+            input.push_at(pushed, host_ns);
         }
     }
 }
@@ -143,10 +169,10 @@ fn input_config(
         .unwrap_or(default))
 }
 
-// On Windows the input is the exclusive one the output's thread reads in its own cycle (wasapi_duplex.rs).
+// On Windows the input is read by the chosen driver's thread in the output's own cycle (windows_driver.rs).
 #[cfg(target_os = "windows")]
 fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<LiveStream, String> {
-    super::wasapi_duplex::listen(&device_id, inputs.clone())?;
+    super::windows_driver::listen(&device_id, inputs.clone())?;
     Ok(LiveStream {
         stop: Arc::new(AtomicBool::new(false)),
         inputs,
@@ -280,7 +306,7 @@ fn reconcile(wanted: &Wanted) -> Result<(), String> {
             stream.stop.store(true, Ordering::Release);
             #[cfg(target_os = "windows")]
             if !devices.contains_key(device.as_str()) {
-                let _ = super::wasapi_duplex::listen(device, Vec::new());
+                let _ = super::windows_driver::listen(device, Vec::new());
             }
         }
         keep

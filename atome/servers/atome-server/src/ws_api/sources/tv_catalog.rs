@@ -48,7 +48,7 @@ static CANONICAL: LazyLock<regex::Regex> = LazyLock::new(|| {
 });
 
 fn now() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 async fn get(url: String) -> Result<reqwest::Response, String> {

@@ -4,6 +4,7 @@ import { runWakeEnrollment } from './wake_enrollment.js';
 import { normalizeAssistantPreferences } from './wake_preferences.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { isAuv3AudioRuntime } from '../../application/audio_runtime/runtime_audio_backend.js';
+import { isExternalDisplayFollower } from '../external_display_role.js';
 export { normalizeAssistantPreferences } from './wake_preferences.js';
 
 // Owns the standby lifecycle. The enabled profile preference arms this device: listening
@@ -15,6 +16,8 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
     // Inside the AUv3 the microphone and the audio session are its host's: standby never listens there
     // (no detector engine, no capture), whatever the profile says.
     if (isAuv3AudioRuntime(env)) blockers.add('plugin_host');
+    // A connected screen's page (R-212) only shows: the device's own page owns the microphone and the phrase.
+    if (isExternalDisplayFollower()) blockers.add('display_follower');
     let engine = null, pending = Promise.resolve(), generation = 0, disposed = false;
     let enabled = false, armed = false, assistant = null, unsubscribe = () => {};
     let captureRetry = null;
@@ -78,7 +81,8 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
             emit('assistant');
             await assistant.open({ source: 'wake_phrase' });
         } catch (error) { await reportError(error); }
-        finally { blockers.delete('activation'); }
+        // An assistant that failed to start reconciled while this activation still blocked: standby listens again now.
+        finally { blockers.delete('activation'); void reconcile(); }
     };
     const reconcile = () => {
         const token = ++generation;

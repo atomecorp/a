@@ -11,6 +11,12 @@ const browser = await chromium.launch({ headless:false, args:[
     '--enable-unsafe-webgpu','--ignore-gpu-blocklist','--disable-gpu-sandbox','--autoplay-policy=no-user-gesture-required'
 ] });
 const page = await browser.newPage({ viewport:{ width:1280, height:900 }, deviceScaleFactor:1 });
+// The app reaches Fastify on the port server_config.json names: the page announces the test server it was served by
+// (an isolated one, tests/parcours/serveur_isole.mjs, never the developer's 3001), as tests/probes/r108_web_session.mjs.
+const appUrl = new globalThis.URL(URL);
+await page.route('**/server_config.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ fastify: {
+    host: appUrl.hostname, port: Number(appUrl.port || 80), serverInfoPath: '/api/server-info', syncWsPath: '/ws/sync', apiWsPath: '/ws/api' } }) }));
+await page.addInitScript(() => { window.__SQUIRREL_FORCE_FASTIFY__ = true; });
 const errors = [];
 page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
 page.on('pageerror', error => errors.push(error.message));
@@ -41,9 +47,10 @@ try {
             projectId = String(all.find(record => String(record?.name || record?.properties?.name || '') === name)?.id || '');
         }
         if (!projectId) throw new Error('visual_project_missing');
-        await window.AdoleAPI.projects.setCurrent(projectId, name, null, true);
-        window.eveToolBase.ensureProjectLayer?.(projectId);
-        await window.eveToolBase.loadProjectAtomes(projectId, { force:true, staleFirst:false, forceProjectSurface:true });
+        // The canonical opener, as the product's Projects matrix does (tests/probes/molecule_ui_workspace_support.mjs).
+        const projectRuntime = await import('/eVe/intuition/matrix/core/project_data.js');
+        const activation = await projectRuntime.activateProjectWorkspace({ id:projectId, name }, { force:true, staleFirst:false });
+        if (activation?.ok !== true) throw new Error(`visual_project_load_failed:${JSON.stringify(activation)}`);
         workspace.markProjectWorkspaceMode(projectId);
         const create = async spec => {
             const result = await window.eveToolBase.createAtome({ projectId, parentId:projectId, ...spec }, { render:false });

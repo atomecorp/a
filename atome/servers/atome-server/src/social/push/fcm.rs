@@ -14,7 +14,7 @@ pub struct Fcm {
 }
 
 fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 // `/^[A-Za-z0-9_-]{22}$/`.

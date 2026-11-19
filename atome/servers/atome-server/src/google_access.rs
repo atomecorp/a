@@ -22,7 +22,7 @@ pub struct GoogleAccess {
 }
 
 fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 impl GoogleAccess {

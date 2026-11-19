@@ -62,7 +62,8 @@ export async function controlSpotify(ctx, record, action, input) {
     const suffix = '?' + new URLSearchParams({ ...(action === 'seek' ? { position_ms: String(Math.round(input.seconds * 1000)) } : {}),
         ...(action === 'shuffle' ? { state: String(input.on === true) } : {}), device_id: deviceId });
     const path = action === 'play' || action === 'resume' ? 'play' : action;
-    const body = action === 'play' ? (target.kind === 'song' ? { uris: [songUri(target.id)] }
+    // A song chosen in a list plays that list from it, so next and previous move through the list.
+    const body = action === 'play' ? (target.kind === 'song' ? { uris: (input.queue_ids || [target.id]).map(songUri), offset: { uri: songUri(target.id) } }
         : { context_uri: 'spotify:' + target.kind + ':' + target.id }) : undefined;
     await spotifyApi(ctx, record, '/me/player/' + path + suffix, { method: ['next', 'previous'].includes(action) ? 'POST' : 'PUT', body, effect: true });
     const observed = await readSpotify(ctx, record, 'get_state', {});

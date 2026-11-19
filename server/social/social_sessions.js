@@ -1,4 +1,3 @@
-import { SOCIAL_NETWORKS } from '../../atome/src/squirrel/social/contracts.js';
 import { SOCIAL_CONFIG_KEYS } from '../auth_secret_config.js';
 import { tiktokAdapter } from './social_tiktok.js';
 import { instagramAdapter } from './social_instagram.js';
@@ -10,12 +9,15 @@ import { awaitSocialAuthorization, cancelSocialAuthorization, startSocialAuthori
 // principal's encrypted server vault (`social.<network>` records); the client
 // only ever receives the public view built here.
 export const SOCIAL_ADAPTERS = Object.freeze({ tiktok: tiktokAdapter, instagram: instagramAdapter, facebook: facebookAdapter });
+// This reference implementation keeps its three networks; the live server (Rust atome-server) serves every network of
+// `SOCIAL_NETWORKS` (atome/src/squirrel/social/contracts.js, R-190).
+const REFERENCE_NETWORKS = Object.freeze(Object.keys(SOCIAL_ADAPTERS));
 
 export const readSocialConfig = (env = process.env) => Object.fromEntries(SOCIAL_CONFIG_KEYS.map((key) => [key, String(env[key] || '')]));
 
 const recordName = (network) => `social.${network}`;
 const assertNetwork = (network) => {
-    if (!SOCIAL_NETWORKS.includes(network)) throw new SocialError('social_request_invalid');
+    if (!REFERENCE_NETWORKS.includes(network)) throw new SocialError('social_request_invalid');
     return SOCIAL_ADAPTERS[network];
 };
 const configured = (adapter, config) => adapter.configured(config) && /^https:\/\//.test(config.SOCIAL_PUBLIC_BASE_URL);
@@ -61,7 +63,7 @@ export async function socialAccountView(network, ctx) {
 }
 
 export async function listSocialAccounts(ctx) {
-    const entries = await Promise.all(SOCIAL_NETWORKS.map(async (network) => [network, await socialAccountView(network, ctx)]));
+    const entries = await Promise.all(REFERENCE_NETWORKS.map(async (network) => [network, await socialAccountView(network, ctx)]));
     return Object.fromEntries(entries);
 }
 

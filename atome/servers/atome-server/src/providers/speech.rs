@@ -14,7 +14,7 @@ const VOICES: [&str; 10] = [
     "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar",
 ];
 
-fn wav(pcm: &[u8]) -> Vec<u8> {
+pub(super) fn wav(pcm: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(44 + pcm.len());
     out.extend_from_slice(b"RIFF");
     out.extend_from_slice(&(36 + pcm.len() as u32).to_le_bytes());
@@ -87,7 +87,7 @@ pub async fn synthesize(payload: &JsonValue, key: &str) -> Done<JsonValue> {
         return Err("provider_parameter_invalid".into());
     }
     let mut socket = open(
-        &format!("wss://api.openai.com/v1/realtime?model={model}"),
+        &format!("{}/realtime?model={model}", super::openai::socket_root()),
         key,
     )
     .await?;

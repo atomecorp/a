@@ -27,11 +27,11 @@ const source = {
     description: 'What an IN module mixes in: {kind:"live_audio",device_id}, {kind:"strip",id} (its own strip closes a loop, heard one return later) or {kind:"instrument",instrument_id,output}.',
     properties: { kind: { type: 'string', enum: ['live_audio', 'strip', 'instrument'] }, device_id: { type: 'string' }, id: { type: 'string' }, instrument_id: { type: 'string' }, output }
 };
-const effect = { type: 'string', description: 'dsp: an atome-dsp kind (reverb, echo, compressor, amp, convolution, bands_3, ducker...); video_fx: color.' };
+const effect = { type: 'string', description: 'dsp: an atome-dsp kind — dynamics compressor (character, sidechain key), limiter, gate, ducker, deesser, transient, expander, multiband; space reverb (space), convolution, echo (sync, mode); eq (8 bands), bell, low_shelf, high_shelf, low_pass, high_pass, band_pass, notch; voice vocoder, tuner, harmonizer, pitch_shift, doubler, denoise; modulation chorus, flanger, phaser, tremolo; saturation saturator, soft_clip, hard_clip, amp, lofi; master maximizer, imager, bands_2..4, mid_side, left_right. video_fx: color, wheels, curves, hsl, lut, bw, blur (params.mode 0 gaussian..4 lens), sharpen, denoise, vignette, grain, glow, aberration, pixelate, chroma_key (its Fond: params.background_track a video track id, or params.background_image a media atome id, else transparent), luma_key, mask. A choice param takes its index.' };
 const MIX_COMMANDS = Object.freeze({
     'mix.module.add': stripCommand({
         module_id: { type: 'string' },
-        type: { type: 'string', enum: ['volume', 'pan', 'mono', 'dsp', 'user_effect', 'send', 'input', 'opacity', 'video_fx'] },
+        type: { type: 'string', enum: ['volume', 'pan', 'mono', 'dsp', 'user_effect', 'send', 'input', 'opacity', 'transform', 'video_fx'] },
         effect, effect_id: { type: 'string', description: 'For a user_effect: the audio_effect atome (Mes effets) it places, linked.' },
         params: { type: 'object' }, destination, outputs, key, source, index: { type: 'integer' }
     }, ['module_id', 'type']),
@@ -49,7 +49,7 @@ const MIX_COMMANDS = Object.freeze({
 });
 
 const EDIT_VERBS = [
-    'clip.move', 'clip.trim', 'clip.crop', 'clip.loop', 'clip.view', 'clip.mode', 'clip.fades', 'clip.stretch', 'clip.split', 'clip.join', 'clip.take',
+    'clip.move', 'clip.trim', 'clip.crop', 'clip.loop', 'clip.view', 'clip.mode', 'clip.fades', 'clip.stretch', 'clip.warp', 'clip.split', 'clip.join', 'clip.take',
     'clip.cut', 'clip.copy', 'clip.paste', 'clip.erase', 'clip.duplicate', 'clip.sound.split', 'clip.sound.unlink',
     'scene.add', 'scene.update', 'scene.remove', 'scene.move', 'cell.set', 'cell.clear', 'cell.place',
     'track.add', 'track.remove', 'track.update', 'track.reorder', 'track.loop', 'track.quantization', 'track.mute', 'track.solo',

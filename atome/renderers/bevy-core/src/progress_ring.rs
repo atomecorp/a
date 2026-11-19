@@ -95,6 +95,8 @@ pub struct AtomeProgressRingState {
     since: f64,
     size: [f32; 2],
     opacity: f32,
+    /// The part of the ring its mesh shows (logical size, then its UV rectangle): all of it unless a clip cuts it.
+    shown: [f32; 6],
 }
 
 impl AtomeProgressRingState {
@@ -194,6 +196,7 @@ pub fn insert(
         since: since(world, &ring),
         size,
         opacity,
+        shown: whole(size),
     };
     let progress = state.progress_at(now(world));
     let mesh = video_quad_mesh_handle_from_size(
@@ -240,7 +243,55 @@ pub fn resize(world: &mut World, entity: Entity, size: [f32; 2]) -> Result<(), S
         [0.0, 0.0, 1.0, 1.0],
     );
     world.entity_mut(entity).insert(Mesh2d(mesh));
-    write_uniform(world, entity, AtomeProgressRingState { size, ..state })
+    write_uniform(
+        world,
+        entity,
+        AtomeProgressRingState {
+            size,
+            shown: whole(size),
+            ..state
+        },
+    )
+}
+
+fn whole(size: [f32; 2]) -> [f32; 6] {
+    [size[0], size[1], 0.0, 0.0, 1.0, 1.0]
+}
+
+/// The ring cut by its clip (a list that scrolls it under its edge): its mesh covers only the part `visible`
+/// of its box `original` (both `[x, y, width, height]`, logical px), its UV that part of the whole ring, so the
+/// shader draws the same annulus cut. The whole mesh, laid on the visible part, drew the whole ring there,
+/// out of its list and over the band (the Sport card lying). Nothing to do for an entity that is not a ring.
+pub fn crop(
+    world: &mut World,
+    entity: Entity,
+    original: [f32; 4],
+    visible: [f32; 4],
+) -> Result<(), String> {
+    let Some(state) = world.get::<AtomeProgressRingState>(entity).copied() else {
+        return Ok(());
+    };
+    let fraction = |offset: f32, length: f32| (offset / length.max(f32::EPSILON)).clamp(0.0, 1.0);
+    let shown = [
+        visible[2],
+        visible[3],
+        fraction(visible[0] - original[0], original[2]),
+        fraction(visible[1] - original[1], original[3]),
+        fraction(visible[2], original[2]),
+        fraction(visible[3], original[3]),
+    ];
+    if shown == state.shown {
+        return Ok(());
+    }
+    let mesh = video_quad_mesh_handle_from_size(
+        &mut world.resource_mut::<Assets<Mesh>>(),
+        [shown[0], shown[1]],
+        [shown[2], shown[3], shown[4], shown[5]],
+    );
+    world
+        .entity_mut(entity)
+        .insert((Mesh2d(mesh), AtomeProgressRingState { shown, ..state }));
+    Ok(())
 }
 
 /// The node's opacity (a paused step dims its disc and ring); nothing to do for an entity that is not a ring.

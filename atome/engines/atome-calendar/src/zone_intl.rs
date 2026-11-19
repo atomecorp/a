@@ -4,7 +4,7 @@
 // `formatToParts` are reached through `Reflect`, so a zone Intl refuses and a date it cannot show
 // come back as errors instead of exceptions thrown through the module. The local zone is `Date`'s
 // own wall clock (its getters), exact to the second where an old zone's offset is not whole
-// minutes (a local mean time), which `getTimezoneOffset` and chrono round.
+// minutes (a local mean time), which `getTimezoneOffset` and chrono's `%z` round.
 use crate::ical_time::date_utc;
 use js_sys::{Array, Date, Function, Object, Reflect};
 use std::cell::RefCell;

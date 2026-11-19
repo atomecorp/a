@@ -1,19 +1,20 @@
 // The feature requests (« Demandes », server/ws_feature_requests.js, ported): bug reports of kind
-// `request`, kept in the same JSON files as the bugs (bug_reports.rs, logs/bug_reports/<day>/). An
+// `request`, kept in the same table as the bugs (crate::team_reports, `team_reports`). An
 // account with the `admin` role (account_roles.rs) validates or refuses them: a refusal writes
 // `review` `{ state: 'refused', at, by, reason }`, a validation `review` `{ state: 'validated' }` and
 // `roadmap` `{ state: 'planned' }`. The Roadmap then moves planned → in_progress → done, in the app
-// by an admin or on the server by scripts/bug_reports_admin.mjs (`roadmap`). Every move is appended
-// to the file's `steps`. The Roadmap (validated requests, titles only) is public
+// by an admin or on the server by the `team_reports` tool (`roadmap`). Every move is appended
+// to the row's `steps`. A message of the Atome contact's thread that the team classified as a
+// request (atome_thread.rs) is reviewed the same way. The Roadmap (validated requests, titles only) is public
 // (`feature-request-roadmap`); the admin frames check the role on the server, whatever the app shows.
-use super::bug_reports::{
-    bounded, file_path, normalize_refs, pretty, read_file, request_state, root,
-};
+use super::bug_reports::{bounded, normalize_refs, request_state};
+use super::common::environment;
 use super::public_source::RateLimit;
 use super::{Asker, account_roles, response};
+use crate::team_reports;
 use crate::vault_router::js;
+use rusqlite::Connection;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
-use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 pub(super) const ROADMAP: &str = "feature-request-roadmap";
@@ -29,54 +30,9 @@ fn fail(error: &str) -> JsonValue {
     json!({ "ok": false, "error": error })
 }
 
-// `listBugReportFiles(root)` kept to the requests: every report file, oldest day first.
-fn requests(root: &Path) -> Result<Vec<(PathBuf, JsonValue)>, String> {
-    let entries = match std::fs::read_dir(root) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error.to_string()),
-    };
-    let mut days = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let day = name.len() == 10
-            && name.bytes().enumerate().all(|(at, b)| {
-                if at == 4 || at == 7 {
-                    b == b'-'
-                } else {
-                    b.is_ascii_digit()
-                }
-            });
-        if day
-            && entry
-                .file_type()
-                .map_err(|error| error.to_string())?
-                .is_dir()
-        {
-            days.push(name);
-        }
-    }
-    days.sort();
-    let mut found = Vec::new();
-    for day in days {
-        let mut names: Vec<String> = std::fs::read_dir(root.join(&day))
-            .map_err(|error| error.to_string())?
-            .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
-            .collect::<Result<_, _>>()
-            .map_err(|error| error.to_string())?;
-        names.retain(|name| name.ends_with(".json"));
-        names.sort();
-        for name in names {
-            let file = root.join(&day).join(name);
-            if let Some(report) =
-                read_file(&file)?.filter(|report| report.get("kind") == Some(&json!("request")))
-            {
-                found.push((file, report));
-            }
-        }
-    }
-    Ok(found)
+// Every feature request, oldest first.
+fn requests(db: &Connection) -> Result<Vec<JsonValue>, String> {
+    team_reports::of_kind(db, "request")
 }
 
 // `{ key: report[key] }` of the fields present (an undefined field is left out by JSON).
@@ -106,9 +62,9 @@ fn newest_first(
 }
 
 // `featureRoadmap(root)`: the validated requests, their title, day and state.
-fn roadmap(root: &Path) -> Result<Vec<JsonMap<String, JsonValue>>, String> {
+fn roadmap(db: &Connection) -> Result<Vec<JsonMap<String, JsonValue>>, String> {
     let mut entries = Vec::new();
-    for (_, report) in requests(root)? {
+    for report in requests(db)? {
         if report.pointer("/review/state") != Some(&json!("validated")) {
             continue;
         }
@@ -126,11 +82,11 @@ fn roadmap(root: &Path) -> Result<Vec<JsonMap<String, JsonValue>>, String> {
 }
 
 // The requests from every account still waiting for an admin, without who filed them.
-fn pending(root: &Path) -> Result<JsonValue, String> {
-    let entries = requests(root)?
+fn pending(db: &Connection) -> Result<JsonValue, String> {
+    let entries = requests(db)?
         .into_iter()
-        .filter(|(_, report)| !js::truthy(report.get("review")))
-        .map(|(_, report)| {
+        .filter(|report| !js::truthy(report.get("review")))
+        .map(|report| {
             fields_of(
                 &report,
                 &[
@@ -148,13 +104,13 @@ fn pending(root: &Path) -> Result<JsonValue, String> {
 }
 
 // `findFeatureRequest(root, { id, created_iso })` by its id and day.
-fn find(root: &Path, id: &str, created_iso: &str) -> Result<Option<(PathBuf, JsonValue)>, String> {
-    let file = file_path(root, id, created_iso);
-    Ok(read_file(&file)?
+fn find(db: &Connection, id: &str, created_iso: &str) -> Result<Option<JsonValue>, String> {
+    Ok(team_reports::get(db, id)?
+        .map(|(_, report)| report)
         .filter(|report| {
-            report.get("id") == Some(&json!(id)) && report.get("kind") == Some(&json!("request"))
-        })
-        .map(|report| (file, report)))
+            report.get("created_iso") == Some(&json!(created_iso))
+                && report.get("kind") == Some(&json!("request"))
+        }))
 }
 
 // `report[key] = value`, its place kept when it was already there.
@@ -175,14 +131,14 @@ fn step(report: &mut JsonValue, entry: JsonValue) -> Result<(), String> {
     Ok(())
 }
 
-fn save(file: &Path, report: &JsonValue) -> Result<JsonValue, String> {
-    std::fs::write(file, pretty(report)).map_err(|error| error.to_string())?;
+fn save(db: &Connection, report: &JsonValue) -> Result<JsonValue, String> {
+    team_reports::save(db, report)?;
     Ok(json!({ "ok": true, "request": request_state(report) }))
 }
 
 // The admin's action on one request (`review` or `roadmap`), `by` the admin.
 fn decide(
-    root: &Path,
+    db: &Connection,
     data: &JsonValue,
     action: &str,
     by: &str,
@@ -212,7 +168,7 @@ fn decide(
             "feature_request_state_invalid"
         }));
     };
-    let Some((file, mut report)) = find(root, id, created_iso)? else {
+    let Some(mut report) = find(db, id, created_iso)? else {
         return Ok(fail("feature_request_unknown"));
     };
     if action == "roadmap" {
@@ -228,7 +184,7 @@ fn decide(
             &mut report,
             json!({ "at": at, "by": by, "roadmap": wanted }),
         )?;
-        return save(&file, &report);
+        return save(db, &report);
     }
     // A request is reviewed once.
     if js::truthy(report.get("review")) {
@@ -250,12 +206,13 @@ fn decide(
         entry["roadmap"] = json!("planned");
     }
     step(&mut report, entry)?;
-    save(&file, &report)
+    save(db, &report)
 }
 
 pub(super) async fn answer(asker: &Asker<'_>, data: &JsonValue) -> Result<JsonValue, String> {
-    let now = chrono::Utc::now().timestamp_millis();
-    let root = root()?;
+    let now = atome_js_values::dates::now_ms();
+    let project = environment()?.1.clone();
+    let central = asker.connection.ws_api.sessions.central();
     if js::text(data.get("type")) == ROADMAP {
         if ROADMAP_LIMITED.limited(asker.address, now) {
             return Ok(response(
@@ -265,9 +222,12 @@ pub(super) async fn answer(asker: &Asker<'_>, data: &JsonValue) -> Result<JsonVa
                 fail("bug_report_rate_limited"),
             ));
         }
-        let entries = tokio::task::spawn_blocking(move || roadmap(&root))
-            .await
-            .map_err(|error| error.to_string())??;
+        let entries = central
+            .transaction(move |db| {
+                team_reports::import_files(db, &project)?;
+                roadmap(db)
+            })
+            .await?;
         return Ok(response(
             ROADMAP,
             data,
@@ -292,16 +252,19 @@ pub(super) async fn answer(asker: &Asker<'_>, data: &JsonValue) -> Result<JsonVa
     let Some(by) = principal else {
         return Ok(response(ADMIN, data, false, fail("admin_required")));
     };
-    if !account_roles::has(asker, &by, "admin").await? {
+    if !account_roles::has(asker, &by, account_roles::ADMIN).await? {
         return Ok(response(ADMIN, data, false, fail("admin_required")));
     }
     let asked = data.clone();
-    let result = tokio::task::spawn_blocking(move || match action.as_str() {
-        "pending" => pending(&root),
-        _ => decide(&root, &asked, &action, &by, &js::iso(now)),
-    })
-    .await
-    .map_err(|error| error.to_string())?;
+    let result = central
+        .transaction(move |db| {
+            team_reports::import_files(db, &project)?;
+            match action.as_str() {
+                "pending" => pending(db),
+                _ => decide(db, &asked, &action, &by, &js::iso(now)),
+            }
+        })
+        .await;
     Ok(match result {
         Ok(result) => {
             let ok = result.get("ok") == Some(&json!(true));

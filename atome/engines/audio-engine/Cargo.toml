@@ -28,6 +28,10 @@ atome-voice-turns = { path = "../voice-turns", optional = true }
 [features]
 # The host links libvosk (desktop: platforms/desktop-tauri/native/lib; iOS: libvosk_ios.a).
 voice = ["dep:vosk", "dep:ort", "dep:base64", "dep:atome-voice-turns"]
+# Windows: ASIO drivers beside WASAPI exclusive (src/asio_duplex.rs). cpal's ASIO host builds
+# asio-sys against the Steinberg ASIO SDK (CPAL_ASIO_DIR, else fetched by its build script) and
+# needs LLVM's libclang; the Windows desktop build enables it.
+asio = ["cpal/asio"]
 
 [dev-dependencies]
 tempfile.workspace = true
@@ -35,7 +39,7 @@ tempfile.workspace = true
 # Windows: WASAPI exclusive output and capture on one thread (src/wasapi_duplex.rs);
 # the same `windows` release cpal already builds on, so no new crate.
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.54", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Media_KernelStreaming", "Win32_Media_Multimedia", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant", "Win32_Devices_FunctionDiscovery", "Win32_UI_Shell_PropertiesSystem"] }
+windows = { version = "0.54", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Media_KernelStreaming", "Win32_Media_Multimedia", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant", "Win32_Devices_FunctionDiscovery", "Win32_Devices_Properties", "Win32_Security", "Win32_UI_Shell_PropertiesSystem"] }
 
 [lints]
 workspace = true

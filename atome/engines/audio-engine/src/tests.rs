@@ -99,6 +99,90 @@ mod audio_engine_tests {
         std::fs::remove_file(&wav_path).ok();
     }
 
+    // A 16-bit stereo AIFF of `seconds` at 44.1 kHz, built in memory (a 90 MB import crashed the iPad, R-188).
+    fn aiff_bytes(seconds: u32) -> Vec<u8> {
+        let frames = 44_100 * seconds;
+        let sound_len = frames * 4;
+        let mut bytes = Vec::with_capacity(sound_len as usize + 54);
+        bytes.extend_from_slice(b"FORM");
+        bytes.extend_from_slice(&(46 + sound_len).to_be_bytes());
+        bytes.extend_from_slice(b"AIFFCOMM");
+        bytes.extend_from_slice(&18u32.to_be_bytes());
+        bytes.extend_from_slice(&2u16.to_be_bytes());
+        bytes.extend_from_slice(&frames.to_be_bytes());
+        bytes.extend_from_slice(&16u16.to_be_bytes());
+        // 44100 as an 80-bit extended float.
+        bytes.extend_from_slice(&[0x40, 0x0E, 0xAC, 0x44, 0, 0, 0, 0, 0, 0]);
+        bytes.extend_from_slice(b"SSND");
+        bytes.extend_from_slice(&(8 + sound_len).to_be_bytes());
+        bytes.extend_from_slice(&[0; 8]);
+        bytes.resize(bytes.len() + sound_len as usize, 0);
+        bytes
+    }
+
+    // The iOS FFI and the Tauri bridge hand a clip's bytes straight to `load_clip_from_bytes`; the JSON
+    // command route no longer carries them (each byte became a JSON number there, 90 MB → out of memory).
+    #[test]
+    fn test_large_clip_from_bytes_without_json() {
+        let _lock = TEST_LOCK.lock().unwrap();
+        let bytes = aiff_bytes(520);
+        assert!(bytes.len() > 90_000_000);
+        crate::playback::init().expect("init failed");
+        let loaded = crate::commands::load_clip_from_bytes("test_large_aiff", bytes)
+            .expect("large clip from bytes");
+        let duration = loaded["duration_seconds"].as_f64().unwrap();
+        assert!((duration - 520.0).abs() < 0.01, "duration {duration}");
+        let refused = crate::commands::dispatch(
+            "audio_load_clip_from_bytes",
+            &serde_json::json!({ "id": "test_json_bytes", "bytes": [0, 1, 2] }),
+            None,
+        );
+        assert_eq!(
+            refused.unwrap_err(),
+            "audio_command_unknown:load_clip_from_bytes"
+        );
+        crate::playback::destroy_clip("test_large_aiff").expect("destroy_clip failed");
+        crate::playback::shutdown().expect("shutdown failed");
+    }
+
+    // An upload's duration is read from the container alone: the same length as a full decode, for a
+    // 90 MB AIFF, an MP4 (riff.m4a) and the app's MP3 alarms, without loading a clip.
+    #[test]
+    fn test_probe_duration_matches_decode() {
+        let _lock = TEST_LOCK.lock().unwrap();
+        let large = aiff_bytes(520);
+        let probed = crate::commands::probe_duration_from_bytes(&large).expect("probe aiff");
+        let seconds = probed["duration_seconds"].as_f64().unwrap();
+        assert!((seconds - 520.0).abs() < 0.01, "aiff {seconds}");
+        let assets =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src/assets/audios");
+        let mut files = vec![assets.join("riff.m4a")];
+        let mut alarms: Vec<_> = std::fs::read_dir(assets.join("alarms"))
+            .expect("alarms")
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| path.extension().is_some_and(|ext| ext == "mp3"))
+            .collect();
+        alarms.sort();
+        assert!(!alarms.is_empty());
+        files.extend(alarms);
+        crate::playback::init().expect("init failed");
+        for (index, path) in files.iter().enumerate() {
+            let bytes = std::fs::read(path).expect("asset");
+            let probed = crate::commands::probe_duration_from_bytes(&bytes).expect("probe")["duration_seconds"]
+                .as_f64().unwrap();
+            let id = format!("test_probe_{index}");
+            let decoded = crate::commands::load_clip_from_bytes(&id, bytes).expect("decode")["duration_seconds"]
+                .as_f64().unwrap();
+            assert!(
+                (probed - decoded).abs() < 0.06,
+                "{}: probed {probed}, decoded {decoded}",
+                path.display()
+            );
+            crate::playback::destroy_clip(&id).expect("destroy_clip failed");
+        }
+        crate::playback::shutdown().expect("shutdown failed");
+    }
+
     #[test]
     fn test_record_mic() {
         let _lock = TEST_LOCK.lock().unwrap();

@@ -16,6 +16,7 @@ extension auv3Utils {
         recordingExpectedRenderFrame = nil
         recordingExpectedTimelineFrame = nil
         recordingPlaybackObservedFrame = nil
+        recordingCaptureClock = nil
         os_unfair_lock_unlock(&recordingTimingLock)
         os_unfair_lock_lock(&recordingEventLock)
         recordingStartedEventPending = pendingStartEvent

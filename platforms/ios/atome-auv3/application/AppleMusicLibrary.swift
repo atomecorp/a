@@ -48,6 +48,20 @@ enum AppleMusicLibrary {
         }
         try check(); guard let result else { throw AppleMusicFailure(code: "ITEM_NOT_FOUND") }; return result
     }
+    // Songs of one scope in one request, in the order of `ids`; an id not found is left out.
+    static func songs(_ ids: [String], scope: String, check: () throws -> Void) async throws -> [Song] {
+        let wanted = ids.map { MusicItemID($0) }
+        let found: [Song]
+        if scope == "library" {
+            var lookup = MusicLibraryRequest<Song>(); lookup.filter(matching: \.id, memberOf: wanted); lookup.limit = wanted.count
+            found = Array(try await lookup.response().items)
+        } else {
+            found = Array(try await MusicCatalogResourceRequest<Song>(matching: \.id, memberOf: wanted).response().items)
+        }
+        try check()
+        let byID = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return wanted.compactMap { byID[$0] }
+    }
     static func playlist(_ id: String, scope: String, check: () throws -> Void) async throws -> Playlist {
         let result: Playlist?
         if scope == "library" {

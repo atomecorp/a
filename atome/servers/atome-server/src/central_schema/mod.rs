@@ -13,13 +13,20 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, path::Path, time::Duration};
 
+mod money_tables;
 mod service_tables;
 mod social_tables;
 
+// The CB sociale's tables (its pseudonyms and reports), also brought up alone by its tests.
+pub(crate) use service_tables::CB as CB_TABLES;
+pub(crate) use service_tables::{CB_COLUMNS, CB_DROPPED_COLUMNS};
+
 // What the chain is made of besides the two schema files: a change to any of them runs it again
 // (the store's file holds the column lists it shares with the vaults).
-const CHAIN_SOURCES: [&str; 4] = [
+const CHAIN_SOURCES: [&str; 6] = [
     include_str!("mod.rs"),
+    include_str!("../team_reports/mod.rs"),
+    include_str!("money_tables.rs"),
     include_str!("social_tables.rs"),
     include_str!("service_tables.rs"),
     include_str!("../../../../engines/atome-store/src/legacy_columns.rs"),
@@ -102,6 +109,7 @@ fn migrate(db: &Connection, schema: &str, auth_schema: &str) -> rusqlite::Result
     prepare_columns(db)?;
     db.execute_batch(schema)?;
     db.execute_batch(auth_schema)?;
+    widen_account_roles(db, auth_schema)?;
     ensure_legacy_columns(
         db,
         "auth_push_installations",
@@ -117,7 +125,60 @@ fn migrate(db: &Connection, schema: &str, auth_schema: &str) -> rusqlite::Result
     backfill_event_sequences(db)?;
     principal_identity_tables(db)?;
     run(db, &service_tables::SERVICES)?;
+    run(db, &money_tables::MONEY)?;
+    run(db, &CB_TABLES)?;
+    // The Appel's pairs put in touch (lot L5): a keyed fingerprint and an instant, kept across a restart for 21 days.
+    run(db, &social_tables::CB_CALL_PAIRS)?;
+    // The channels' numbers a report froze, for the moderator's case file (lot L4).
+    run(db, &social_tables::CB_RECORDING_HOLD_CHANNELS)?;
+    // What the people send the team (R-210): the reports, the requests and the Atome contact's thread.
+    run(db, &crate::team_reports::TABLES)?;
+    // Lot L2b: a bottles' table made before it gains its new columns (adole_cb_social_schema.js `CB_BOTTLE_COLUMNS`).
+    for (table, columns) in CB_COLUMNS {
+        ensure_legacy_columns(db, table, columns)?;
+    }
+    drop_cb_columns(db)?;
     db.execute_batch(USERS_VIEW)
+}
+
+// Lot L2c: a column no longer kept (the catcher's country) leaves a table that had it, its values blanked first and
+// overwritten on disk (`secure_delete`), the setting given back after (adole_cb_social_schema.js `dropCbColumns`).
+fn drop_cb_columns(db: &Connection) -> rusqlite::Result<()> {
+    for (table, column) in CB_DROPPED_COLUMNS {
+        let present: i64 = db.query_row(
+            &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = '{column}'"),
+            [],
+            |row| row.get(0),
+        )?;
+        if present == 0 {
+            continue;
+        }
+        let secure: i64 = db.query_row("PRAGMA secure_delete", [], |row| row.get(0))?;
+        db.execute_batch(&format!(
+            "PRAGMA secure_delete = ON; UPDATE {table} SET {column} = NULL; ALTER TABLE {table} DROP COLUMN {column}; PRAGMA secure_delete = {secure};"
+        ))?;
+    }
+    Ok(())
+}
+
+// A roles table made before the roles `tester` and `owner` (its CHECK naming fewer roles) is made again from
+// the account schema, its rows kept (database/adole_cb_social_schema.js `widenAccountRoles`).
+fn widen_account_roles(db: &Connection, auth_schema: &str) -> rusqlite::Result<()> {
+    let made: String = db.query_row(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'auth_account_roles'",
+        [],
+        |row| row.get(0),
+    )?;
+    if made.contains("'owner'") {
+        return Ok(());
+    }
+    db.execute_batch("ALTER TABLE auth_account_roles RENAME TO auth_account_roles_before_tester;")?;
+    db.execute_batch(auth_schema)?;
+    db.execute_batch(
+        "INSERT INTO auth_account_roles (principal_id, role, granted_ms, granted_by)
+         SELECT principal_id, role, granted_ms, granted_by FROM auth_account_roles_before_tester;
+         DROP TABLE auth_account_roles_before_tester;",
+    )
 }
 
 fn run(db: &Connection, statements: &[&str]) -> rusqlite::Result<()> {
@@ -364,7 +425,7 @@ fn principal_identity_tables(db: &Connection) -> rusqlite::Result<()> {
         )?
         .query_map([], |row| Ok((row.get::<_, SqlValue>(0)?, row.get::<_, String>(1)?)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let now = crate::vault_router::js::iso(chrono::Utc::now().timestamp_millis());
+    let now = crate::vault_router::js::iso(atome_js_values::dates::now_ms());
     for (credential, phone) in active {
         if crate::auth::device_sessions::e164(Some(&JsonValue::String(phone))).is_none() {
             db.execute(

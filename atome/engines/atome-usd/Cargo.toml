@@ -1,0 +1,33 @@
+[package]
+name = "atome-usd"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "OpenUSD scenes of the scene3d atome: the scene description and its byte codec (read by the renderer), and behind the `reader` feature the USD reader (built into its own WASM module, platforms/web/usd-wasm)"
+
+[features]
+reader = ["dep:openusd", "dep:anyhow", "dep:zip", "dep:image"]
+
+[dependencies]
+serde.workspace = true
+# The reader. openusd 0.6 is the last release on rustc 1.95 (0.7+ needs 1.96).
+openusd = { version = "=0.6.0", features = ["geom", "shade", "lux"], optional = true }
+anyhow = { version = "1", optional = true }
+# The usdz entries (textures), with the zip version and features openusd already builds.
+zip = { version = "8", default-features = false, features = ["deflate"], optional = true }
+# A usdz texture decoded to RGBA (PNG, as the renderer's own image reader).
+image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "atome_usd_read"
+path = "../../../tests/atome_usd/read.rs"
+required-features = ["reader"]
+
+[[test]]
+name = "atome_usd_codec"
+path = "../../../tests/atome_usd/codec.rs"
+required-features = ["reader"]

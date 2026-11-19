@@ -660,6 +660,10 @@ public class iCloudFileManager: ObservableObject {
         documentPicker.shouldShowFileExtensions = true
     DispatchQueue.main.async { viewController.present(documentPicker, animated: true) }
     }
+    // Word, Excel (macro-enabled included), PDF, CSV/TSV, Markdown, HTML and plain text, by their extensions.
+    private static let importableDocumentTypes: [UTType] = [
+        "docx", "docm", "xlsx", "xlsm", "pdf", "csv", "tsv", "md", "markdown", "html", "htm", "xhtml", "txt"
+    ].compactMap { UTType(filenameExtension: $0) }
     private func proceedWithMultipleDocumentPicker(fileTypes: [String], multiple: Bool, from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
         let multipleDelegate = DocumentPickerLoadMultipleDelegate { success, results, error in
             completion(success, results, error)
@@ -679,10 +683,12 @@ public class iCloudFileManager: ObservableObject {
             case "image": utTypes.append(.image)
             case "video": utTypes.append(contentsOf: [.movie, .video])
             case "audio": utTypes.append(.audio)
+            // The documents the eVe document import reads (document_import.js#DOCUMENT_ACCEPT).
+            case "document": utTypes.append(contentsOf: Self.importableDocumentTypes)
             default: utTypes.append(.data)
             }
         }
-        let mediaKinds: Set<String> = ["image", "video", "audio"]
+        let mediaKinds: Set<String> = ["image", "video", "audio", "document"]
         let kindsOnly = !fileTypes.isEmpty && fileTypes.allSatisfy { mediaKinds.contains($0.lowercased()) }
         if !kindsOnly { utTypes.append(contentsOf: [.audio, .data, .item, .content]) }
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)

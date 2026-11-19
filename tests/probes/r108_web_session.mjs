@@ -18,7 +18,7 @@ export const openR108Session = async ({ out }) => {
         '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
     const context = await browser.newContext({ viewport: { width: 402, height: 874 }, deviceScaleFactor: 1, hasTouch: true });
     // The app reaches Fastify on the port server_config.json names: the page announces the test server it was served
-    // by (an isolated one, temp/comm/comm_harness.mjs, never the developer's 3001), and the product's switch keeps a
+    // by (an isolated one, tests/helpers/probe_server.mjs, never the developer's 3001), and the product's switch keeps a
     // loopback page off the local native server route.
     const appUrl = new URL(APP_URL);
     await context.route('**/server_config.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ fastify: {

@@ -115,3 +115,13 @@ export const makeId = (prefix = 'id') => {
         : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
     return prefix ? `${prefix}_${unique}` : unique;
 };
+
+// --- bytes -------------------------------------------------------------------
+// Bytes (a Uint8Array, an ArrayBuffer or an array of bytes) as base64, read in slices so a long file never
+// overflows the call stack of `String.fromCharCode(...)`.
+export const bytesToBase64 = (bytes) => {
+    const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    let binary = '';
+    for (let offset = 0; offset < source.length; offset += 0x8000) binary += String.fromCharCode(...source.subarray(offset, offset + 0x8000));
+    return globalThis.btoa(binary);
+};

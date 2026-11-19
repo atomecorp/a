@@ -5,7 +5,7 @@ import {
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, disarmMemberPlayback,
-    expandCanonicalListMolecule, listIndex, listNode, memberPlayTool, playbackSnapshot,
+    expandCanonicalListMolecule, listIndex, listNode, memberPlayTool, playbackTrace,
     selectListRow, startMoleculePlayback, structuredRows, waitForPlaybackEnd
 } from './molecule_ui_drop_playback_support.mjs';
 
@@ -102,10 +102,11 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
         const rule = await chooseMoleculePlaybackMode(page, moleculeId, mode);
         const started = await startMoleculePlayback(page, moleculeId, [fixture.audioId, fixture.imageId]);
         await wait(500);
-        const progressed = await playbackSnapshot(page, [fixture.audioId, fixture.imageId]);
-        assert(progressed.playing && progressed.selectionIds.includes(moleculeId),
-            `molecule_playback_not_progressing:${mode}:${JSON.stringify(progressed)}`);
-        assert(progressed.activeLeafIds.length === (mode === 'layer' ? 2 : 1),
+        // Judged on the states the transport published while it played (playbackTrace), so a playback shorter
+        // than the probe's round trips on a loaded machine is still seen progressing.
+        const progressed = await playbackTrace(page, moleculeId, [fixture.audioId, fixture.imageId]);
+        assert(progressed.progressed, `molecule_playback_not_progressing:${mode}:${JSON.stringify(progressed)}`);
+        assert(progressed.maxActiveLeaves === (mode === 'layer' ? 2 : 1),
             `molecule_active_leaves_incorrect:${mode}:${JSON.stringify(progressed)}`);
         await screenshot({ page, report, outDir, name: `drop_list_molecule_${mode}_progress` });
         const ended = await waitForPlaybackEnd(page, mode === 'layer' ? 12000 : 35000);

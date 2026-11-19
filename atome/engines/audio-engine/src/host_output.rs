@@ -10,7 +10,9 @@
 // it just before it renders, so the direct path plays it in the same quantum.
 
 use super::direct::{self, SharedDirect};
-use super::scheduled_backend::{CHANNELS, SharedConsumer, note_output_quantum};
+use super::scheduled_backend::{
+    CHANNELS, CaptureClock, SharedConsumer, note_capture_start_at, note_output_quantum,
+};
 use atome_mix_graph::shared::LiveInput;
 use kira::Frame;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -23,6 +25,17 @@ const CHUNK_FRAMES: usize = 256;
 static HOST_RATE: AtomicU32 = AtomicU32::new(0);
 static CONSUMER: Mutex<Option<(SharedConsumer, SharedDirect)>> = Mutex::new(None);
 static HOST_LISTENERS: Mutex<Vec<Arc<LiveInput>>> = Mutex::new(Vec::new());
+
+// Where a take of the host's input starts on the engine's clock (R-179): the host
+// instant of its first sample and the output anchor the render block noted last,
+// as a device capture notes it (`scheduled_backend::CaptureClock`), so the take is
+// placed by the same rule (`exact_placement.js#nativeTakeStart`). Real-time safe:
+// a busy anchor gives a clock without an anchor (the next quantum tries again).
+pub fn capture_clock(first_capture_host_ns: i64) -> Option<CaptureClock> {
+    let slot = Mutex::new(None);
+    note_capture_start_at(&slot, first_capture_host_ns);
+    slot.into_inner().ok().flatten()
+}
 
 // Selects the host-pulled output at `sample_rate` (before the engine starts).
 pub fn use_host_output(sample_rate: u32) {
@@ -41,10 +54,11 @@ pub(crate) fn listen_host_input(inputs: Vec<Arc<LiveInput>>) -> Result<(), Strin
     Ok(())
 }
 
-// Called by the host's render block with the host's input: true when a strip
-// listens to it (the dry input is then the chain's to play, not the unit's to
-// copy through). Real-time safe: a busy list drops the quantum.
-pub fn push_host_input(left: &[f32], right: &[f32]) -> bool {
+// Called by the host's render block with the host's input, its first frame at
+// `host_ns` (the quantum's host instant, the clock `render` notes): true when a
+// strip listens to it (the dry input is then the chain's to play, not the
+// unit's to copy through). Real-time safe: a busy list drops the quantum.
+pub fn push_host_input(left: &[f32], right: &[f32], host_ns: i64) -> bool {
     let Ok(listeners) = HOST_LISTENERS.try_lock() else {
         return false;
     };
@@ -52,14 +66,17 @@ pub fn push_host_input(left: &[f32], right: &[f32]) -> bool {
         return false;
     }
     let mut frames = [Frame::ZERO; CHUNK_FRAMES];
-    for (left, right) in left.chunks(CHUNK_FRAMES).zip(right.chunks(CHUNK_FRAMES)) {
+    let nanos_per_frame = 1e9 / f64::from(HOST_RATE.load(Ordering::Acquire).max(1));
+    let chunks = left.chunks(CHUNK_FRAMES).zip(right.chunks(CHUNK_FRAMES));
+    for (chunk, (left, right)) in chunks.enumerate() {
         let count = left.len().min(right.len());
         for frame in 0..count {
             frames[frame] = Frame::new(left[frame], right[frame]);
         }
-        listeners
-            .iter()
-            .for_each(|input| input.push(&frames[..count]));
+        let at = host_ns as f64 + (chunk * CHUNK_FRAMES) as f64 * nanos_per_frame;
+        listeners.iter().for_each(|input| {
+            input.push_at(&frames[..count], at);
+        });
     }
     true
 }
@@ -106,4 +123,10 @@ pub fn render(left: &mut [f32], right: &mut [f32], host_ns: i64) -> usize {
     }
     note_output_quantum(host_ns, frames, popped);
     popped
+}
+
+/// Frames Atome's output lags what it plays and hears: the slower of its two graphs (the console and the
+/// direct path), the latency a host compensates (AUv3 `latency`).
+pub fn output_latency_frames() -> usize {
+    super::mix::output_latency_frames().max(direct::output_latency_frames())
 }

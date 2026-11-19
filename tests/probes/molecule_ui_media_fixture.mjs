@@ -146,6 +146,9 @@ export const importThroughMenu = async ({ page, projectId, filePath, expectedKin
     await clickCanvasTarget(page, external);
     const chooser = await chooserPromise;
     await chooser.setFiles(filePath);
+    // On the Web an upload first waits for the offline app to control the page, up to the product's own
+    // OFFLINE_APP_CONTROL_WAIT_MS (120 s, asset_box_file_upload.js); its install hashes every asset and runs
+    // long under load. The probe waits that long plus the store itself.
     const imported = await waitFor(page, async ({ pid, known, kind }) => {
         const normalize = (value) => String(value || '').toLowerCase();
         const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
@@ -164,8 +167,11 @@ export const importThroughMenu = async ({ page, projectId, filePath, expectedKin
             sw_controlled: Boolean(navigator.serviceWorker?.controller), offline_events: window.__probeOfflineEvents || [],
             sw_registration: await navigator.serviceWorker?.getRegistration?.().then((registration) => registration ? {
                 installing: registration.installing?.state || null, waiting: registration.waiting?.state || null, active: registration.active?.state || null
-            } : 'none').catch((error) => String(error)) };
-    }, { pid: projectId, known: [...before], kind: expectedKind }, 45000).catch(async (error) => {
+            } : 'none').catch((error) => String(error)),
+            storage: await navigator.storage?.estimate?.().then((estimate) => ({
+                usageMb: Math.round(estimate.usage / 1e6), quotaMb: Math.round(estimate.quota / 1e6) })).catch((error) => String(error)),
+            caches: await caches.keys().catch((error) => String(error)) };
+    }, { pid: projectId, known: [...before], kind: expectedKind }, 180000).catch(async (error) => {
         const mediaState = await page.evaluate(() => window.__eveMedia?.readState?.());
         const directory = path.resolve('temp/probe_reports/media_import_diagnostics');
         fs.mkdirSync(directory, { recursive: true });

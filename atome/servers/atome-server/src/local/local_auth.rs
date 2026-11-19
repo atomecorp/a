@@ -2,7 +2,6 @@
 // remote session. Remote identity can be attached only by a verified device proof.
 use super::local_atome::LocalAtomeState;
 use super::local_vault::LocalVault;
-use chrono::Utc;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};

@@ -2,7 +2,8 @@
 // with ffprobe, and where a destination needs it a variant prepared with ffmpeg in the job's own
 // temporary directory (the original is only ever read); short-lived public URLs for the networks
 // that pull the file themselves (Instagram images, TikTok photos). The limits are the networks'
-// documented ones (SOCIAL_MEDIA_CONSTRAINTS of atome/src/squirrel/social/contracts.js).
+// documented ones (limits.rs).
+use super::limits::limits;
 use super::net::{Sd, Se};
 use super::plan::sniff;
 use crate::providers::generation::now_ms;
@@ -12,101 +13,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
-
-const MB: f64 = 1024.0 * 1024.0;
-
-/// A network's limits for a kind of media, none where it has none.
-pub struct Limits {
-    pub formats: &'static [&'static str],
-    pub containers: &'static [&'static str],
-    pub codecs: &'static [&'static str],
-    pub audio_codecs: Option<&'static [&'static str]>,
-    pub max_audio_rate: Option<f64>,
-    pub min_side: Option<f64>,
-    pub max_side: Option<f64>,
-    pub min_width: Option<f64>,
-    pub max_width: Option<f64>,
-    pub min_aspect: Option<f64>,
-    pub max_aspect: f64,
-    pub min_fps: f64,
-    pub max_fps: f64,
-    pub min_duration: Option<f64>,
-    pub max_duration: Option<f64>,
-    pub max_bytes: f64,
-}
-
-const NONE: Limits = Limits {
-    formats: &[],
-    containers: &[],
-    codecs: &[],
-    audio_codecs: None,
-    max_audio_rate: None,
-    min_side: None,
-    max_side: None,
-    min_width: None,
-    max_width: None,
-    min_aspect: None,
-    max_aspect: 0.0,
-    min_fps: 0.0,
-    max_fps: 0.0,
-    min_duration: None,
-    max_duration: None,
-    max_bytes: 0.0,
-};
-
-// TikTok's documented caption limits, in UTF-16 units.
-pub const TIKTOK_VIDEO_CAPTION: usize = 2200;
-pub const TIKTOK_PHOTO_DESCRIPTION: usize = 4000;
-
-pub fn limits(network: &str, kind: &str) -> Option<Limits> {
-    Some(match (network, kind) {
-        ("tiktok", "video") => Limits {
-            containers: &["mp4", "mov", "webm"],
-            codecs: &["h264", "hevc", "vp8", "vp9"],
-            min_side: Some(360.0),
-            max_side: Some(4096.0),
-            min_fps: 23.0,
-            max_fps: 60.0,
-            max_duration: Some(600.0),
-            max_bytes: 4.0 * 1024.0 * MB,
-            ..NONE
-        },
-        ("tiktok", "image") => Limits {
-            formats: &["jpeg", "webp"],
-            max_side: Some(1080.0),
-            max_bytes: 20.0 * MB,
-            ..NONE
-        },
-        ("instagram", "video") => Limits {
-            containers: &["mp4", "mov"],
-            codecs: &["h264", "hevc"],
-            audio_codecs: Some(&["aac"]),
-            max_audio_rate: Some(48_000.0),
-            min_fps: 23.0,
-            max_fps: 60.0,
-            max_width: Some(1920.0),
-            min_duration: Some(3.0),
-            max_duration: Some(900.0),
-            max_bytes: 300.0 * MB,
-            ..NONE
-        },
-        ("instagram", "image") => Limits {
-            formats: &["jpeg"],
-            min_width: Some(320.0),
-            max_width: Some(1440.0),
-            min_aspect: Some(4.0 / 5.0),
-            max_aspect: 1.91,
-            max_bytes: 8.0 * MB,
-            ..NONE
-        },
-        ("facebook", "image") => Limits {
-            formats: &["jpeg", "png", "gif", "bmp", "tiff"],
-            max_bytes: 4.0 * MB,
-            ..NONE
-        },
-        _ => return None,
-    })
-}
 
 async fn run(command: &str, args: &[&str], timeout: Duration) -> Result<Vec<u8>, ()> {
     let child = tokio::process::Command::new(command)

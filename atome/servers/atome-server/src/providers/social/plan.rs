@@ -8,6 +8,17 @@
 //   images JPEG from a public URL; no text post. A personal account gets the system share.
 // - Facebook: a Page the person administers (`pages_manage_posts` + CREATE_CONTENT) takes text,
 //   photo and video; a personal profile has no publishing API: share sheet or copied text.
+// - Threads: text, images and videos pulled from a public URL (`threads_content_publish`).
+// - YouTube: videos only (`youtube.upload`); a text or an image is skipped and named.
+// - LinkedIn: the member's own posts (`w_member_social`), text, image or video.
+// - Bluesky, Mastodon, Telegram (a bot in a channel), Discord (a channel's webhook): text, image,
+//   video, uploaded by the server.
+//
+// A destination names an account (`<network>:<account>`, R-190); the bare network (`tiktok`,
+// `instagram`) is its first enabled account; Facebook keeps `facebook:page:<id>` and
+// `facebook:profile`.
+use super::accounts;
+use super::network::Network;
 use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
@@ -167,10 +178,136 @@ fn facebook_page(
     out
 }
 
-/// `planSocialDestination`.
+/// What a destination id names.
+#[derive(Debug, PartialEq)]
+pub enum Target {
+    /// An account of the network, its first enabled one when none is named.
+    Account(Network, Option<String>),
+    FacebookPage(String),
+    FacebookProfile,
+}
+
+/// The destination id read, none when it is not one.
+pub fn parse(destination: &str) -> Option<Target> {
+    if destination == "facebook:profile" {
+        return Some(Target::FacebookProfile);
+    }
+    if let Some(page) = destination.strip_prefix("facebook:page:") {
+        let shaped = (1..=40).contains(&page.len()) && page.bytes().all(|c| c.is_ascii_digit());
+        return shaped.then(|| Target::FacebookPage(page.into()));
+    }
+    let (name, account) = match destination.split_once(':') {
+        Some((name, account)) => (name, Some(account)),
+        None => (destination, None),
+    };
+    let network = Network::of(name).ok().filter(|n| *n != Network::Facebook)?;
+    match account {
+        Some(account) if accounts::shaped(account) => {
+            Some(Target::Account(network, Some(account.into())))
+        }
+        Some(_) => None,
+        None => Some(Target::Account(network, None)),
+    }
+}
+
+/// The public view of a network's accounts (`social.accounts`' `networks`).
+fn accounts_of<'a>(networks: &'a JsonValue, network: &str) -> &'a [JsonValue] {
+    networks
+        .as_array()
+        .and_then(|all| {
+            all.iter()
+                .find(|n| n.get("network") == Some(&json!(network)))
+        })
+        .and_then(|n| n.get("accounts"))
+        .and_then(JsonValue::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+fn account_in<'a>(
+    networks: &'a JsonValue,
+    network: Network,
+    wanted: Option<&str>,
+) -> Option<&'a JsonValue> {
+    let all = accounts_of(networks, network.name());
+    match wanted {
+        Some(wanted) => all
+            .iter()
+            .find(|a| a.get("account") == Some(&json!(wanted))),
+        None => all
+            .iter()
+            .find(|a| a.get("state") != Some(&json!("disabled"))),
+    }
+}
+
+/// The networks that upload what the server sends them, connected and allowed to publish.
+fn uploaded(
+    account: Option<&JsonValue>,
+    kind: &str,
+    scope: Option<&str>,
+) -> JsonMap<String, JsonValue> {
+    if expired(account) {
+        return plan(None, None, Some("social_session_expired"), vec![]);
+    }
+    if !connected(account) {
+        return plan(None, None, Some("social_not_connected"), vec![]);
+    }
+    if scope.is_some_and(|scope| !has(account, scope)) {
+        return plan(None, None, Some("social_permission_missing"), vec![]);
+    }
+    let mut out = plan(Some("direct"), None, None, vec![]);
+    out.insert("kind".into(), json!(kind));
+    out
+}
+
+fn threads(account: Option<&JsonValue>, kind: &str) -> JsonMap<String, JsonValue> {
+    let pulled = kind != "text";
+    if pulled
+        && connected(account)
+        && account.and_then(|a| a.get("public_media")) != Some(&json!(true))
+    {
+        return plan(
+            None,
+            None,
+            Some("social_public_media_url_unavailable"),
+            vec![],
+        );
+    }
+    uploaded(account, kind, Some("threads_content_publish"))
+}
+
+fn youtube(account: Option<&JsonValue>, kind: &str) -> JsonMap<String, JsonValue> {
+    match kind {
+        "text" => plan(None, None, Some("social_text_only_unsupported"), vec![]),
+        "image" => plan(None, None, Some("social_media_type_unsupported"), vec![]),
+        _ => uploaded(
+            account,
+            kind,
+            Some("https://www.googleapis.com/auth/youtube.upload"),
+        ),
+    }
+}
+
+fn planned(
+    network: Network,
+    account: Option<&JsonValue>,
+    kind: &str,
+    handoff: &JsonValue,
+) -> JsonMap<String, JsonValue> {
+    match network {
+        Network::TikTok => tiktok(account, kind, handoff),
+        Network::Instagram => instagram(account, kind, handoff),
+        Network::Threads => threads(account, kind),
+        Network::YouTube => youtube(account, kind),
+        Network::LinkedIn => uploaded(account, kind, Some("w_member_social")),
+        Network::Facebook => plan(None, None, Some("social_destination_invalid"), vec![]),
+        _ => uploaded(account, kind, None),
+    }
+}
+
+/// `planSocialDestination`: `networks` is the public account view (`social.accounts`).
 pub fn destination(
     destination: &str,
-    accounts: &JsonValue,
+    networks: &JsonValue,
     kind: Option<&str>,
     handoff: &JsonValue,
 ) -> JsonValue {
@@ -184,21 +321,118 @@ pub fn destination(
         out.extend(plan(None, None, Some("social_content_empty"), vec![]));
         return JsonValue::Object(out);
     };
-    let page = destination
-        .strip_prefix("facebook:page:")
-        .filter(|id| (1..=40).contains(&id.len()) && id.bytes().all(|c| c.is_ascii_digit()));
-    let planned = match destination {
-        "tiktok" => tiktok(accounts.get("tiktok"), kind, handoff),
-        "instagram" => instagram(accounts.get("instagram"), kind, handoff),
-        "facebook:profile" if kind == "text" => {
+    let planned = match parse(destination) {
+        Some(Target::FacebookProfile) if kind == "text" => {
             plan(Some("app_transfer"), Some("copy_open"), None, vec![])
         }
-        "facebook:profile" => assisted(kind, handoff, vec![]),
-        _ => match page {
-            Some(page) => facebook_page(accounts.get("facebook"), page, kind),
-            None => plan(None, None, Some("social_destination_invalid"), vec![]),
-        },
+        Some(Target::FacebookProfile) => assisted(kind, handoff, vec![]),
+        Some(Target::FacebookPage(page)) => {
+            let holder = accounts_of(networks, "facebook").iter().find(|account| {
+                account
+                    .get("pages")
+                    .and_then(JsonValue::as_array)
+                    .is_some_and(|pages| pages.iter().any(|p| p.get("id") == Some(&json!(page))))
+            });
+            let holder = holder.or_else(|| account_in(networks, Network::Facebook, None));
+            let mut planned = facebook_page(holder, &page, kind);
+            if let Some(account) = holder.and_then(|a| a.get("account")) {
+                planned.insert("account".into(), account.clone());
+            }
+            planned
+        }
+        Some(Target::Account(network, wanted)) => {
+            let account = account_in(networks, network, wanted.as_deref());
+            let mut planned = if wanted.is_some() && account.is_none() {
+                plan(None, None, Some("social_account_not_found"), vec![])
+            } else {
+                planned(network, account, kind, handoff)
+            };
+            if let Some(account) = account.and_then(|a| a.get("account")) {
+                planned.insert("account".into(), account.clone());
+            }
+            planned
+        }
+        None => plan(None, None, Some("social_destination_invalid"), vec![]),
     };
     out.extend(planned);
     JsonValue::Object(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn networks() -> JsonValue {
+        json!([
+            { "network": "instagram", "configured": true, "accounts": [
+                { "account": "1", "state": "connected", "scopes": ["instagram_business_content_publish"], "public_media": true },
+                { "account": "2", "state": "connected", "scopes": [], "public_media": true } ] },
+            { "network": "facebook", "configured": true, "accounts": [
+                { "account": "9", "state": "connected", "scopes": ["pages_manage_posts"],
+                  "pages": [{ "id": "55", "name": "P", "can_post": true }] } ] },
+            { "network": "youtube", "configured": true, "accounts": [
+                { "account": "c", "state": "connected", "scopes": ["https://www.googleapis.com/auth/youtube.upload"] } ] },
+            { "network": "mastodon", "configured": true, "accounts": [
+                { "account": "ann@m.social", "state": "disabled" },
+                { "account": "bob@m.social", "state": "connected" } ] },
+        ])
+    }
+
+    #[test]
+    fn destination_ids_are_parsed() {
+        assert_eq!(
+            parse("instagram"),
+            Some(Target::Account(Network::Instagram, None))
+        );
+        assert_eq!(
+            parse("mastodon:ann@m.social"),
+            Some(Target::Account(
+                Network::Mastodon,
+                Some("ann@m.social".into())
+            ))
+        );
+        assert_eq!(
+            parse("facebook:page:123"),
+            Some(Target::FacebookPage("123".into()))
+        );
+        assert_eq!(parse("facebook:profile"), Some(Target::FacebookProfile));
+        assert_eq!(parse("facebook"), None);
+        assert_eq!(parse("facebook:page:abc"), None);
+        assert_eq!(parse("x"), None);
+        assert_eq!(parse("bluesky:a/b"), None);
+    }
+
+    #[test]
+    fn the_bare_network_is_its_first_account_and_a_named_one_is_its_own() {
+        let first = destination("instagram", &networks(), Some("image"), &json!({}));
+        assert_eq!(first["route"], "direct");
+        assert_eq!(first["account"], "1");
+        let second = destination("instagram:2", &networks(), Some("image"), &json!({}));
+        assert_eq!(second["route"], "export");
+        assert_eq!(second["notes"], json!(["social_permission_missing"]));
+        let missing = destination("instagram:7", &networks(), Some("image"), &json!({}));
+        assert_eq!(missing["error"], "social_account_not_found");
+        let enabled = destination("mastodon", &networks(), Some("text"), &json!({}));
+        assert_eq!(enabled["account"], "bob@m.social");
+        let disabled = destination(
+            "mastodon:ann@m.social",
+            &networks(),
+            Some("text"),
+            &json!({}),
+        );
+        assert_eq!(disabled["error"], "social_not_connected");
+    }
+
+    #[test]
+    fn a_content_a_network_cannot_take_is_skipped_and_named() {
+        let text = destination("youtube", &networks(), Some("text"), &json!({}));
+        assert_eq!(text["error"], "social_text_only_unsupported");
+        let image = destination("youtube:c", &networks(), Some("image"), &json!({}));
+        assert_eq!(image["error"], "social_media_type_unsupported");
+        let video = destination("youtube:c", &networks(), Some("video"), &json!({}));
+        assert_eq!(video["route"], "direct");
+        let page = destination("facebook:page:55", &networks(), Some("text"), &json!({}));
+        assert_eq!(page["route"], "direct");
+        assert_eq!(page["account"], "9");
+    }
 }

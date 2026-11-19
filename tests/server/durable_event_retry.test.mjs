@@ -13,9 +13,10 @@ test('compacted events survive lost receipts, restart and duplicate batches with
         await db.createAtome({ id:'owner', type:'user', owner:'owner', creator:'owner', properties:{visibility:'private'} });
         const event = (id, props) => ({ id, kind:'set', atome_id:'record', scope:'global',
             ts:'2026-10-16T00:00:00Z', actor:{type:'user',id:'owner'}, tx_id:'transaction', payload:{props} });
-        const stable = { photo:'x'.repeat(10000), name:'Unchanged' };
-        await db.appendEvent(event('initial', { ...stable, width:10 }));
-        const original = event('retry', { ...stable, width:20 });
+        // A typed record: the type gate refuses an untyped atome's properties (`atome_property_unknown`).
+        const stable = { type:'contact', photo:'x'.repeat(10000), name:'Unchanged' };
+        await db.appendEvent(event('initial', { ...stable, note:'10' }));
+        const original = event('retry', { ...stable, note:'20' });
         const stored = await db.appendEvent(original);
         assert.equal(stored.payload.props.photo, undefined);
         assert.equal(stored.payload.props.name, undefined);
@@ -32,14 +33,16 @@ test('compacted events survive lost receipts, restart and duplicate batches with
             { ...original, tx_id:'other-transaction' }
         ]) await assert.rejects(db.appendEvent(changed), /event_id_conflict/);
         // The server owns this hash; an incoming payload cannot choose it.
-        const forged = event('forged', { ...stable, width:30 });
+        const forged = event('forged', { ...stable, note:'30' });
         forged.payload.idempotency_intent_hash = stored.payload.idempotency_intent_hash;
         const protectedRow = await db.appendEvent(forged);
         assert.notEqual(protectedRow.payload.idempotency_intent_hash, forged.payload.idempotency_intent_hash);
-        await assert.rejects(db.appendEvent({ ...forged, payload:{...forged.payload,props:{width:99}} }), /event_id_conflict/);
+        await assert.rejects(db.appendEvent({ ...forged, payload:{...forged.payload,props:{note:'99'}} }), /event_id_conflict/);
         // Existing compacted journals have no hash. Their immutable snapshot
         // proves which omitted incoming values were no-ops at that event.
-        const legacy = { ...stored.payload }; delete legacy.idempotency_intent_hash;
+        // Such a journal was compacted before an unchanged type counted as unchanged: it kept the type.
+        const legacy = { ...stored.payload, props: { ...stored.payload.props, type: 'contact' } };
+        delete legacy.idempotency_intent_hash;
         await db.default.query('run','UPDATE events SET payload=? WHERE id=?',[JSON.stringify(legacy),original.id]);
         assert.equal((await db.appendEvent(original)).inserted, false);
         await assert.rejects(db.appendEvent({ ...original, payload:{props:{...original.payload.props,name:'Changed'}} }), /event_id_conflict/);

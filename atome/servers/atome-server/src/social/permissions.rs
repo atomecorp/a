@@ -6,20 +6,20 @@
 // reads and the `sync` acknowledgement of /ws/api.
 use super::news::db::get;
 use super::privacy_rules::{effective_owner, properties};
+use atome_js_values::dates::{self, Instant};
 use atome_store::append::iso_now;
 use atome_store::security::document_matches;
-use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use rusqlite::Connection;
 use serde_json::json;
 
 // `new Date(text)`: an ISO instant, a date alone (UTC midnight), a date and time with no zone
 // (local time); None where V8 reads NaN, a date that never expires.
-fn instant(text: &str) -> Option<DateTime<Utc>> {
-    if let Ok(instant) = DateTime::parse_from_rfc3339(text) {
-        return Some(instant.with_timezone(&Utc));
+pub(crate) fn instant(text: &str) -> Option<Instant> {
+    if let Some(instant) = dates::rfc3339(text) {
+        return Some(instant.utc);
     }
-    if let Ok(date) = NaiveDate::parse_from_str(text, "%Y-%m-%d") {
-        return Some(date.and_hms_opt(0, 0, 0)?.and_utc());
+    if let Some(date) = dates::date(text, "%Y-%m-%d") {
+        return Some(date);
     }
     [
         "%Y-%m-%dT%H:%M:%S%.f",
@@ -28,9 +28,8 @@ fn instant(text: &str) -> Option<DateTime<Utc>> {
         "%Y-%m-%d %H:%M",
     ]
     .iter()
-    .find_map(|format| NaiveDateTime::parse_from_str(text, format).ok())
-    .and_then(|local| Local.from_local_datetime(&local).earliest())
-    .map(|local| local.with_timezone(&Utc))
+    .find_map(|format| dates::naive(text, format))
+    .and_then(|local| dates::local(local).first())
 }
 
 /// `canRead(atomeId, principal, key)`: whether `principal` may read `atome_id` (one property of it
@@ -86,7 +85,7 @@ fn flag(
         .as_str()
         .filter(|text| !text.is_empty())
         .and_then(instant)
-        && Utc::now() > expiry
+        && Instant::now() > expiry
     {
         return Ok(false);
     }

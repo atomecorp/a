@@ -3,16 +3,40 @@
 // Tauri and iOS hosts). The atome application is registered with each network by the operator,
 // never by a user (one app per network); the tokens live only in the person's vault
 // (`social.<network>`), the client receiving the public view built here; the official consent
-// goes through oauth.rs; the only HTTP surfaces are the two the providers impose (`route`).
+// goes through oauth.rs; the only HTTP surfaces are those the providers impose (`route`: the
+// pulled media, the consent callbacks, Bluesky's client metadata; `webhook`: Meta's events).
+mod accounts;
+mod bluesky;
+mod bluesky_auth;
+mod discord;
 mod facebook;
+mod inbox;
 mod instagram;
 mod jobs;
+mod kept;
+mod limits;
+mod linked;
+mod linkedin;
+mod mastodon;
 mod media;
-mod net;
+mod meta_inbox;
+pub(crate) mod net;
+mod network;
 mod ops;
+mod outcome;
 mod plan;
+mod poll;
+mod removal;
+mod reply;
 mod sessions;
+mod telegram;
+#[cfg(test)]
+mod tests;
+mod threads;
 mod tiktok;
+mod webhook;
+mod wording;
+mod youtube;
 
 use super::credentials::Credentials;
 use super::http::{Done, Failure};
@@ -27,8 +51,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-// `SOCIAL_CONFIG_KEYS` (server/auth_secret_config.js).
-const CONFIG_KEYS: [&str; 10] = [
+// `SOCIAL_CONFIG_KEYS` (server/auth_secret_config.js), with the networks added on 16 Nov. 2026
+// (R-190): their operator applications, the Meta webhook's verify token, and for the probes the
+// fake providers' base URLs (`SOCIAL_API_BASE_<NETWORK>`, empty = the official one).
+const CONFIG_KEYS: [&str; 29] = [
     "TIKTOK_CLIENT_KEY",
     "TIKTOK_CLIENT_SECRET",
     "TIKTOK_AUDITED",
@@ -38,11 +64,30 @@ const CONFIG_KEYS: [&str; 10] = [
     "INSTAGRAM_APP_SECRET",
     "FACEBOOK_APP_ID",
     "FACEBOOK_APP_SECRET",
+    "THREADS_APP_ID",
+    "THREADS_APP_SECRET",
+    "YOUTUBE_CLIENT_ID",
+    "YOUTUBE_CLIENT_SECRET",
+    "LINKEDIN_CLIENT_ID",
+    "LINKEDIN_CLIENT_SECRET",
+    "LINKEDIN_COMMUNITY",
+    "META_WEBHOOK_VERIFY_TOKEN",
     "SOCIAL_PUBLIC_BASE_URL",
+    "SOCIAL_FAKE_PROVIDERS",
+    "SOCIAL_API_BASE_TIKTOK",
+    "SOCIAL_API_BASE_INSTAGRAM",
+    "SOCIAL_API_BASE_FACEBOOK",
+    "SOCIAL_API_BASE_THREADS",
+    "SOCIAL_API_BASE_YOUTUBE",
+    "SOCIAL_API_BASE_LINKEDIN",
+    "SOCIAL_API_BASE_BLUESKY",
+    "SOCIAL_API_BASE_MASTODON",
+    "SOCIAL_API_BASE_TELEGRAM",
+    "SOCIAL_API_BASE_DISCORD",
 ];
 
 // `SOCIAL_ERRORS` (atome/src/squirrel/social/contracts.js).
-pub const SOCIAL_ERRORS: [&str; 29] = [
+pub const SOCIAL_ERRORS: [&str; 33] = [
     "social_not_configured",
     "social_not_connected",
     "social_session_expired",
@@ -72,6 +117,10 @@ pub const SOCIAL_ERRORS: [&str; 29] = [
     "social_request_invalid",
     "social_needs_person",
     "social_update_unsupported",
+    "social_reply_window_closed",
+    "social_reply_unsupported",
+    "social_account_not_found",
+    "social_credentials_invalid",
 ];
 
 /// The networks' configuration as Fastify's environment holds it (`readSocialConfig`).
@@ -80,6 +129,45 @@ pub struct Config(HashMap<String, String>);
 impl Config {
     pub fn get(&self, key: &str) -> &str {
         self.0.get(key).map_or("", String::as_str)
+    }
+
+    /// The probes' fake providers: a test application without a real secret is accepted, and
+    /// the public origin may be a loopback `http://` one.
+    pub fn fake(&self) -> bool {
+        self.get("SOCIAL_FAKE_PROVIDERS") == "1"
+    }
+
+    /// The network's API origin: `SOCIAL_API_BASE_<NETWORK>` when set (a fake provider), else
+    /// the official one. A fake base stands for every host of that network.
+    pub fn api(&self, network: &str, official: &str) -> String {
+        let key = format!("SOCIAL_API_BASE_{}", network.to_ascii_uppercase());
+        let base = self.get(&key).trim().trim_end_matches('/');
+        if base.is_empty() {
+            official.to_string()
+        } else {
+            base.to_string()
+        }
+    }
+
+    /// An operator application: its id, and its secret unless the providers are fake.
+    pub fn app(&self, id: &str, secret: &str) -> bool {
+        !self.get(id).is_empty() && (self.fake() || !self.get(secret).is_empty())
+    }
+
+    /// The public origin the providers call back and pull from.
+    pub fn public_base(&self) -> bool {
+        let base = self.get("SOCIAL_PUBLIC_BASE_URL");
+        base.starts_with("https://") || (self.fake() && crate::providers::oauth::loopback(base))
+    }
+
+    #[cfg(test)]
+    pub fn of(pairs: &[(&str, &str)]) -> Self {
+        Self(
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
     }
 }
 
@@ -134,11 +222,13 @@ pub struct Ctx<'a> {
     pub hooks: &'a Hooks,
 }
 
-/// The sharing owner's state: the configuration, the jobs in flight, the public files.
+/// The sharing owner's state: the configuration, the jobs in flight, the public files, the
+/// accounts linked (who the webhooks and the polling reach).
 pub struct Social {
     config: Arc<Config>,
     jobs: Arc<jobs::Jobs>,
     public: Arc<media::PublicFiles>,
+    linked: Arc<linked::Linked>,
 }
 
 impl Social {
@@ -147,6 +237,7 @@ impl Social {
             config: Arc::new(config),
             jobs: Arc::default(),
             public: Arc::default(),
+            linked: Arc::default(),
         }
     }
 
@@ -161,6 +252,7 @@ impl Social {
                 public: self.public.clone(),
                 root: vault.social_root(),
             },
+            linked: self.linked.clone(),
         }
     }
 
@@ -196,17 +288,70 @@ impl Social {
             return Err("social_update_unsupported".into());
         };
         let env = self.env(vault, files, principal);
-        let (session, _) = ops::connected(sessions::Network::Facebook, &env)
+        let page = js::text(remote.get("page_id"));
+        let session = sessions::page_session(&page, &env)
             .await
             .map_err(|failure| failure.code)?;
         let record = ops::record(&session).map_err(|failure| failure.code)?;
-        facebook::update(record, remote, text)
+        facebook::update(&self.config, record, remote, text)
             .await
             .map_err(|failure| failure.code)
     }
 
+    /// `GET|POST /api/social/webhook/meta`: the Meta webhook (Facebook Pages, Instagram,
+    /// Threads), its signature checked before anything it says is read.
+    pub async fn webhook(
+        &self,
+        router: &Arc<crate::vault_router::VaultRouter>,
+        vault_root: &Path,
+        notifier: &crate::social::live::Notifier,
+        call: (
+            &axum::http::Method,
+            &axum::http::HeaderMap,
+            Option<&str>,
+            &[u8],
+        ),
+    ) -> Response {
+        let (method, headers, query, body) = call;
+        let call = webhook::Call {
+            method,
+            headers,
+            query,
+            body,
+        };
+        let reach = poll::Reach {
+            config: &self.config,
+            linked: &self.linked,
+            router,
+            vault_root,
+            notifier,
+        };
+        webhook::answer(&reach, call).await
+    }
+
+    /// The 60 s relève of the networks without a webhook (Bluesky, Mastodon, YouTube, LinkedIn,
+    /// Telegram, Discord), for the accounts linked only: none linked, a tick costs no call.
+    pub async fn poll(
+        &self,
+        router: &Arc<crate::vault_router::VaultRouter>,
+        vault_root: &Path,
+        notifier: &crate::social::live::Notifier,
+    ) {
+        let reach = poll::Reach {
+            config: &self.config,
+            linked: &self.linked,
+            router,
+            vault_root,
+            notifier,
+        };
+        poll::run(&reach).await;
+    }
+
     /// `GET /api/social/oauth/callback/:network` and `GET /api/social/media/:name`, else none.
     pub async fn route(&self, oauth: &OAuth, path: &str, query: Option<&str>) -> Option<Response> {
+        if path == bluesky_auth::METADATA_PATH {
+            return Some(bluesky_auth::metadata(&self.config));
+        }
         if let Some(network) = path
             .strip_prefix("/api/social/oauth/callback/")
             .filter(|n| !n.is_empty() && !n.contains('/'))

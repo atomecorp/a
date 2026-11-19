@@ -7,7 +7,7 @@ use crate::social::news::News;
 use crate::social::news::db::{all, run, text};
 use crate::social::permissions;
 use crate::vault_router::central::Central;
-use crate::vault_router::js;
+use crate::vault_router::{VaultRouter, js};
 use rusqlite::Connection;
 use serde_json::{Value as JsonValue, json};
 use std::path::PathBuf;
@@ -32,10 +32,10 @@ impl From<String> for Missed {
 }
 
 // `canAccessFile`'s answer once the central database is read: granted, or the atomes whose
-// grants the resolvers may hold, with the file's owner.
+// grants the resolvers may hold, with the file's owner and its name.
 enum Access {
     Granted,
-    Through(Vec<String>, String),
+    Through(Vec<String>, String, String),
 }
 
 fn access(db: &Connection, identifier: &str, user: &str) -> Result<Access, String> {
@@ -80,7 +80,10 @@ fn access(db: &Connection, identifier: &str, user: &str) -> Result<Access, Strin
     }
     let mut seen = std::collections::HashSet::new();
     ids.retain(|id| !id.is_empty() && seen.insert(id.clone()));
-    Ok(Access::Through(ids, text(meta.get("owner_id"))))
+    let name = js::first(&meta, &["file_name", "original_name"])
+        .map(js::string)
+        .unwrap_or_default();
+    Ok(Access::Through(ids, text(meta.get("owner_id")), name))
 }
 
 // The `sync_share` read: an accepted share of the atome, from the file's owner, still running.
@@ -100,6 +103,8 @@ pub struct Downloads<'a> {
     pub central: &'a Central,
     pub news: &'a News,
     pub push: &'a crate::social::push::Push,
+    // The vaults: a file a shared folder holds is read by its parties (R-202, shared_folders.rs).
+    pub router: &'a VaultRouter,
 }
 
 impl Downloads<'_> {
@@ -114,17 +119,18 @@ impl Downloads<'_> {
     /// News of the owner or an accepted share grant.
     pub async fn can_read(&self, identifier: &str, user: &str) -> Result<bool, String> {
         let (id, reader) = (identifier.to_string(), user.to_string());
-        let Access::Through(ids, owner) = self.db(move |db| access(db, &id, &reader)).await? else {
+        let Access::Through(ids, owner, name) = self.db(move |db| access(db, &id, &reader)).await?
+        else {
             return Ok(true);
         };
         if user.is_empty() || user == "anonymous" || owner.is_empty() {
             return Ok(false);
         }
-        for atome_id in ids {
+        for atome_id in &ids {
             let mut notices = Vec::new();
             let news = self
                 .news
-                .can_read_media(user, &atome_id, &owner, &mut notices)
+                .can_read_media(user, atome_id, &owner, &mut notices)
                 .await?;
             // A News's file belongs to a News already published, so its circle exists: what a
             // first reach of a circle would store reaches its devices, the stack keeping it.
@@ -145,25 +151,46 @@ impl Downloads<'_> {
                 return Ok(true);
             }
         }
-        Ok(false)
+        super::shared_folders::holds(self.router, self.central, user, &owner, &ids, &name).await
     }
 
     /// `resolveDownloadTarget(param, user)`.
     pub async fn target(&self, param: &str, user: &str) -> Result<Download, Missed> {
+        self.target_for(param, user, None).await
+    }
+
+    /// `target`, with the owner a media URL names (`media_user_id`): a file of a project shared with `user` keeps its
+    /// author's name, found in that author's files and read through the share (`can_read`).
+    pub async fn target_for(
+        &self,
+        param: &str,
+        user: &str,
+        hint: Option<&str>,
+    ) -> Result<Download, Missed> {
         let wanted = js::trim(param).to_string();
         if !wanted.is_empty() {
             let (id, owner) = (wanted.clone(), user.to_string());
+            let hint = hint
+                .map(js::trim)
+                .filter(|hint| !hint.is_empty() && *hint != user)
+                .map(str::to_string);
             let meta = self
                 .db(move |db| {
                     let by_id = files::metadata(db, &id, None)?
                         .filter(|meta| text(meta.get("atome_id")) == id);
                     let meta = match by_id {
                         Some(meta) => Some(meta),
-                        None => files::metadata(
+                        None => match files::metadata(
                             db,
                             &id,
                             Some(owner.as_str()).filter(|o| !o.is_empty()),
-                        )?,
+                        )? {
+                            Some(meta) => Some(meta),
+                            None => match hint.as_deref() {
+                                Some(hint) => files::metadata(db, &id, Some(hint))?,
+                                None => None,
+                            },
+                        },
                     };
                     let aliased = match &meta {
                         Some(meta) => files::legacy_alias(db, meta)?,

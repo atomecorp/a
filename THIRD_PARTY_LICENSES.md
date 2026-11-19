@@ -92,6 +92,43 @@ dans ce seul fichier.
 
 ---
 
+## Code porté à attribution — Étirement temporel (Signalsmith Stretch)
+
+| Composant | Licence | Rôle |
+|---|---|---|
+| [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch) 1.3.1 | **MIT** | étirement en temps réel du sampler et warp des clips audio de la Timeline |
+| [Signalsmith Linear](https://github.com/Signalsmith-Audio/linear) (STFT, FFT réelle à demi-case) | **MIT** | transformée sous l'étirement |
+
+Porté en Rust (18 nov. 2026, R-178) dans `atome/engines/atome-instrument/src/stretch/engine.rs` et `stretch/stft.rs`, sans code
+C++ ni dépendance `signalsmith-stretch` : il tourne sur toutes les cibles, le Web (wasm32) compris. La FFT complexe est `rustfft`
+(MIT/Apache 2.0). Équivalence vérifiée contre le C++ d'origine : `temp/warp_2026-11-18/compare`. La MIT demande de garder la notice
+ci-dessous avec toute copie ou portion substantielle :
+
+```
+MIT License
+
+Copyright (c) 2022 Geraint Luff / Signalsmith Audio Ltd.
+Copyright (c) 2025 Signalsmith Audio
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Dépendance embarquée à attribution — Lecteur de livres (PDF)
 
 | Composant | Licence | Rôle |
@@ -119,6 +156,60 @@ dans `atome/src/assets/food/ciqual_2025.json`, servi sur les quatre cibles avec 
 seul `eVe/domains/shopping/food_composition.js`. La licence autorise la réutilisation et la redistribution, y compris commerciale, à
 condition de **mentionner la source et la date de sa dernière mise à jour** : « Anses. 2025. Table de composition nutritionnelle des
 aliments Ciqual » (bloc `source` de l'asset et cette page ; rien n'est affiché dans l'interface, conformément au contrat zen).
+
+
+## Données embarquées — Frontières des pays de la CB sociale (Bouteille)
+
+| Données | Licence | Rôle |
+|---|---|---|
+| [Natural Earth](https://www.naturalearthdata.com) admin-0 countries 1:110m (`ne_110m_admin_0_countries.geojson`, dépôt `nvkelso/natural-earth-vector`, VERSION 5.2.0-pre) | **Domaine public** (aucune attribution exigée ; mentionnée ici par courtoisie) | le pays d'une position, calculé sur l'appareil (R-173 lot L2b) |
+
+Réduit par `temp/cb_l2b_2026-11-16/build_borders.mjs` (code ISO_A2_EH, coordonnées arrondies à 0,01°, anneaux vides retirés ; sha256 de la source
+dans le fichier) dans `eVe/domains/cb_social/data/ne_110m_admin0_countries.json` (≈ 140 Ko, 175 pays), consommé par le seul
+`eVe/domains/cb_social/cb_country.js`. Ce n'est pas une dépendance npm ni cargo.
+
+
+## Dépendance embarquée à attribution — Enregistrement des voix de la CB sociale
+
+| Composant | Licence | Rôle |
+|---|---|---|
+| [ogg](https://github.com/RustAudio/ogg) 0.9.2 (crate cargo, Rust pur) | **BSD-3-Clause** | écriture des prises de parole de la CB en Ogg Opus, sans transcodage (R-173 lot L4) |
+
+Dépendance du seul `atome-server` (`atome/servers/atome-server/src/social/cb/recordings/ogg_opus.rs`), validée par l'utilisateur le
+15 nov. 2026. Elle ne fait que mettre en pages Ogg les paquets Opus reçus. Le binaire du serveur n'est pas distribué aux
+utilisateurs. S'il l'était, sa documentation devrait reproduire la notice ci-dessous.
+
+```
+Copyright (c) 2016-2017 est31 <MTest31@outlook.com> and contributors
+Copyright (c) 2002-2015 Xiph.org Foundation
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.org Foundation nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 
 ## Données consultées à attribution — Produits du commerce

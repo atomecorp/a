@@ -18,11 +18,6 @@
                             <imageView opaque="NO" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="logoImage">
                                 <rect key="frame" x="157" y="386" width="100" height="100"/>
                             </imageView>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" text="atome" textAlignment="center" lineBreakMode="wordWrap" numberOfLines="1" translatesAutoresizingMaskIntoConstraints="NO" id="placeholderLabel">
-                                <rect key="frame" x="87" y="506" width="240" height="60"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="48"/>
-                                <color key="textColor" red="0.8" green="0.8" blue="0.8" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                            </label>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="safeArea"/>
                         <color key="backgroundColor" name="LaunchBackground"/>

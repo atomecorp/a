@@ -3,7 +3,7 @@
 // eVe/domains/audio_fx/instrument_commands.js. Each screen action of the Sampler has its command; the instrument itself
 // follows eVe/intuition/tools/molecule/kernel/instrument_schema.js and every change runs through instrument_operations.js.
 export const INSTRUMENT_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'NOT_FOUND', 'INVALID_INSTRUMENT',
-    'PLACE_OCCUPIED', 'STRETCH_UNAVAILABLE', 'PLAY_FAILED', 'WRITE_FAILED']);
+    'PLACE_OCCUPIED', 'PLAY_FAILED', 'WRITE_FAILED']);
 
 const text = { type: 'string', minLength: 1, maxLength: 200 };
 const note = { type: 'integer', minimum: 0, maximum: 127 };
@@ -42,9 +42,15 @@ const markerFields = { kind: { type: 'string', enum: ['slice', 'loop_point', 'ac
     action: { type: ['object', 'null'], additionalProperties: false, required: ['command'], properties: { command: text, input: { type: 'object' } },
         description: 'The eVe command it runs (family.action) with its input, outside the audio thread; null: none.' },
     priority: { type: 'integer', minimum: -100, maximum: 100 }, delay_ms: { type: 'number', minimum: 0, maximum: 60000 } };
+// The kinds and inputs of atome-instrument synth/patch.rs (KINDS, INPUT_KEYS), as eVe's generated synth_catalog.js lists them.
+const synthKind = { type: 'string', enum: ['oscillator', 'noise', 'envelope', 'lfo', 'svf', 'vca', 'velocity', 'note', 'wheel', 'constant',
+    'ad', 'drive', 'random', 'slew', 'pressure'] };
+const synthInput = { type: 'string', enum: ['audio', 'pitch', 'fm', 'level', 'rate', 'cutoff', 'resonance', 'gain', 'width', 'sync', 'drive', 'signal'] };
+const synthParams = { type: 'object', additionalProperties: { type: 'number' } };
 const segmentHelp = 'The segment is a step\'s (step_id), else a release take (release true), else a take; take is its index.';
 const definitions = {
-    instrument_create: [{ name: text, strip_id: text }, ['name'], 'Create an empty Sampler instrument: a strip whose input plays notes (strip_id: an existing chain it becomes the input of). Returns instrument_id.', true, 'write'],
+    instrument_create: [{ name: text, strip_id: text, synth: { type: 'string', enum: ['new', 'analog'] } }, ['name'],
+        'Create an instrument: an empty Sampler, or with synth a modular synth laid from a preset (new: an oscillator, its envelope and its VCA; analog: two oscillators into a filter, two envelopes, an LFO on the cutoff). A strip whose input plays notes (strip_id: an existing chain it becomes the input of). Returns instrument_id.', true, 'write'],
     instrument_update: [{ instrument_id: text, name: text, favorite: { type: 'boolean' } }, ['instrument_id'], 'Rename an instrument of Mes instruments, or add it to or take it from the favourites.', true, 'write'],
     instrument_delete: [{ instrument_id: text }, ['instrument_id'], 'Delete an instrument of Mes instruments (its chains stop playing it); its sounds stay in the person\'s media.', true, 'write'],
     instrument_read: [{ instrument_id: text }, ['instrument_id'], 'Read an instrument: its settings (params), samples and zones with their takes, stack, cuts and release takes.', false, 'read'],
@@ -64,7 +70,7 @@ const definitions = {
         tune_cents: { type: 'number', minimum: -1200, maximum: 1200 }, gain_db: { type: 'number', minimum: -60, maximum: 12 }, pan: { type: 'number', minimum: -1, maximum: 1 },
         playback: { type: 'string', enum: ['forward', 'reverse'] }, loop, stretch: { type: 'number', minimum: 0.25, maximum: 4 } },
         ['instrument_id', 'zone_id', 'take'],
-        'Set how a take reads its sample: region start and end (exclusive) in source frames, start offset (plus velocity_offset × velocity), root note and tuning, level and pan, direction, loop, and duration apart from pitch (stretch ×0.25..×4, shared by the zone\'s takes; refused where the engine has no real-time stretch: STRETCH_UNAVAILABLE).', true, 'write'],
+        'Set how a take reads its sample: region start and end (exclusive) in source frames, start offset (plus velocity_offset × velocity), root note and tuning, level and pan, direction, loop, and duration apart from pitch (stretch ×0.25..×4, shared by the zone\'s takes).', true, 'write'],
     take_remove: [{ instrument_id: text, zone_id: text, take }, ['instrument_id', 'zone_id', 'take'], 'Remove a take from its zone (a zone keeps one).', true, 'write'],
     release_takes_set: [{ instrument_id: text, zone_id: text, media_atome_ids: { ...media, minItems: 0 } }, ['instrument_id', 'zone_id', 'media_atome_ids'],
         'The sounds a zone plays when its key is let go (a damper, a fret noise), quieter the longer the key was held; an empty list removes them.', true, 'write'],
@@ -103,6 +109,19 @@ const definitions = {
         `Set a marker's kind, when it fires, its command, priority (-100..100, first among markers of one frame) and delay. ${segmentHelp}`, true, 'write'],
     marker_remove: [{ instrument_id: text, ...location, marker_id: stepId }, ['instrument_id', 'zone_id', 'take', 'marker_id'],
         `Remove a marker (refused while a transition still needs it). ${segmentHelp}`, true, 'write'],
+    // The synth's rack (R-186): modules in signal order, routes forward only; the kernel's synth_rack.js checks every change.
+    synth_module_add: [{ instrument_id: text, kind: synthKind, index: { type: 'integer', minimum: 0, maximum: 31 }, params: synthParams }, ['instrument_id', 'kind'],
+        'Drop a module into a synth\'s rack at index (the end unless given): it wires itself to what precedes it (a filter takes the sound crossing its place, a source joins the next processor, a VCA follows the nearest envelope). Returns module_id.', true, 'write'],
+    synth_module_remove: [{ instrument_id: text, module_id: text }, ['instrument_id', 'module_id'], 'Take a module out of the rack; its sound is passed on from what fed it to what it fed.', true, 'write'],
+    synth_module_move: [{ instrument_id: text, module_id: text, index: { type: 'integer', minimum: 0, maximum: 31 } }, ['instrument_id', 'module_id', 'index'],
+        'Move a module along the rack; it wires itself again, its modulations kept where they still run forward.', true, 'write'],
+    synth_module_set: [{ instrument_id: text, module_id: text, params: synthParams }, ['instrument_id', 'module_id', 'params'],
+        'Set a module\'s values (audio_fx.instrument_read lists them; a choice is its index: oscillator waveform 0 sine 1 saw 2 square 3 triangle, filter mode 0 low-pass 1 high-pass 2 band-pass 3 notch).', true, 'write'],
+    synth_connect: [{ instrument_id: text, from: text, to: text, input: synthInput, depth: { type: 'number', minimum: -1000, maximum: 1000 } }, ['instrument_id', 'from', 'to', 'input'],
+        'Modulate: a route from a module to an input of a later one, at depth (in the input\'s unit: pitch semitones, level dB, cutoff and rate octaves, gain a factor). « le LFO sur la coupure » = from the lfo, to the filter, input cutoff.', true, 'write'],
+    synth_disconnect: [{ instrument_id: text, from: text, to: text, input: synthInput }, ['instrument_id', 'from', 'to', 'input'], 'Take a route away.', true, 'write'],
+    synth_input_set: [{ instrument_id: text, module_id: text, sources: { type: 'array', maxItems: 31, uniqueItems: true, items: text } }, ['instrument_id', 'module_id', 'sources'],
+        'A module\'s « Entrée »: the sounding modules before it whose sound it takes, replacing the ones it took.', true, 'write'],
     validate: [{ instrument: { type: 'object' } }, ['instrument'], 'Check an instrument description without saving it (dry run); returns the normalized instrument or the reason it is refused.', false, 'read']
 };
 export const INSTRUMENT_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent, access]]) => Object.freeze({
@@ -110,9 +129,9 @@ export const INSTRUMENT_COMMANDS = Object.freeze(Object.entries(definitions).map
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: INSTRUMENT_ERRORS },
         reason: { type: 'string' }, instrument_id: { type: 'string' }, instrument: { type: 'object' }, facade: { type: 'array' }, zone_ids: { type: 'array', items: { type: 'string' } },
-        step_id: { type: 'string' }, marker_id: { type: 'string' } } }
+        step_id: { type: 'string' }, marker_id: { type: 'string' }, module_id: { type: 'string' } } }
 })));
 export const INSTRUMENT_ASSISTANT_INSTRUCTIONS = 'Sampler: « fais-moi un kit avec ces 12 sons » calls audio_fx.instrument_create then audio_fx.samples_place '
     + 'with the media ids and spread notes from note 36; « en round-robin » is spread alternate (one zone) or audio_fx.zone_drop mode alternate on a zone; '
     + '« la charleston fermée coupe l\'ouverte » calls audio_fx.zone_set on the closed one with cuts [the open one\'s zone_id]; « boucle ce son tant que la touche est '
-    + 'tenue » audio_fx.take_set with loop mode sustain; « plus doux » moves the façade (audio_fx.instrument_read gives it) or audio_fx.params_set. « fais une note composée : attaque, boucle, puis la fin au relâché » calls audio_fx.composed_set then composed_step_add and transition_set (trigger note_off, follow next); « à ce point, lance la lumière » audio_fx.marker_add with an action. Never invent an instrument_id, zone_id, step_id or marker_id: read audio_fx.instrument_read first.';
+    + 'tenue » audio_fx.take_set with loop mode sustain; « plus doux » moves the façade (audio_fx.instrument_read gives it) or audio_fx.params_set. « fais une note composée : attaque, boucle, puis la fin au relâché » calls audio_fx.composed_set then composed_step_add and transition_set (trigger note_off, follow next); « à ce point, lance la lumière » audio_fx.marker_add with an action. Synth: « fais-moi un synthé analogique » calls audio_fx.instrument_create with synth analog; « ajoute un filtre » audio_fx.synth_module_add kind svf; « le LFO sur la coupure » audio_fx.synth_connect. Never invent an instrument_id, zone_id, step_id, marker_id or module_id: read audio_fx.instrument_read first.';

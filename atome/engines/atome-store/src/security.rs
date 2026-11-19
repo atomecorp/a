@@ -1,4 +1,4 @@
-use chrono::Utc;
+use atome_js_values::dates;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
@@ -71,11 +71,9 @@ pub fn as_number(value: &JsonValue) -> Option<f64> {
         .as_f64()
         .or_else(|| value.as_str().and_then(|raw| raw.parse::<f64>().ok()))
         .or_else(|| {
-            value.as_str().and_then(|raw| {
-                chrono::DateTime::parse_from_rfc3339(raw)
-                    .ok()
-                    .map(|date| date.timestamp_millis() as f64)
-            })
+            value
+                .as_str()
+                .and_then(|raw| dates::rfc3339(raw).map(|date| date.utc.millis() as f64))
         })
 }
 
@@ -200,7 +198,7 @@ pub fn conditions_match(
     property_key: Option<&str>,
 ) -> bool {
     let context = json!({
-        "time": { "now": Utc::now().to_rfc3339() },
+        "time": { "now": dates::now_rfc3339() },
         "user": state_properties(db, principal_id),
         "atome": state_properties(db, atome_id),
         "actor": { "id": principal_id },
@@ -233,10 +231,10 @@ pub fn permission_active(
     property_key: Option<&str>,
 ) -> bool {
     if let Some(raw) = permission.expires_at.as_deref() {
-        let Ok(expiry) = chrono::DateTime::parse_from_rfc3339(raw) else {
+        let Some(expiry) = dates::rfc3339(raw) else {
             return false;
         };
-        if Utc::now() > expiry.with_timezone(&Utc) {
+        if dates::Instant::now() > expiry.utc {
             return false;
         }
     }

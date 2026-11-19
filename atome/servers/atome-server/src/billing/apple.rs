@@ -163,6 +163,13 @@ impl Apple {
             period_end_ms: plan.then_some(end as i64),
             account_token: tx["appAccountToken"].as_str().map(str::to_lowercase),
             revoked: js::truthy(tx.get("revocationDate")),
+            // Only an App Store purchase is real money; Sandbox (TestFlight) and Xcode never (R-193).
+            environment: if tx["environment"] == "Production" {
+                "real"
+            } else {
+                "test"
+            }
+            .into(),
             ..Purchase::default()
         })
     }
@@ -188,6 +195,26 @@ impl Apple {
             _ => None,
         };
         Ok((kind, transaction))
+    }
+}
+
+impl Apple {
+    /// An `AppTransaction` (StoreKit 2, signed by Apple) for this app: `real` when the app was
+    /// installed from the App Store (`receiptType` Production), `test` for TestFlight or Xcode.
+    pub fn verify_app_transaction(
+        &self,
+        jws: &JsonValue,
+        now: i64,
+    ) -> Result<&'static str, &'static str> {
+        let payload = self.verify_jws(jws, now)?;
+        if payload["bundleId"] != BUNDLE_ID {
+            return Err(INVALID);
+        }
+        Ok(if payload["receiptType"] == "Production" {
+            "real"
+        } else {
+            "test"
+        })
     }
 }
 

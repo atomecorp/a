@@ -19,8 +19,8 @@ pub mod sample;
 pub mod sampler;
 pub mod segment;
 pub mod stream;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod stretch;
+pub mod synth;
 pub mod voice;
 pub mod zone;
 
@@ -33,4 +33,5 @@ pub use sample::{SampleBank, SampleData, Span, SpanFrames};
 pub use sampler::{Sampler, VoiceMode};
 pub use segment::{LoopMode, LoopSpec, Playback, Segment};
 pub use stream::{FrameSource, Streams};
-pub use zone::{Draw, Stack, Zone, ZoneFilter};
+pub use synth::Synth;
+pub use zone::{Draw, Stack, Zone, ZoneEnvelope, ZoneFilter};

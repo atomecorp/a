@@ -63,8 +63,10 @@ export const registerTimelineDefaultTools = ({ Agent, invokeRuntimeDefaultTool }
     Object.entries(RECORD_DESCRIPTIONS).forEach(([verb, description]) => Agent.registerTool({
         name: `eve.timeline.record.${verb}`,
         description,
+        // A take turns the microphone on (its twin asks media.capture) but sends nothing out: `moderate`, done at once when
+        // the person asked her; `high` is what leaves toward others (mcp_security_policy.js OUTWARD_AI_TIERS, rule 22).
         capabilities: ['timeline.write', 'media.capture'],
-        risk_tier: verb === 'start' ? 'high' : 'moderate',
+        risk_tier: 'moderate',
         parameters: TIMELINE_TOOL_SCHEMAS[`record.${verb}`],
         handler: runTwin(`eve.timeline.record.${verb}`, withoutCaptureState)
     }));

@@ -57,7 +57,7 @@ pub(super) fn generate(
     grant: Option<&str>,
     generation: Option<i64>,
 ) -> Result<String, String> {
-    let now = Utc::now().timestamp();
+    let now = atome_js_values::dates::Instant::now().seconds;
     let claims = Claims {
         sub: user_id.into(),
         username: username.into(),

@@ -47,6 +47,14 @@ final class AppPageHost {
             ))
         }
         config.setValue(false, forKey: "drawsBackground")
+        // A CarPlay launch runs this page without a window, never focused: WebKit holds every microphone
+        // request of an unfocused page until it is shown, so the assistant on the car screen never heard.
+        // The page itself decides when it listens (wake_runtime.js listens only in the foreground).
+        if config.preferences.responds(to: NSSelectorFromString("_setGetUserMediaRequiresFocus:")) {
+            config.preferences.setValue(false, forKey: "getUserMediaRequiresFocus")
+        } else {
+            WebViewManager.shared.log.error("WebKit getUserMediaRequiresFocus preference missing: the CarPlay assistant cannot listen windowless")
+        }
         let webView = WKWebView(frame: UIScreen.main.bounds, configuration: config)
         WebViewManager.markBootMilestone("webview_created")
         // Same rule as the AUv3 factory: no native long-press link preview, the

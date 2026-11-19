@@ -64,14 +64,7 @@ impl<'a> Js<'a> {
         match self {
             Js::Undefined => "undefined".into(),
             Js::Num(number) => number_text(*number),
-            // `Date.prototype.toString` without its zone's name, which chrono does not know.
-            Js::Date(ms) => chrono::DateTime::from_timestamp_millis(*ms as i64)
-                .map(|time| {
-                    time.with_timezone(&chrono::Local)
-                        .format("%a %b %d %Y %H:%M:%S GMT%z")
-                        .to_string()
-                })
-                .unwrap_or_else(|| "Invalid Date".into()),
+            Js::Date(ms) => js::local_string(*ms as i64),
             Js::Json(value) => js::text(Some(value)),
         }
     }

@@ -36,7 +36,7 @@ const fixture = () => {
 test('only audio lanes compile, with buses as strip targets and canonical module ids', () => {
     let timeline = fixture();
     timeline = addMixModule(timeline, {
-        strip_id: 'voice:audio', module_id: 'send_1', type: 'send', destination: { kind: 'bus', id: 'bus' }, index: 0
+        strip_id: 'voice:audio', module_id: 'aux_1', type: 'aux', destination: { kind: 'bus', id: 'bus' }, index: 0
     });
     timeline = addMixModule(timeline, { strip_id: 'voice:audio', module_id: 'rev', type: 'dsp', effect: 'reverb' });
     timeline = setMixOutput(timeline, { strip_id: 'film:audio', enabled: false });
@@ -44,12 +44,17 @@ test('only audio lanes compile, with buses as strip targets and canonical module
     assert.deepEqual(program.map((strip) => strip.id), ['voice:audio', 'film:audio', 'bus:audio']);
     const voice = program[0];
     assert.deepEqual(voice.chain.map((module) => [module.id, module.type, module.target]), [
-        ['send_1', 'send', { kind: 'strip', id: 'bus:audio' }],
+        // R-183: an Aux compiles to its send (its share as a level) and the pass going on through the strip.
+        ['aux_1', 'send', { kind: 'strip', id: 'bus:audio' }],
+        ['aux_1:pass', 'volume', null],
+        ['voice:audio:record', 'record', null],
         ['voice:audio:volume', 'volume', null],
         ['voice:audio:pan', 'pan', null],
         ['rev', 'dsp', null]
     ]);
-    assert.equal(voice.chain[3].effect, 'reverb');
+    assert.equal(Math.round(voice.chain[0].params.level_db * 10) / 10, -13.6);
+    assert.equal(voice.chain[1].params.gain_db, 0);
+    assert.equal(voice.chain[5].effect, 'reverb');
     assert.deepEqual(voice.output, { kind: 'main' });
     assert.equal(program[1].output_enabled, false);
     assert.equal(compileMoleculeMixProgram(timeline, { clipHasAudio: () => false }).some((strip) => strip.id === 'film:audio'), false);
@@ -94,7 +99,7 @@ test('the engine merges open Molecules, skips identical programs and reports fai
     assert.deepEqual(await none.update('x', fixture()), { ok: true, graph: false });
 });
 
-test('video lanes project opacity and colour onto their clip atomes, hide when unrouted, chain through strips', async () => {
+test('video lanes project opacity and effects onto their clip atomes, hide when unrouted, chain through strips', async () => {
     const { compileMoleculeMixVideo, projectMoleculeMixVideoRecord, setMoleculeMixVideo, removeMoleculeMixVideo } = await import('../../eVe/core/media_engine/molecule_mix_video.js');
     const { addMixModule, updateMixModule, setMixOutput: route } = await import('../../eVe/intuition/tools/molecule/kernel/index.js');
     let timeline = fixture();
@@ -104,8 +109,12 @@ test('video lanes project opacity and colour onto their clip atomes, hide when u
     assert.equal(setMoleculeMixVideo('one', timeline), true);
     const projected = projectMoleculeMixVideoRecord({ id: 'v', properties: { opacity: 0.8, brightness: 1 } });
     assert.equal(projected.properties.opacity, 0.4);
-    assert.equal(projected.properties.filter_grayscale, 1);
-    assert.equal(projected.properties.filter_brightness, 1.5);
+    // The strip's effects reach the renderer in chain order, every parameter set (bevy-core media_fx).
+    assert.equal(projected.properties.media_effects.length, 1);
+    assert.equal(projected.properties.media_effects[0].effect, 'color');
+    assert.equal(projected.properties.media_effects[0].params.grayscale, 1);
+    assert.equal(projected.properties.media_effects[0].params.brightness, 1.5);
+    assert.equal(projected.properties.media_effects[0].params.exposure, 0);
     assert.equal(projectMoleculeMixVideoRecord({ id: 'other', properties: {} }).properties.opacity, undefined, 'other atomes are untouched');
     timeline = route(timeline, { strip_id: 'film:video', destination: null });
     setMoleculeMixVideo('one', timeline);

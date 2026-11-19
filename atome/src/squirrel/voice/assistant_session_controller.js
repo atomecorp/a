@@ -26,6 +26,9 @@ export const createVoiceAssistantSessionController = ({
     announceReady,
     touchResponse,
     locale = 'fr-FR',
+    // `dismissal`: { matches(text), hangUp() } — the person dismisses her (« raccroche »): she hangs up, as the cloud
+    // session does through `assistant.session.end`.
+    dismissal = null,
     actorId = 'eve_voice_assistant',
     executionTransport = 'mcp',
     env = globalThis
@@ -200,6 +203,7 @@ export const createVoiceAssistantSessionController = ({
                 continue;
             }
             pendingTranscriptPrefix = '';
+            if (dismissal?.matches(nextText)) { void dismissal.hangUp(); return; }
             setPhase('processing');
             const execution = await voiceApi.executeUtterance(nextText, {
                 session_id: state.sessionId,
@@ -387,8 +391,8 @@ export const createVoiceAssistantSessionController = ({
 // Provider choice shares the assistant lifecycle contract. The local speech
 // backend publishes viseme/input frames; Realtime publishes the level of the voice heard.
 export const bindVoiceAssistantSession = async ({
-    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate, locale = '', keepWhenHidden = false, announceReady = null, announceTouch = null, input = null,
-    opening = ''
+    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate, locale = '', keepWhenHidden = false, hangUpWhenSilent = true, announceReady = null, announceTouch = null, announceCheckIn = null, input = null,
+    opening = '', dismissal = null
 }) => {
     if (provider && provider.ok !== true) throw new Error(provider.error || 'no_active_ai_provider');
     const remote = provider?.ok && provider.providerId === 'openai';
@@ -397,11 +401,11 @@ export const bindVoiceAssistantSession = async ({
             history: () => conversation.contextTurns(),
             onTurn: turn => conversation.appendVoiceTurn(turn), onHear: turn => conversation.hearVoice(turn),
             createTools: options => conversation.createVoiceTools(options),
-            onUsage: (usage, model, serviceTier) => conversation.recordUsage(usage, model, 'openai', serviceTier), locale, suspendWhenHidden: !keepWhenHidden,
-            announceReady, announceTouch, input, opening
+            onUsage: (usage, model, serviceTier) => conversation.recordUsage(usage, model, 'openai', serviceTier), locale, suspendWhenHidden: !keepWhenHidden, hangUpWhenSilent,
+            announceReady, announceTouch, announceCheckIn, input, opening
         })
         : createVoiceAssistantSessionController({ voiceApi, announceReady,
-            touchResponse: translate('eve.voice.assistant.touch_response'), locale: 'fr-FR'
+            touchResponse: translate('eve.voice.assistant.touch_response'), locale: 'fr-FR', dismissal
         });
     const unsubscribeSession = controller.subscribe(onSession);
     const frameSubscriptions = [];

@@ -1,0 +1,21 @@
+[package]
+name = "atome-script-wasm"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "A document script's engine (eVe/domains/script/): JavaScript, or Ruby compiled by Opal, run in a boa context that reaches nothing but its document's snapshot, inside a WASM module whose linear memory is capped"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Pure ECMAScript (no console, no network, no module loader); annex-b for the String methods Opal's runtime calls,
+# js for the browser's clock and randomness on wasm32-unknown-unknown.
+boa_engine = { version = "0.22", default-features = false, features = ["annex-b", "js"] }
+serde.workspace = true
+serde_json.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

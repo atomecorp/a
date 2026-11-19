@@ -43,6 +43,10 @@ export function createInvites({ query, transaction, proof, devices, mailer, orig
         const fromName = headerText(input.fromName, 64);
         const text = String(input.text || '');
         if (text.length > 4000 || text.split(LINK).length !== 2) reject('auth_request_invalid');
+        // The domain the invitation opens eVe on (R-192, eVe/domains/dashboard/dashboard_domain.js): none (the whole
+        // eVe) or `music`, its link then `/music#invite=…`, the account made from it opening on that domain everywhere.
+        if (input.domain != null && input.domain !== 'music') reject('auth_request_invalid');
+        const domain = input.domain == null ? '' : input.domain;
         const token = randomHandle();
         const created = await transaction(async () => {
             const key = await devices.byId(claims.cnf?.kid);
@@ -66,7 +70,7 @@ export function createInvites({ query, transaction, proof, devices, mailer, orig
         if (created.duplicate) return { ok: true, inviteId: created.inviteId, expiresAt: created.expiresAt };
         // Mail is network I/O: sent after the commit; an invitation that never left is withdrawn.
         try {
-            await mailer.send({ to: email, fromName, subject, text: text.replace(LINK, `${origin}/#invite=${token}`) });
+            await mailer.send({ to: email, fromName, subject, text: text.replace(LINK, `${origin}/${domain}#invite=${token}`) });
         } catch (error) {
             await query('run', 'DELETE FROM auth_invites WHERE invite_id = ?', [created.inviteId]);
             throw error;

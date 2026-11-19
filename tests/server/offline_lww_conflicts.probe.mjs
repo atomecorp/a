@@ -11,7 +11,8 @@ test('offline LWW converges per property while preserving every event', async ()
     const actor = { type: 'user', id: 'offline_lww_owner' };
     const atomeId = 'offline_lww_shape';
     const offline = { conflictMode: 'offline-lww', source: 'offline-device' };
-    const commit = (event) => db.appendEvent({ kind: 'set', atome_id: atomeId, actor, ...event }, offline);
+    // The atome says what it is: the type gate refuses a property its type does not declare (atome_type_gate.js).
+    const commit = (event) => db.appendEvent({ kind: 'set', atome_id: atomeId, atome_type: 'shape', actor, ...event }, offline);
     try {
         await db.initDatabase();
         await db.createAtome({
@@ -53,7 +54,7 @@ test('offline LWW converges per property while preserving every event', async ()
 
         const invalidAtome = 'offline_invalid_shape';
         const invalidCommit = (id, value) => db.appendEvent({
-            id, ts: 'invalid', kind: 'set', atome_id: invalidAtome, actor,
+            id, ts: 'invalid', kind: 'set', atome_id: invalidAtome, atome_type: 'shape', actor,
             payload: { props: { opacity: value } }
         }, offline);
         await invalidCommit('invalid_z', 0.9);

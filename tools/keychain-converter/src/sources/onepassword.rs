@@ -3,6 +3,7 @@
 //! a custom field of its section, a value CXF cannot hold at all (strength
 //! metrics, input traits…) stays in the sealed fidelity backup and is counted.
 
+use atome_js_values::dates;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::{Map, Value, json};
@@ -120,7 +121,7 @@ impl Env<'_> {
 }
 
 pub fn unix_date(seconds: i64) -> Option<String> {
-    chrono::DateTime::from_timestamp(seconds, 0).map(|time| time.format("%Y-%m-%d").to_string())
+    dates::Instant::new(seconds, 0).map(dates::Instant::date_text)
 }
 
 fn year_month(value: i64) -> Option<String> {

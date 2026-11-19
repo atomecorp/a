@@ -5,7 +5,7 @@
 //! It knows no transport: Axum (Tauri desktop and Android), the cloud vault
 //! binary and the iOS host call it with a `rusqlite::Connection`.
 
-use chrono::Utc;
+use atome_js_values::dates;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
@@ -32,6 +32,7 @@ mod pending;
 mod permissions;
 mod projection;
 mod reads;
+mod receipts;
 mod row_json;
 mod rows;
 mod schema;
@@ -55,6 +56,10 @@ pub use snapshots::restored_atome_ids;
 #[cfg(test)]
 #[path = "../../../../tests/atome_store/commit_parity.rs"]
 mod commit_parity;
+
+#[cfg(test)]
+#[path = "../../../../tests/atome_store/unchanged_receipts.rs"]
+mod unchanged_receipts;
 
 #[cfg(test)]
 #[path = "../../../../tests/atome_vault/vault_parity.rs"]

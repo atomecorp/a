@@ -15,6 +15,7 @@ permissions = [
   "allow-audio-render-clock",
   "allow-audio-mix-apply",
   "allow-audio-mix-levels",
+  "allow-audio-mix-readings",
   "allow-audio-mix-devices",
   "allow-audio-mix-cut-tail",
   "allow-audio-mix-module-state",
@@ -24,6 +25,7 @@ permissions = [
   "allow-audio-instrument",
   "allow-audio-direct-apply",
   "allow-audio-direct-levels",
+  "allow-audio-direct-readings",
   "allow-audio-direct-cut-tail",
   "allow-audio-direct-module-state",
   "allow-audio-direct-measure-latency",
@@ -157,6 +159,11 @@ description = "Enables the audio_mix_levels command."
 commands.allow = ["audio_mix_levels"]
 
 [[permission]]
+identifier = "allow-audio-mix-readings"
+description = "Enables the audio_mix_readings command."
+commands.allow = ["audio_mix_readings"]
+
+[[permission]]
 identifier = "allow-audio-mix-devices"
 description = "Enables the audio_mix_devices command."
 commands.allow = ["audio_mix_devices"]
@@ -200,6 +207,11 @@ commands.allow = ["audio_direct_apply"]
 identifier = "allow-audio-direct-levels"
 description = "Enables the audio_direct_levels command."
 commands.allow = ["audio_direct_levels"]
+
+[[permission]]
+identifier = "allow-audio-direct-readings"
+description = "Enables the audio_direct_readings command."
+commands.allow = ["audio_direct_readings"]
 
 [[permission]]
 identifier = "allow-audio-direct-cut-tail"

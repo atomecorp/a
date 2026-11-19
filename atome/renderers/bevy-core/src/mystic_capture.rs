@@ -10,7 +10,7 @@
 use crate::{
     procedural_sdf::ProceduralSdfMaterial,
     render_math::atome_camera_projection,
-    types::AtomeBevyRendererConfig,
+    types::{AtomeBevyRendererConfig, MYSTIC_MAX_TILES},
     workspace_backdrop::{blur_pyramid_image, capture_image},
     workspace_blur::{backdrop_capture_pixel_size, pyramid::BlurCapture},
 };
@@ -35,7 +35,7 @@ pub struct MenuCapture {
     spare: Handle<Image>,
     cameras: [Entity; 4],
     size: UVec2,
-    geometry: [Vec4; 24],
+    geometry: [Vec4; MYSTIC_MAX_TILES],
     epoch: f32,
     warmup: u8,
     face_warmup: u8,
@@ -166,7 +166,7 @@ pub fn sync_menu_capture(world: &mut World) {
             spare,
             cameras,
             size,
-            geometry: [Vec4::ZERO; 24],
+            geometry: [Vec4::ZERO; MYSTIC_MAX_TILES],
             epoch: -1.0,
             warmup: 2,
             face_warmup: 2,

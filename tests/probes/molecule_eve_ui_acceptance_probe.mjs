@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 
 import { APP_URL, ensureProject, enterProvisionedWorkspace, importPlaybackFixtureMedia, installCanonicalFixture } from "./molecule_ui_workspace_support.mjs";
 import { runMoleculeDropAcceptance } from "./molecule_ui_drop_acceptance_scenarios.mjs";
-import { assert, clickCanvasTarget, findBevyUiNodeTarget, runSetupStep, wait, waitFor } from "./molecule_ui_acceptance_support.mjs";
+import { assert, findBevyUiNodeTarget, runSetupStep, wait, waitFor } from "./molecule_ui_acceptance_support.mjs";
 
 const HEADLESS = process.env.ATOME_PLAYWRIGHT_HEADLESS === '1';
 const VIEWPORT = Object.freeze({
@@ -79,14 +79,19 @@ const main = async () => {
         console_warnings: [],
         molecule_drop_logs: [],
         page_errors: [],
+        page_error_details: [],
         http_errors: [],
         websocket_events: [],
+        service_worker_events: [],
         screenshots: [],
         visual_diff: null,
         measurements: {},
         endurance: null
     };
+    // The check under way, named in each console error so a failure of the console check says where it began.
+    let runningCheck = 'setup';
     const check = async (name, operation) => {
+        runningCheck = name;
         const startedAt = performance.now();
         try {
             const details = await operation();
@@ -135,6 +140,17 @@ const main = async () => {
             ? await chromium.launchPersistentContext(path.resolve(profileDir), { headless: HEADLESS, args: launchArgs, ...contextOptions })
             : await (browser = await chromium.launch({ headless: HEADLESS, args: launchArgs })).newContext(contextOptions);
         if (profileDir) browser = context;
+        // The offline app's outcome (sw.js posts it to every page, early-init.js re-dispatches it), kept across
+        // reloads in the tab's sessionStorage: a media import waits on it (molecule_ui_media_fixture.mjs).
+        await context.addInitScript(() => {
+            const key = '__probeOfflineEvents';
+            const read = () => JSON.parse(sessionStorage.getItem(key) || '[]');
+            Object.defineProperty(window, key, { get: read, configurable: true });
+            for (const type of ['squirrel:offline-app-ready', 'squirrel:offline-app-error']) {
+                window.addEventListener(type, (event) => sessionStorage.setItem(key,
+                    JSON.stringify([...read(), [type, event.detail?.code || '', new Date().toISOString()]])));
+            }
+        });
         // Another Fastify than the dev server (an isolated instance with mocked
         // SMS links): the app is pointed at it alone, never at :3000 / :3001.
         const appPort = Number(new URL(APP_URL).port);
@@ -166,6 +182,15 @@ const main = async () => {
         page = await context.newPage();
         const cdp = await context.newCDPSession(page);
         await cdp.send('Network.enable');
+        // Chrome's own account of the offline app's worker (registered, installed, deleted, its errors), with the
+        // check under way: a media import waits on that worker.
+        await cdp.send('ServiceWorker.enable');
+        const swEvent = (kind) => (event) => report.service_worker_events.push({ kind, check: runningCheck,
+            at: new Date().toISOString(), event: JSON.parse(JSON.stringify(event)) });
+        cdp.on('ServiceWorker.workerRegistrationUpdated', swEvent('registration'));
+        cdp.on('ServiceWorker.workerVersionUpdated', (event) => swEvent('version')({
+            versions: event.versions.map(({ versionId, registrationId, status, runningStatus, scriptURL }) => ({ versionId, registrationId, status, runningStatus, scriptURL })) }));
+        cdp.on('ServiceWorker.workerErrorReported', swEvent('error'));
         cdp.on('Network.webSocketCreated', (event) => {
             report.websocket_events.push({
                 event: 'created',
@@ -184,7 +209,7 @@ const main = async () => {
         });
         page.on('console', (message) => {
             const text = message.text();
-            if (message.type() === 'error') report.console_errors.push(text);
+            if (message.type() === 'error') report.console_errors.push(`[${runningCheck}] ${text}`);
             if (message.type() === 'warning') report.console_warnings.push(text);
             if (text.startsWith('[eVe][molecule-drop]')) report.molecule_drop_logs.push(text);
         });
@@ -194,6 +219,12 @@ const main = async () => {
             }
         });
         page.on('pageerror', (error) => report.page_errors.push(error?.stack || error?.message || String(error)));
+        // A thrown value that is no Error carries no stack: Chrome's own account of it says where it was thrown.
+        await cdp.send('Runtime.enable');
+        cdp.on('Runtime.exceptionThrown', ({ exceptionDetails: details }) => report.page_error_details.push({
+            text: details.exception?.description || details.text, url: details.url, line: details.lineNumber, column: details.columnNumber,
+            stack: details.stackTrace?.callFrames?.slice(0, 8).map((frame) => `${frame.functionName}@${frame.url}:${frame.lineNumber}:${frame.columnNumber}`)
+        }));
 
         await runSetupStep('provisioned_workspace', () => enterProvisionedWorkspace(page), 240000);
         await runSetupStep('profile_handedness', () => page.evaluate(async ({ handedness, masteryLevel }) => {
@@ -203,19 +234,22 @@ const main = async () => {
                 const current = await window.AdoleAPI?.auth?.current?.();
                 const userId = String(current?.user?.id || current?.user_id || current?.id || '');
                 if (!userId) throw new Error('profile_user_id_missing');
+                // `base`: the profile this copy was edited from (bevy_panel_home_actions.js#persistHomeProfile); none yet.
                 const created = await home.persistHomeProfile({
                     userId,
                     profile: { preferences: { visual: { handedness } } },
+                    base: {},
                     guest: false
                 });
                 if (created?.ok !== true) throw new Error(`profile_create_failed:${created?.error || 'unknown'}`);
                 loaded = await home.loadHomeProfile();
             }
             if (loaded?.ok !== true) throw new Error(`profile_load_failed:${loaded?.error || 'unknown'}`);
+            const base = JSON.parse(JSON.stringify(loaded.profile));
             const profile = loaded.profile;
             profile.preferences.visual.handedness = handedness;
             if (masteryLevel) profile.preferences.visual.masteryLevel = masteryLevel;
-            const persisted = await home.persistHomeProfile({ profile, userId: loaded.userId, guest: false });
+            const persisted = await home.persistHomeProfile({ profile, base, userId: loaded.userId, guest: false });
             if (persisted?.ok !== true) throw new Error(`profile_persist_failed:${persisted?.error || 'unknown'}`);
         }, { handedness: EXPECTED_HANDEDNESS, masteryLevel: REQUESTED_MASTERY }));
         await runSetupStep('profile_projection', () => waitFor(page, async ({ handedness, masteryLevel }) => {
@@ -225,7 +259,9 @@ const main = async () => {
             const level = context.resolveContextMenuContext({}).level;
             return {
                 ok: state.readState().handedness === handedness
-                    && menu.getMainMenuRuntime()?.handedness === handedness
+                    // The ribbon's `handedness` is the assistant's anchor side, opposite the hand since V6.1
+                    // (bevy_ui_main_menu_runtime.js#handednessResolver).
+                    && menu.getMainMenuRuntime()?.handedness === (handedness === 'left' ? 'right' : 'left')
                     && (!masteryLevel || level === masteryLevel),
                 state: state.readState().handedness,
                 level,

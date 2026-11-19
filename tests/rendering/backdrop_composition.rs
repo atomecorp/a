@@ -19,6 +19,8 @@ use bevy::{
     winit::WinitPlugin,
 };
 
+#[path = "backdrop_blur_alignment.rs"]
+mod blur_alignment;
 #[path = "backdrop_temporal_order.rs"]
 mod temporal_order;
 
@@ -520,6 +522,17 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
         .unwrap(),
     )
     .unwrap();
+    // In the product the wallpaper is the surface background, and a Mystic plate's glass blurs that alone, never the
+    // live workspace (mystic_capture.rs): the same white ground under both glasses, as on the Dashboard.
+    crate::background::apply_surface_background(
+        app.world_mut(),
+        crate::AtomeSurfaceBackgroundPatch {
+            signature: "white".into(),
+            color: [1.0, 1.0, 1.0, 1.0],
+            ..Default::default()
+        },
+    )
+    .unwrap();
     let mut mystic: crate::AtomeProceduralSdf = serde_json::from_value(serde_json::json!({
         "mode":3,"morph":[1,1,0,0],"surface_size":[256,192],"background_blur_px":16,
         "assistant_background_tint":[0,0,0,0.69],"mystic_count":[1,0,8,0],"mystic_style":[2.5,0,0,0.6]
@@ -537,13 +550,11 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
     )
     .unwrap();
     let unified = frame(&mut app, &target);
-    for (palette, mystic) in rgb(&unified, 50, 50)
-        .into_iter()
-        .zip(rgb(&unified, 120, 50))
-    {
+    let (palette_rgb, mystic_rgb) = (rgb(&unified, 50, 50), rgb(&unified, 120, 50));
+    for (palette, mystic) in palette_rgb.into_iter().zip(mystic_rgb) {
         assert!(
             (palette as i16 - mystic as i16).abs() <= 2,
-            "palette and Mystic must retain equal tint and transparency"
+            "palette and Mystic must retain equal tint and transparency: {palette_rgb:?} vs {mystic_rgb:?}"
         );
     }
     if let Ok(directory) = std::env::var("ATOME_COMPOSITION_CAPTURE_DIR") {

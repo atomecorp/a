@@ -6,6 +6,8 @@ import { ensureCoachTables } from './adole_coach_schema.js';
 import { ensureScheduledSendTables } from './adole_scheduled_sends_schema.js';
 import { ensureSiteTables } from './adole_site_schema.js';
 import { ensureObjectiveNetworkTables } from './adole_objective_network_schema.js';
+import { ensureCbSocialTables } from './adole_cb_social_schema.js';
+import { ensureMoneyTables } from './adole_money_schema.js';
 
 async function ensureColumn({ query, table, column, ddl }) {
     const columns = await query('all', `PRAGMA table_info(${table})`);
@@ -445,7 +447,9 @@ async function runAdoleSchemaMigrations(query) {
     await ensureCoachTables(query);
     await ensureScheduledSendTables(query);
     await ensureSiteTables(query);
+    await ensureMoneyTables(query);
     await ensureObjectiveNetworkTables(query);
+    await ensureCbSocialTables(query);
     await refreshUsersView(query);
 }
 

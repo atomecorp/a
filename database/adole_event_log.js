@@ -2,7 +2,8 @@
 // ADOLE EVENT LOG — append-only events commit (ADOLE v3.0)
 // ============================================================================
 // Normalizes, sequences, conflict-evaluates and inserts events, projects them
-// into `state_current` and enqueues sync. Owns the inserted-result WeakSet.
+// into `state_current` and enqueues sync; a `set` that changes nothing is answered
+// with a delivery receipt (adole_event_receipts.js) and recorded nowhere. Owns the inserted-result WeakSet.
 
 import { v4 as uuidv4 } from 'uuid';
 import { query, safeParseJson, serializeJson, withTransaction } from './adole_db_core.js';
@@ -18,6 +19,7 @@ import { applyEventToStateCurrent, resolveActorId } from './adole_state_projecti
 import { isProjectAtome, resolveEventProjectId } from './adole_event_containment.js';
 import { getStateCurrent } from './adole_event_state_reads.js';
 import { resolvePendingOwners } from './adole_ownership.js';
+import { receiveUnchanged, resentUnchanged } from './adole_event_receipts.js';
 
 const insertedEventResults = new WeakSet();
 
@@ -187,10 +189,20 @@ export async function appendEvent(event, options = {}) {
             };
             return;
         }
+        const resent = await resentUnchanged(normalized);
+        if (resent) {
+            normalized = resent;
+            return;
+        }
         await assertEventProperties(event, normalized, options);
-        normalized = await eventMutations.prepare(normalized, {
+        const prepared = await eventMutations.prepare(normalized, {
             skipExpectedVersions: conflictMode === 'offline-lww'
         });
+        if (prepared.unchanged) {
+            normalized = await receiveUnchanged(normalized);
+            return;
+        }
+        normalized = prepared.event;
         normalized.project_id = await resolveEventProjectId(normalized);
         normalized = await assignEventSequence(normalized);
         const evaluation = await eventConflicts.evaluate(normalized, conflictMode);
@@ -278,11 +290,21 @@ export async function appendEvents(events, options = {}) {
                 });
                 continue;
             }
+            const resent = await resentUnchanged(normalized);
+            if (resent) {
+                results.push(resent);
+                continue;
+            }
 
             await assertEventProperties(evt, normalized, options);
-            normalized = await eventMutations.prepare(normalized, {
+            const prepared = await eventMutations.prepare(normalized, {
                 skipExpectedVersions: conflictMode === 'offline-lww'
             });
+            if (prepared.unchanged) {
+                results.push(await receiveUnchanged(normalized));
+                continue;
+            }
+            normalized = prepared.event;
             normalized.project_id = await resolveEventProjectId(normalized);
             normalized = await assignEventSequence(normalized);
             const evaluation = await eventConflicts.evaluate(normalized, conflictMode);

@@ -4,6 +4,8 @@ mod audio_engine;
 mod auth_device;
 mod code_workspace;
 mod dev_logging;
+#[cfg(not(target_os = "android"))]
+mod external_display;
 mod local_http_navigation;
 mod native_alarms;
 mod native_billing;
@@ -256,6 +258,7 @@ pub fn run() {
             audio_engine::bridge::audio_init,
             audio_engine::bridge::audio_load_clip,
             audio_engine::bridge::audio_load_clip_from_bytes,
+            audio_engine::bridge::audio_probe_duration_from_bytes,
             audio_engine::bridge::audio_has_clip,
             audio_engine::bridge::audio_play,
             audio_engine::bridge::audio_play_instance,
@@ -264,7 +267,10 @@ pub fn run() {
             audio_engine::bridge::audio_render_clock,
             audio_engine::bridge::audio_mix_apply,
             audio_engine::bridge::audio_mix_levels,
+            audio_engine::bridge::audio_mix_readings,
             audio_engine::bridge::audio_mix_devices,
+            audio_engine::bridge::audio_driver,
+            audio_engine::bridge::audio_driver_set,
             audio_engine::bridge::audio_mix_cut_tail,
             audio_engine::bridge::audio_mix_asset_load,
             audio_engine::bridge::audio_mix_asset_unload,
@@ -273,6 +279,7 @@ pub fn run() {
             audio_engine::bridge::audio_instrument,
             audio_engine::bridge::audio_direct_apply,
             audio_engine::bridge::audio_direct_levels,
+            audio_engine::bridge::audio_direct_readings,
             audio_engine::bridge::audio_direct_cut_tail,
             audio_engine::bridge::audio_direct_module_state,
             audio_engine::bridge::audio_direct_measure_latency,
@@ -294,6 +301,8 @@ pub fn run() {
             audio_engine::bridge::audio_voice_set_wake_verifier,
             audio_engine::bridge::audio_voice_read,
             audio_engine::bridge::audio_record_start,
+            audio_engine::bridge::audio_record_strip_start,
+            audio_engine::bridge::audio_record_strip_stop,
             audio_engine::bridge::audio_record_stop,
             audio_engine::bridge::audio_get_levels,
             audio_engine::bridge::audio_get_scope,
@@ -465,12 +474,15 @@ pub fn run() {
                 // The page is always Axum's: `frontendDist` names it only for a bundled build,
                 // `tauri dev` would open `tauri://localhost` and find no asset there.
                 config.url = tauri::WebviewUrl::External(tauri::Url::parse(TAURI_LOCAL_HTTP_URL)?);
+                let init = format!(
+                    "window.__ATOME_PROJECT_ROOT__={:?};",
+                    project_root.to_string_lossy()
+                );
                 tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-                    .initialization_script(format!(
-                        "window.__ATOME_PROJECT_ROOT__={:?};",
-                        project_root.to_string_lossy()
-                    ))
+                    .initialization_script(&init)
                     .build()?;
+                // Connected screens: a second view of the document on each screen beside this one (R-212).
+                external_display::watch(app.handle().clone(), TAURI_LOCAL_HTTP_URL, init);
             }
 
             #[cfg(target_os = "android")]

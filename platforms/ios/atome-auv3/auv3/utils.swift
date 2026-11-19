@@ -15,10 +15,6 @@ import WebKit
 
 // File d'attente circulaire pour messages JS (évite blocage thread principal)
 
-// Protocol for transport data delegation
-protocol TransportDataDelegate: AnyObject {
-    func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double)
-}
 
 public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     // MARK: - Properties
@@ -37,7 +33,6 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var masterGain: Float = 1.0
     var playActive: Bool = false
     
-    weak var transportDataDelegate: TransportDataDelegate?
     // Debug capture (tiny ring buffer for quick inspection)
     var dbgCaptureEnabled: Bool = false
     var dbgBuffer: [Float] = [Float](repeating: 0, count: 48000) // ~1s stereo mixed
@@ -81,6 +76,14 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var jsAudioSampleRate: Double = 48000
     var jsAudioActive: Bool = false
     var jsAudioLock = os_unfair_lock() // Low-overhead lock for JS audio injection
+    // MIDI the page sends to the host's MIDI output: records of [length, byte0, byte1, byte2], queued on the
+    // main thread and sent by the render block (capacities reserved once, nothing allocated while rendering).
+    static let hostMIDIOutCapacity = 4096
+    var hostMIDIOutLock = os_unfair_lock()
+    var hostMIDIOutQueue: [UInt8] = { var queue = [UInt8](); queue.reserveCapacity(auv3Utils.hostMIDIOutCapacity); return queue }()
+    var hostMIDIOutBatch = [UInt8](repeating: 0, count: auv3Utils.hostMIDIOutCapacity)
+    // Atome's output latency as last told to the host (frames of its graphs, `latency`).
+    var reportedLatencyFrames: UInt32 = 0
     // Native Kira engine pulled by the render block (AUv3KiraEngine.swift).
     var kiraEngineStarted = false
     let kiraLeft = UnsafeMutablePointer<Float>.allocate(capacity: auv3Utils.kiraScratchFrames)
@@ -108,6 +111,7 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var recordingEventPlaybackObservedFrame: Int64? = nil
     var recordingEventLock = os_unfair_lock()
     var recordingTimingLock = os_unfair_lock()
+    var recordingCaptureClock: AtomeIosCaptureClock? = nil
     var playbackCurrentRenderFrame: Int64? = nil
     var playbackCurrentTimelineFrame: Int64? = nil
     var playbackExpectedRenderFrame: Int64? = nil
@@ -263,6 +267,8 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
             // Silent error handling for performance
             throw error
         }
+        // The host compensates Atome's latency: it is read again whenever a mixer graph changes it.
+        NativeKiraEngine.graphApplied = { [weak self] in self?.noteGraphLatency() }
     }
 
     // MARK: - MIDI Support
@@ -382,4 +388,62 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
         return outputBusArray[0].format.sampleRate
     }
     
+}
+
+// MARK: - MIDI output to the host
+
+extension auv3Utils {
+    public func sendHostMIDIOutput(_ bytes: [UInt8]) {
+        guard (1...3).contains(bytes.count) else { return }
+        os_unfair_lock_lock(&hostMIDIOutLock)
+        defer { os_unfair_lock_unlock(&hostMIDIOutLock) }
+        guard hostMIDIOutQueue.count + 4 <= auv3Utils.hostMIDIOutCapacity else {
+            NSLog("[AUv3] host MIDI output queue full: message refused")
+            return
+        }
+        hostMIDIOutQueue.append(UInt8(bytes.count))
+        for index in 0..<3 { hostMIDIOutQueue.append(index < bytes.count ? bytes[index] : 0) }
+    }
+
+    // Render thread: never waits for the lock (a busy queue goes out at the next quantum).
+    func flushHostMIDIOutput() {
+        guard os_unfair_lock_trylock(&hostMIDIOutLock) else { return }
+        let count = hostMIDIOutQueue.count
+        if count > 0 {
+            hostMIDIOutQueue.withUnsafeBufferPointer { source in
+                hostMIDIOutBatch.withUnsafeMutableBufferPointer { target in
+                    target.baseAddress!.update(from: source.baseAddress!, count: count)
+                }
+            }
+            hostMIDIOutQueue.removeAll(keepingCapacity: true)
+        }
+        os_unfair_lock_unlock(&hostMIDIOutLock)
+        guard count > 0, let send = midiOutputEventBlock else { return }
+        hostMIDIOutBatch.withUnsafeBufferPointer { batch in
+            var offset = 0
+            while offset + 4 <= count {
+                _ = send(AUEventSampleTimeImmediate, 0, Int(batch[offset]), batch.baseAddress! + offset + 1)
+                offset += 4
+            }
+        }
+    }
+}
+
+// MARK: - Latency told to the host
+
+extension auv3Utils {
+    public override var latency: TimeInterval {
+        let rate = _outputBusArray?[0].format.sampleRate ?? 0
+        return rate > 0 ? Double(reportedLatencyFrames) / rate : 0
+    }
+
+    func noteGraphLatency() {
+        let frames = atome_ios_audio_host_latency_frames()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, frames != self.reportedLatencyFrames else { return }
+            self.willChangeValue(forKey: "latency")
+            self.reportedLatencyFrames = frames
+            self.didChangeValue(forKey: "latency")
+        }
+    }
 }

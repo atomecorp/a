@@ -51,9 +51,11 @@ pub async fn tag(mut request: Request, next: Next) -> Response {
     let mut response = next.run(request).await;
     if let Some(Failed(message)) = response.extensions().get::<Failed>() {
         let mut recent = RECENT.lock().expect("recent errors");
-        recent.push_back(serde_json::json!({ "timestamp": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        recent.push_back(
+            serde_json::json!({ "timestamp": atome_js_values::iso(atome_js_values::dates::now_ms()),
             "request_id": id.to_str().unwrap_or_default(), "method": method, "url": url,
-            "status_code": response.status().as_u16(), "message": message }));
+            "status_code": response.status().as_u16(), "message": message }),
+        );
         while recent.len() > RECENT_ERRORS {
             recent.pop_front();
         }

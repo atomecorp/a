@@ -185,6 +185,47 @@ export const CORE_SCENE_ATOME_TYPES = Object.freeze([
             midi_channel: { type: 'number' }
         }
     }),
+    // A Lottie animation (bodymovin .json or dotLottie .lottie): its stored file (`media_url`, `source_atome_id`: the
+    // person's media) and its clock; the renderer draws the frame of `time_seconds` on its quad (bevy-core
+    // lottie_playback.rs). `lottie_report`: what the file holds and what is not drawn (atome-lottie, never shown).
+    defineType({
+        type: 'lottie',
+        kind: 'media',
+        traits: ['visual', 'media', 'vector', 'time_based', 'selectable'],
+        schema: {
+            ...ATOME_ORDER_SCHEMA,
+            ...ATOME_FRAME_SCHEMA,
+            ...ATOME_MEDIA_SCHEMA,
+            name: { type: 'string' },
+            file_name: { type: 'string' },
+            mime_type: { type: 'string' },
+            source_atome_id: { type: 'string' },
+            time_seconds: { type: 'number', minimum: 0 },
+            playing: { type: 'boolean' },
+            loop: { type: 'boolean' },
+            frame_rate: { type: 'number', minimum: 0 },
+            lottie_report: { type: 'object' }
+        }
+    }),
+    // A 3D scene (OpenUSD: usda, usdc, usdz): its stored file (`media_url`, `source_atome_id`: the person's media) and
+    // its clock; the renderer draws the scene at `scene_time_seconds` (of `media_duration_seconds`) on its quad
+    // (bevy-core scene3d/). `scene3d_report`: what the file holds and what is not shown (never shown itself).
+    defineType({
+        type: 'scene3d',
+        kind: 'media',
+        traits: ['visual', 'media', 'spatial3d', 'time_based', 'selectable'],
+        schema: {
+            ...ATOME_ORDER_SCHEMA,
+            ...ATOME_FRAME_SCHEMA,
+            ...ATOME_MEDIA_SCHEMA,
+            name: { type: 'string' },
+            file_name: { type: 'string' },
+            mime_type: { type: 'string' },
+            source_atome_id: { type: 'string' },
+            scene_time_seconds: { type: 'number', minimum: 0 },
+            scene3d_report: { type: 'object' }
+        }
+    }),
     defineType({
         type: 'audio_waveform',
         kind: 'media',

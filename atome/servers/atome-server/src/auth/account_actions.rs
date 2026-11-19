@@ -303,6 +303,8 @@ pub fn delete_account(
         )?;
         let principal = text(&row, "principal_id");
         accounts::delete(db, principal, &iso_now())?;
+        // The CB sociale: their bottles at sea, their threads and pseudonyms leave with them.
+        crate::social::cb::bottles::forget_principal(db, principal)?;
         let mut statement = db
             .prepare("SELECT session_id FROM auth_device_sessions WHERE principal_id = ?")
             .map_err(|e| e.to_string())?;

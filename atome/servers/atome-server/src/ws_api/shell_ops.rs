@@ -68,7 +68,7 @@ pub(super) async fn answer(connection: Arc<Connection>, message: JsonValue) {
     let expires = front["exp_ms"]
         .as_f64()
         .filter(|ms| *ms != 0.0 && !ms.is_nan());
-    let expired = expires.is_some_and(|ms| chrono::Utc::now().timestamp_millis() as f64 >= ms);
+    let expired = expires.is_some_and(|ms| atome_js_values::dates::now_ms() as f64 >= ms);
     let Some(user) = attached.filter(|_| !expired) else {
         let error = if attached.is_some() {
             "ws/api authentication expired (re-auth required)"

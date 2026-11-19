@@ -7,8 +7,11 @@
 // (voice) and the calendar engine (calendar).
 
 mod calendar;
+mod interchange;
 mod kernels;
+mod lpproj;
 mod mix;
+mod record;
 mod scheduled_backend;
 mod voice;
 
@@ -76,7 +79,8 @@ fn ensure_audio_manager(
 }
 
 fn is_explicit_symphonia_container(bytes: &[u8]) -> bool {
-    bytes.len() >= 12 && &bytes[4..8] == b"ftyp"
+    (bytes.len() >= 12 && &bytes[4..8] == b"ftyp")
+        || atome_mix_graph::clip_decode::is_aiff_container(bytes)
 }
 
 #[wasm_bindgen]
@@ -113,6 +117,13 @@ pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<f64, JsValue>
         .clips
         .insert(id.to_string(), ClipEntry { data: sound_data });
     Ok(duration_seconds)
+}
+
+/// A sound's length in seconds, read from its container without decoding nor loading a clip (an upload's duration).
+#[wasm_bindgen]
+pub fn audio_probe_duration(data: &[u8]) -> Result<f64, JsValue> {
+    atome_mix_graph::clip_decode::probe_duration(data, None)
+        .map_err(|error| JsValue::from_str(&error))
 }
 
 #[wasm_bindgen]
@@ -223,6 +234,8 @@ pub fn audio_play_instance(
         loop_start_seconds,
         loop_end_seconds,
         envelope: None,
+        reverse: false,
+        warp: None,
     };
     let mut guard = ENGINE
         .lock()

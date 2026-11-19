@@ -10,7 +10,11 @@ use serde::Deserialize;
 /// The panel skin's one glide (`scrollMotion`).
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 pub struct ScrollMotionSpec {
-    pub velocity_blend: f64,
+    /// The finger's speed is its travel over this last span (px per ms), never from one move to the next:
+    /// a device hands a frame's moves together (an iPad's 120 Hz touches), a few ms apart or none.
+    pub velocity_window_ms: f64,
+    /// The shortest span a speed is read over (a frame): moves handed at one instant are not infinitely fast.
+    pub min_span_ms: f64,
     pub min_velocity_px_per_ms: f64,
     pub max_velocity_px_per_ms: f64,
     pub friction_per16_ms: f64,
@@ -25,6 +29,54 @@ const CAUGHT_GLIDE_PX_PER_MS: f64 = 0.25;
 const CAUGHT_STRETCH_PX: f64 = 4.0;
 /// A stretch under half a pixel is none.
 const STRETCH_EPSILON_PX: f64 = 0.5;
+/// The finger's last places kept to read its speed: more than a window's moves at 120 Hz, bursts included.
+const SAMPLES: usize = 32;
+
+/// The finger's places over its last `velocity_window_ms` (and the last one before it, or the press).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FingerTrail {
+    places: [(f64, f64); SAMPLES],
+    first: usize,
+    len: usize,
+    pressed_at: f64,
+}
+
+impl FingerTrail {
+    fn new(y: f64, at: f64) -> Self {
+        let mut places = [(0.0, 0.0); SAMPLES];
+        places[0] = (at, y);
+        Self {
+            places,
+            first: 0,
+            len: 1,
+            pressed_at: at,
+        }
+    }
+
+    fn place(&self, index: usize) -> (f64, f64) {
+        self.places[(self.first + index) % SAMPLES]
+    }
+
+    /// The finger at `y` at `at`; its speed (px per ms, the content's way: up is positive): the travel after
+    /// the window's start over the time since then, or since the press when it came later.
+    fn follow(&mut self, y: f64, at: f64, spec: &ScrollMotionSpec) -> f64 {
+        if self.len == SAMPLES {
+            self.first = (self.first + 1) % SAMPLES;
+            self.len -= 1;
+        }
+        self.places[(self.first + self.len) % SAMPLES] = (at, y);
+        self.len += 1;
+        let since = at - spec.velocity_window_ms;
+        // Keep the last place at or before the window's start: the travel is counted from there.
+        while self.len > 1 && self.place(1).0 <= since {
+            self.first = (self.first + 1) % SAMPLES;
+            self.len -= 1;
+        }
+        let from = since.max(self.pressed_at);
+        -(y - self.place(0).1) / (at - from).max(spec.min_span_ms)
+    }
+}
+
 /// A wheel's notches keep a list moving until none came for this long.
 pub const SCROLL_WHEEL_SETTLE_MS: f64 = 80.0;
 
@@ -35,7 +87,6 @@ enum Phase {
     Drag {
         start_offset: f64,
         start_y: f64,
-        last_y: f64,
         last_at: f64,
         velocity: f64,
     },
@@ -61,6 +112,8 @@ pub struct ScrollMotion {
     offset: f64,
     stretch: f64,
     phase: Phase,
+    /// The finger's last places while it drags, kept beside the phase so the phase, copied at every move, stays small.
+    trail: FingerTrail,
 }
 
 impl ScrollMotion {
@@ -73,6 +126,7 @@ impl ScrollMotion {
             offset: offset.clamp(0.0, max),
             stretch: 0.0,
             phase: Phase::Rest,
+            trail: FingerTrail::new(0.0, 0.0),
         }
     }
 
@@ -154,10 +208,10 @@ impl ScrollMotion {
         self.phase = Phase::Drag {
             start_offset: self.shown(),
             start_y: y,
-            last_y: y,
             last_at: at,
             velocity: 0.0,
         };
+        self.trail = FingerTrail::new(y, at);
     }
 
     /// The finger at `y`: the content follows it, past an end less and less.
@@ -165,16 +219,12 @@ impl ScrollMotion {
         let Phase::Drag {
             start_offset,
             start_y,
-            last_y,
-            last_at,
-            velocity,
+            ..
         } = self.phase
         else {
             return;
         };
-        let elapsed = (at - last_at).max(1.0);
-        let instantaneous = -(y - last_y) / elapsed;
-        let blend = self.spec.velocity_blend;
+        let velocity = self.trail.follow(y, at, &self.spec);
         let wanted = start_offset - (y - start_y);
         self.offset = wanted.clamp(0.0, self.max);
         let stretch = if wanted < 0.0 {
@@ -192,9 +242,8 @@ impl ScrollMotion {
         self.phase = Phase::Drag {
             start_offset,
             start_y,
-            last_y: y,
             last_at: at,
-            velocity: velocity * (1.0 - blend) + instantaneous * blend,
+            velocity,
         };
     }
 

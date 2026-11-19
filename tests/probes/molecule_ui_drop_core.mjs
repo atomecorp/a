@@ -5,10 +5,12 @@ import {
     analyzePngSignal,
     assert,
     clickCanvasTarget,
+    openCdpPointer,
     playwrightPointForClientTarget,
     visibleMenuTool,
     wait,
     waitFor,
+    waitForResponsivePage,
     waitForStableScene
 } from './molecule_ui_acceptance_support.mjs';
 import { contextualTool } from './molecule_ui_drop_playback_support.mjs';
@@ -200,43 +202,72 @@ export const chooseDropChoice = async (page, choice) => {
     return target;
 };
 
+// What the page itself received of a drag (the pointer events, coalesced moves counted) and when a Mystic opened under
+// it: a drop that fails says whether the input arrived, and what took it.
+const traceDrag = (page) => page.evaluate(async () => {
+    window.__probeDragTrace = [];
+    if (window.__probeDragTraceInstalled) return;
+    window.__probeDragTraceInstalled = true;
+    const note = (entry) => { if (window.__probeDragTrace.length < 400) window.__probeDragTrace.push(entry); };
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+        window.addEventListener(type, (event) => note([type, Math.round(event.clientX), Math.round(event.clientY),
+            Math.round(event.timeStamp), event.getCoalescedEvents?.().length || 0]), true);
+    }
+    const mystic = await import('/eVe/intuition/mystic/index.js');
+    let open = false;
+    const watch = () => {
+        const now = mystic.isMysticMenuOpen() === true;
+        if (now !== open) { open = now; note([now ? 'mystic_open' : 'mystic_closed', Math.round(performance.now())]); }
+        requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+});
+
 export const drag = async ({
     page, source, destination, holdMs = 0, armedShot = null, steps = 16,
     postArmOffset = null, waypoint = null, railChoice = null
 }) => {
     const from = await playwrightPointForClientTarget(page, source);
     const to = await playwrightPointForClientTarget(page, destination);
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
-    if (waypoint) {
-        const via = await playwrightPointForClientTarget(page, waypoint);
-        await page.mouse.move(via.x, via.y, { steps: Math.max(2, Math.round((Number(steps) || 16) / 2)) });
+    // Every point is resolved BEFORE the press: a finger kept still on a media while the probe reads the page is
+    // a hold, which opens its Mystic (bevy_ui_mystic_dwell.js) instead of starting the drag.
+    const via = waypoint ? await playwrightPointForClientTarget(page, waypoint) : null;
+    await traceDrag(page);
+    const pointer = await openCdpPointer(page);
+    let releasePoint = to;
+    try {
+        await pointer.move(from);
+        await waitForResponsivePage(page);
+        await pointer.press([
+            ...(via ? [{ to: via, steps: Math.max(2, Math.round((Number(steps) || 16) / 2)) }] : []),
+            { to, steps: Math.max(1, Number(steps) || 1) }
+        ]);
+        if (holdMs > 0) {
+            await wait(holdMs);
+        }
+        // Garde permanente : rester immobile au-dessus d'une cible n'ouvre plus AUCUN
+        // pop-up. Le choix ne vit que dans le rail, apres le depot.
+        const popupMounted = await page.evaluate(() => Array.from(window.eveBevyUiRuntime?.state?.trees?.keys?.() || [])
+            .some((id) => String(id).includes('composition_choices')));
+        assert(!popupMounted, 'drop_popup_reappeared_during_drag');
+        if (typeof armedShot === 'function') await armedShot();
+        if (postArmOffset) {
+            releasePoint = { x: to.x + Number(postArmOffset.x || 0), y: to.y + Number(postArmOffset.y || 0) };
+            await pointer.travel(releasePoint);
+        }
+        await pointer.release();
+    } finally {
+        await pointer.close();
     }
-    await page.mouse.move(to.x, to.y, { steps: Math.max(1, Number(steps) || 1) });
-    if (holdMs > 0) {
-        await wait(holdMs);
-    }
-    // Garde permanente : rester immobile au-dessus d'une cible n'ouvre plus AUCUN
-    // pop-up. Le choix ne vit que dans le rail, apres le depot.
-    const popupMounted = await page.evaluate(() => Array.from(window.eveBevyUiRuntime?.state?.trees?.keys?.() || [])
-        .some((id) => String(id).includes('composition_choices')));
-    assert(!popupMounted, 'drop_popup_reappeared_during_drag');
-    if (typeof armedShot === 'function') await armedShot();
-    if (postArmOffset) {
-        await page.mouse.move(
-            to.x + Number(postArmOffset.x || 0),
-            to.y + Number(postArmOffset.y || 0)
-        );
-    }
-    const releasePoint = postArmOffset
-        ? { x: to.x + Number(postArmOffset.x || 0), y: to.y + Number(postArmOffset.y || 0) }
-        : to;
-    await page.mouse.up();
     await page.evaluate(async () => {
         const { waitForPendingMutations } = await import('/eVe/core/atome_commit_state.js');
         await waitForPendingMutations();
     });
-    if (railChoice) await chooseDropChoice(page, railChoice);
+    if (railChoice) {
+        await chooseDropChoice(page, railChoice).catch(async (error) => {
+            throw new Error(`${error.message}:drag_trace:${JSON.stringify(await page.evaluate(() => window.__probeDragTrace))}`, { cause: error });
+        });
+    }
     return { from, to, releasePoint };
 };
 

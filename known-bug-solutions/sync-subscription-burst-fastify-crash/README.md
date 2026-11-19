@@ -35,7 +35,7 @@ control-message ownership.
 
 ## Regression and acceptance
 
-- Run `cargo test -p atome-vault -p atome-server --test ws_sync` (the Rust runtime, `tests/atome_server/ws_sync.rs`). Since 2026-11-05 the
+- Run `cargo test -p atome-vault -p atome-server --test worker_process --test ws_sync` (the Rust runtime, `tests/atome_server/ws_sync.rs`). Since 2026-11-05 the
   runtime is atome-server's (`atome/servers/atome-server/src/ws_sync/`): one
   message of a connection at a time by construction; the burst contract proves
   ordered completion of two subscriptions sent at once, the failure contract

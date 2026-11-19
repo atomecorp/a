@@ -4,12 +4,22 @@
 // notification routes (web.rs). A store purchase is verified by its store, then bound to an
 // account: either the account already holds its original transaction, or the purchase
 // carries the account token of one of the account's device keys.
+pub mod admin;
 pub mod apple;
 pub mod catalog;
 pub mod google;
+pub mod guard;
 pub mod ledger;
+pub mod money;
+mod money_frames;
+#[cfg(test)]
+mod money_tests;
+pub mod pricing;
 pub mod routes;
-mod x509;
+pub mod stripe;
+pub mod usage;
+pub mod wallet;
+pub(crate) mod x509;
 
 use crate::vault_router::central::Central;
 use crate::vault_router::js;
@@ -30,6 +40,8 @@ pub struct Purchase {
     // Google Play: whether it is acknowledged (or consumed) already, and its token.
     pub acknowledged: bool,
     pub purchase_token: Option<String>,
+    // `real` only for a store's production purchase; empty or `test` never brings real money.
+    pub environment: String,
 }
 
 impl Purchase {
@@ -152,16 +164,20 @@ pub struct Creation {
 }
 
 impl Creation {
+    /// Records the account's activation (R-193): a production store receipt or an offered
+    /// invitation makes it real with its whole entry price as credit; a sandbox receipt or a
+    /// simulated method only opens a test account (no euros, no paid AI) until a real payment.
     pub fn record(&self, db: &Connection, principal: &str, now: i64) -> Result<JsonValue, String> {
-        let Some(purchase) = &self.purchase else {
-            return ledger::apply_simulated_plan(db, principal, now);
+        let environment = match &self.purchase {
+            Some(purchase) => {
+                ledger::apply_purchase(db, principal, purchase, now)?;
+                Some(purchase.environment.as_str())
+            }
+            None => None,
         };
-        ledger::apply_purchase(db, principal, purchase, now)?;
-        let product = catalog::product(&purchase.product_id).ok_or("billing_product_unknown")?;
-        Ok(
-            json!({ "mode": self.method, "productId": product["productId"], "amountCents": product["priceCents"],
-            "currency": product["currency"], "period": product["period"] }),
-        )
+        let mut activation = money::activate_new(db, principal, environment, now)?;
+        activation["mode"] = json!(self.method);
+        Ok(activation)
     }
 }
 
@@ -169,10 +185,11 @@ pub struct Billing {
     central: Central,
     apple: apple::Apple,
     google: google::Google,
+    stripe: stripe::Stripe,
 }
 
 fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 impl Billing {
@@ -185,6 +202,7 @@ impl Billing {
             central,
             apple: apple::Apple::new(apple::xcode_root(settings)?),
             google: google::Google::new(settings, project_root)?,
+            stripe: stripe::Stripe::load(settings)?,
         })
     }
 
@@ -346,9 +364,14 @@ impl Billing {
         match self.operation(message, principal).await {
             Ok(fields) => (true, fields),
             Err(error) => {
-                let public = ["billing_", "not_authenticated", "insufficient_quota"]
-                    .iter()
-                    .any(|prefix| error.starts_with(prefix));
+                let public = [
+                    "billing_",
+                    "money_",
+                    "not_authenticated",
+                    "insufficient_quota",
+                ]
+                .iter()
+                .any(|prefix| error.starts_with(prefix));
                 (
                     false,
                     json!({ "error": if public { error.as_str() } else { "billing_operation_failed" } }),
@@ -374,6 +397,9 @@ impl Billing {
             .filter(|action| js::truthy(Some(action)))
             .map(|action| js::trim(&js::string(action)).to_lowercase())
             .unwrap_or_default();
+        if action.starts_with("wallet.") || action.starts_with("admin.") {
+            return self.money(&action, message, principal).await;
+        }
         let store = match action.as_str() {
             "status" => {
                 return self

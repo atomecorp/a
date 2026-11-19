@@ -34,14 +34,19 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
     try {
         await db.initDatabase();
         await Promise.all([router.provision(owner), router.provision(recipient)]);
+        // A share waits for the recipient's consent unless they accept the owner's shares always (the `direct` option
+        // is gone since 30 Sep.): the recipient's policy, every right the owner grants.
+        await service.handle({ action: 'policy', peer_user_id: owner, policy: 'always',
+            permissions: { read: true, alter: true, create: true, delete: true } }, recipient);
 
+        // Since 30 Sep. a share's readable and writable properties are two lists (allowed_properties: the writable).
         const linkedId = 'linked-shape';
         const initial = await commit(owner, linkedId, 'linked-1', { left: 1, secret: 'hidden' });
         const linked = await service.request(owner, {
             action: 'create', principal_id: recipient, atome_id: linkedId,
             share_type: 'linked', mode: 'real-time',
-            permission: { read: true, alter: true }, allowed_properties: ['left']
-        }, { direct: true });
+            permission: { read: true, alter: true }, readable_properties: ['left'], allowed_properties: ['left']
+        });
         assert.equal(linked.requests[0].status, 'active');
         assert.equal(linked.requests[0].stream_id, initial.event.stream_id);
         assert.deepEqual(granted[0], { principal: recipient, stream: initial.event.stream_id });
@@ -72,15 +77,16 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
             share_type: 'linked',
             mode: 'real-time',
             permission: { read: true, alter: true, create: true, delete: false }
-        }, { direct: true });
+        });
         assert.equal(rooted.requests[0].atome_id, projectRoot);
         assert.ok(await router.getState(recipient, moleculeRoot));
         assert.ok(await router.getState(recipient, existingMember));
+        // The recipient sees the project's tree and the shape shared above with them, never the owner's private project.
         assert.deepEqual(
             (await router.listStates(recipient, { includeShared: true }))
                 .filter((state) => state.vault_principal_id === owner)
                 .map((state) => state.atome?.id || state.atome_id || state.id).sort(),
-            [existingMember, moleculeRoot, projectRoot].sort()
+            [linkedId, existingMember, moleculeRoot, projectRoot].sort()
         );
         await commit(recipient, existingMember, 'member-resize', { width: 64 }, 'recipient-device');
         assert.equal((await router.getState(owner, existingMember)).properties.width, 64);
@@ -120,7 +126,7 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
             share_type: 'linked',
             mode: 'real-time',
             permission: { read: true, alter: true, create: true, delete: false }
-        }, { direct: true });
+        });
         assert.equal(moleculeOnly.requests[0].atome_id, moleculeOnlyRoot);
         assert.ok(await router.getState(recipient, moleculeOnlyRoot));
         assert.ok(await router.getState(recipient, moleculeOnlyMember));
@@ -137,8 +143,8 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
         const manualInitial = await commit(owner, manualId, 'manual-1', { top: 2 });
         const manual = await service.request(owner, {
             principal_id: recipient, atome_id: manualId, share_type: 'linked', mode: 'manual',
-            permission: { read: true }, allowed_properties: ['top']
-        }, { direct: true });
+            permission: { read: true }, readable_properties: ['top'], allowed_properties: ['top']
+        });
         assert.equal(manual.requests[0].share_type, 'linked');
         assert.equal(manual.requests[0].share_mode, 'manual');
         assert.deepEqual(await router.listStreamEvents(recipient, manualInitial.event.stream_id, { cursor: 0 }), []);
@@ -148,11 +154,12 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
         assert.deepEqual(replayed, [{ principal: recipient, stream: manualInitial.event.stream_id }]);
 
         const detachedSourceId = 'detached-source';
-        await commit(owner, detachedSourceId, 'detached-1', { color: 'red' });
+        // Typed: the type gate refuses `color` on an atome that does not say what it is.
+        await commit(owner, detachedSourceId, 'detached-1', { type: 'shape', color: 'red' });
         const detached = await service.request(owner, {
             principal_id: recipient, atome_id: detachedSourceId, share_type: 'detached', mode: 'real-time',
             permission: { read: true }
-        }, { direct: true });
+        });
         const detachedRow = detached.requests[0];
         assert.equal(detachedRow.status, 'accepted');
         assert.ok(detachedRow.detached_atome_id);

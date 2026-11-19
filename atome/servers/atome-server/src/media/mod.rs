@@ -4,6 +4,8 @@
 #[cfg(unix)]
 mod audio_track;
 #[cfg(unix)]
+pub mod clean;
+#[cfg(unix)]
 pub mod downloads;
 #[cfg(unix)]
 pub mod files;
@@ -14,8 +16,11 @@ pub mod removal;
 #[cfg(unix)]
 pub mod served;
 #[cfg(unix)]
+pub mod shared_folders;
+#[cfg(unix)]
 pub(crate) mod storage;
 pub mod trash;
+#[cfg(unix)]
 #[cfg(unix)]
 pub mod uploads;
 #[cfg(unix)]

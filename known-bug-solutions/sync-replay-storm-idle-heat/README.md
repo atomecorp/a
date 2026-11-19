@@ -110,11 +110,13 @@ reconnection loop itself was not exercised on the device.
 ## Regression checks
 
 - `npx vitest run tests/eve/sync_engine.test.mjs` (burst persistence test).
-- `cargo test -p atome-vault -p atome-server --test ws_sync` (the Rust runtime, `tests/atome_server/ws_sync.rs`).
-- `node temp/dashboard_heat_2026-10-13/sync_engine_storm.probe.mjs [srcRoot]`.
+- `cargo test -p atome-vault -p atome-server --test worker_process --test ws_sync` (the Rust runtime, tests/atome_server/ws_sync.rs).
 - `node --test tests/server/ws_sync_stream_heads.test.mjs` (real vault workers).
-- `node --test tests/probes/ios_sync_batch_subscribe.probe.mjs` (compiled native client).
-- `node temp/ws_sync_batch_2026-10-13/reconnect_cost.probe.mjs [N]`: real
-  engine, runtime, router and vault over a WebSocket, per-stream vs batch.
+- `cargo test -p atome-server --lib local::local_atome_ws_sync_replay_tests` (the
+  device's native client, the Rust local server since the Swift one was retired on
+  6 Nov. 2026: batches of 500, a reconnection with nothing new resumes every stream at
+  its cursor, applies and announces nothing).
+- Measurement probes, not regression checks: temp/dashboard_heat_2026-10-13/sync_engine_storm.probe.mjs
+  and temp/ws_sync_batch_2026-10-13/reconnect_cost.probe.mjs (per-stream vs batch cost).
 - Device: `rwi.mjs ios_instrument.js` then `__heat.report()` after 60 s on the
   Dashboard: count `sync:projection-ready`/s and `storage` writes.

@@ -11,9 +11,10 @@ use crate::vault_router::js;
 use serde_json::{Value as JsonValue, json};
 use std::collections::{HashMap, HashSet};
 
-pub const MEDIA_TYPES: [&str; 5] = ["image", "video", "audio", "sound", "svg"];
-const SHOWN_TYPES: [&str; 9] = [
-    "text", "shape", "form", "group", "image", "video", "audio", "sound", "svg",
+// A stored file (`file`, `raw`: a PDF, an archive…) placed on a page is offered to download (R-202).
+pub const MEDIA_TYPES: [&str; 7] = ["image", "video", "audio", "sound", "svg", "file", "raw"];
+const SHOWN_TYPES: [&str; 11] = [
+    "text", "shape", "form", "group", "image", "video", "audio", "sound", "svg", "file", "raw",
 ];
 
 /// `parse(value)`: a JSON text read back, else the value as it is.

@@ -19,13 +19,16 @@ const definitions = {
     send: [{ atome_id: id, list_kind: kind, user_ids: { type: 'array', minItems: 1, maxItems: 34, items: id },
         phones: { type: 'array', minItems: 1, maxItems: 34, items: { type: 'string', minLength: 3, maxLength: 32 } }, linked: { type: 'boolean' },
         live: { type: 'boolean' }, note: { type: 'string', maxLength: 1000 } }, [],
-        'Send a list to contacts (their account ids, or phones for a book contact known by number only): atome_id names the list (a playlist, a programme, a protocol template, a list made with share.list_create), list_kind alone the user\'s own medications or supplements. Linked by default: each later version reaches them to validate; linked false sends a copy; live true shares it to work on together (the shopping list: they see, add, tick and remove its items with the user); note: the user\'s own words with it. They validate it before it becomes theirs; someone it is already shared with is not asked again.', true],
+        'Send a list to contacts (their account ids, or phones for a book contact known by number only): atome_id names the list (a playlist, a programme, a protocol template, a list made with share.list_create), list_kind alone the user\'s own medications or supplements. Linked by default: each later version reaches them to validate; linked false sends a copy; live true shares it to work on together (the shopping list: they see, add, tick and remove its items with the user; a project, atome_id, shared live is a shared folder: everything in it, now and later, they read and write); note: the user\'s own words with it. They validate it before it becomes theirs; someone it is already shared with is not asked again.', true],
     pending: [{}, [], 'What waits for the user\'s answer: the lists sent to them (and drafts of the assistant) not answered yet, and each new version of a list they follow.', false],
     view: [{ share_id: id, draft_id: id }, [], 'Read a list received (share_id) or a draft (draft_id) whole: its name, version and entries, a changed entry with what it was before.', false],
     accept: [{ share_id: id, draft_id: id }, [], 'Validate a list received or its new version (share_id), or a draft of the assistant (draft_id): it becomes the user\'s.', true],
     refuse: [{ share_id: id, draft_id: id }, [], 'Refuse a list received or its new version (share_id), or a draft (draft_id).', true],
     detach: [{ share_id: id }, ['share_id'], 'Keep a copy of a linked list received and stop following its sender\'s versions.', true],
     revoke: [{ share_id: id }, ['share_id'], 'Stop a share the user made (or one received).', true],
+    folders: [{}, [], 'The projects other people share with the user as folders, live: each with its share_id, its owner (owner_id), its name and whether the user may write in it.', false],
+    rights: [{ share_id: id, atome_id: id, write: { type: 'boolean' } }, ['write'],
+        'A share made live (a project shared as a folder, a list worked on together) read only (write false) or read and written again (write true): share_id for one person, atome_id for everyone it is shared with.', true],
     sent: [{ atome_id: id, list_kind: kind }, [], 'The lists the user sent: to whom (principal_id), linked or a copy, and their state (pending until accepted); atome_id or list_kind (the user\'s own medications, supplements or shopping list) keeps one list\'s.', false],
     list_create: [{ list_kind: kind, name, for_person: person }, ['list_kind', 'name'],
         'A new list (« + »): for the user, or for a third party (for_person with their name): a list for someone else stays with the user, never on the user\'s Dashboard nor Agenda.', true],
@@ -45,13 +48,14 @@ export const SHARE_COMMANDS = Object.freeze(Object.entries(definitions).map(([ac
         shares: { type: 'array', items: shareSchema }, list: { type: 'object' }, list_id: { type: 'string' }, draft_id: { type: 'string' },
         version: { type: 'number' } } }
 })));
-export const SHARE_CONFIRMED_COMMANDS = Object.freeze(['share.send', 'share.accept', 'share.refuse', 'share.detach', 'share.revoke', 'share.list_delete']);
+export const SHARE_CONFIRMED_COMMANDS = Object.freeze(['share.send', 'share.accept', 'share.refuse', 'share.detach', 'share.revoke', 'share.rights', 'share.list_delete']);
 export const validateShareInput = (action, input) => {
     const contract = SHARE_COMMANDS.find(command => command.action === action);
     if (!contract || !validateParams(contract.input_schema, input).ok) return 'INVALID_ARGUMENT';
     if (['view', 'accept', 'refuse'].includes(action) && Boolean(input.share_id) === Boolean(input.draft_id)) return 'INVALID_ARGUMENT';
+    if (action === 'rights' && Boolean(input.share_id) === Boolean(input.atome_id)) return 'INVALID_ARGUMENT';
     if (action === 'send' && (Boolean(input.atome_id) === Boolean(input.list_kind) || !(input.user_ids?.length || input.phones?.length))) return 'INVALID_ARGUMENT';
     return null;
 };
 export const shareError = error => (SHARE_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'COMMIT_FAILED');
-export const SHARE_ASSISTANT_INSTRUCTIONS = 'Lists between people: « envoie ma liste de médicaments à Marie » calls share.send with list_kind medications and her account id; « envoie la playlist Soirée à Paul » calls share.send with the list\'s atome_id; « qu\'est-ce qu\'on m\'a envoyé » calls share.pending; « valide la liste de Julien » calls share.accept, « refuse-la » share.refuse, « garde une copie » share.detach; « fais une liste pour maman » calls share.list_create with for_person; « partage ma liste de courses avec Marie » calls share.send with list_kind shopping and live true, share.sent with list_kind shopping tells with whom, share.revoke stops it. A list received is never applied before the user validates it. A prescription read for the user becomes share.draft, never a treatment applied.';
+export const SHARE_ASSISTANT_INSTRUCTIONS = 'Lists between people: « envoie ma liste de médicaments à Marie » calls share.send with list_kind medications and her account id; « envoie la playlist Soirée à Paul » calls share.send with the list\'s atome_id; « qu\'est-ce qu\'on m\'a envoyé » calls share.pending; « valide la liste de Julien » calls share.accept, « refuse-la » share.refuse, « garde une copie » share.detach; « fais une liste pour maman » calls share.list_create with for_person; « partage ma liste de courses avec Marie » calls share.send with list_kind shopping and live true, share.sent with list_kind shopping tells with whom, share.revoke stops it; « partage le projet Concert avec Léa » calls share.send with the project\'s atome_id and live true, « mets-le en lecture seule » share.rights with write false. A list received is never applied before the user validates it. A prescription read for the user becomes share.draft, never a treatment applied.';

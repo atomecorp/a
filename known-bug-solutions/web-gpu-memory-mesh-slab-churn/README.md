@@ -36,7 +36,7 @@ per-frame path unless the geometry really changed.
 
 ## Regression / acceptance
 
-- `cargo test --lib backdrop_transform_keeps_an_unchanged_crop_out_of_the_mesh`
+- `cargo test -p atome-bevy-renderer-core --lib backdrop_transform_keeps_an_unchanged_crop_out_of_the_mesh`
   (`atome/renderers/bevy-core/src/tests.rs`): fails without the guard.
 - On the phone: `dumpsys gpu --gpumem` for the app stays flat after the home
   appears; the app is not killed. Tracer: `temp/android-cdp/gputrace.mjs`.

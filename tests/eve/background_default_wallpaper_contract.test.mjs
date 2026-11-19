@@ -21,6 +21,9 @@ const mediaOwner = vi.hoisted(() => ({
     isLocalNativeBackendRuntime: vi.fn(), ensureMediaLocallyAvailable: vi.fn(), buildLocalAuthHeaders: vi.fn()
 }));
 vi.mock('../../eVe/domains/media/api/media_api_shared.js', () => mediaOwner);
+// A stored media joins the life profiles active (media_store.js#storeMediaFile).
+const lifeProfiles = vi.hoisted(() => ({ tagNew: vi.fn(async () => ({ ok: true })) }));
+vi.mock('../../eVe/domains/life_profiles/life_profile_runtime.js', () => ({ getLifeProfileRuntime: () => lifeProfiles }));
 const videoSource = vi.hoisted(() => ({ register: vi.fn() }));
 vi.mock('../../eVe/domains/rendering/bevy_video_stream_source_runtime.js', () => ({
     registerBevyVideoStreamSource: videoSource.register
@@ -402,7 +405,8 @@ test.each([{ name: 'wallpaper.mov', type: 'video/quicktime' }, { name: 'wallpape
     const patches = [];
     const image = createBackgroundImage({ applyBackgroundParams: params => patches.push(params), schedulePreferenceSave: async () => ({ ok: true }) });
     const result = await image.importBackgroundImageFile(file);
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(lifeProfiles.tagNew.mock.calls.at(-1), ['wallpaper_media'], 'the upload\'s media atome joins the life profiles');
     // The account-wide media atome is what carries the file to the other devices.
     assert.deepEqual(assetBox.sendFileToServer.mock.calls[0][1], { typeOverride: 'video', scope: 'global' });
     assert.equal(patches[0].backgroundImageAtomeId, 'wallpaper_media');

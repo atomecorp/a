@@ -253,7 +253,7 @@ impl Surfaces {
                 vec![json!(owner), json!(js::trim(surface)), json!(grantee)],
             )
             .await?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         Ok(rows.iter().map(grant).any(|grant| {
             live(&grant, now)
                 && grant["capabilities"]

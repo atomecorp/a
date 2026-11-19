@@ -49,7 +49,8 @@ the one-redraw fast path and freeze an intermediate Dashboard capture.
 
 - `cargo test --manifest-path atome/renderers/bevy-core/Cargo.toml`: 79 passed.
 - `cargo test --manifest-path platforms/web/bevy-renderer/Cargo.toml`: 27 passed.
-- `cargo test --manifest-path platforms/desktop-tauri/Cargo.toml --features bevy_renderer_core bevy_backend::`: 14 passed.
+- The Tauri native Bevy backend (`bevy_backend::`, feature `bevy_renderer_core`) no longer exists: the desktop app
+  renders through the shared `atome-bevy-renderer-core`, whose tests are the first line above.
 - `npx vitest run tests/eve/bevy_project_renderer_guards.test.mjs`: 14 passed,
   including the active-backdrop transform prime.
 

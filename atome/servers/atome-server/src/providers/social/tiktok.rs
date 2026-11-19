@@ -1,14 +1,18 @@
 // TikTok (server/social/social_tiktok.js, ported): Login Kit for the web and the Content Posting
 // API v2, as developers.tiktok.com documents them.
-use super::media::{TIKTOK_PHOTO_DESCRIPTION, TIKTOK_VIDEO_CAPTION};
+use super::limits::{TIKTOK_PHOTO_DESCRIPTION, TIKTOK_VIDEO_CAPTION};
 use super::net::{self, Sd, Se};
 use super::{Config, Ctx, Media};
 use crate::providers::http::{self, form};
 use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
-const AUTHORIZE: &str = "https://www.tiktok.com/v2/auth/authorize/";
+const AUTHORIZE: &str = "https://www.tiktok.com";
 const API: &str = "https://open.tiktokapis.com";
+
+fn api(config: &Config) -> String {
+    config.api("tiktok", API)
+}
 const MIN_CHUNK: f64 = 5.0 * 1024.0 * 1024.0;
 const CHUNK: f64 = 10.0 * 1024.0 * 1024.0;
 const MAX_DURATION: f64 = 600.0;
@@ -42,7 +46,11 @@ pub fn authorize_url(config: &Config, state: &str, redirect: &str) -> String {
         ("redirect_uri", redirect),
         ("state", state),
     ];
-    format!("{AUTHORIZE}?{}", form(&pairs))
+    format!(
+        "{}/v2/auth/authorize/?{}",
+        config.api("tiktok", AUTHORIZE),
+        form(&pairs)
+    )
 }
 
 fn bearer(request: reqwest::RequestBuilder, record: &JsonValue) -> reqwest::RequestBuilder {
@@ -54,8 +62,17 @@ fn bearer(request: reqwest::RequestBuilder, record: &JsonValue) -> reqwest::Requ
         .header("Content-Type", "application/json; charset=UTF-8")
 }
 
-fn post(path: &str, record: &JsonValue, body: JsonValue) -> reqwest::RequestBuilder {
-    bearer(http::client().post(format!("{API}{path}")), record).body(body.to_string())
+fn post(
+    config: &Config,
+    path: &str,
+    record: &JsonValue,
+    body: JsonValue,
+) -> reqwest::RequestBuilder {
+    bearer(
+        http::client().post(format!("{}{path}", api(config))),
+        record,
+    )
+    .body(body.to_string())
 }
 
 fn token_record(token: &JsonValue, now: i64) -> Sd<JsonValue> {
@@ -87,7 +104,7 @@ fn token_form(config: &Config, fields: &[(&str, JsonValue)]) -> reqwest::Request
         ("client_secret", json!(config.get("TIKTOK_CLIENT_SECRET"))),
     ];
     all.extend_from_slice(fields);
-    net::form_post(&format!("{API}/v2/oauth/token/"), &all)
+    net::form_post(&format!("{}/v2/oauth/token/", api(config)), &all)
 }
 
 pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> Sd<JsonValue> {
@@ -98,7 +115,10 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
     ];
     let token = net::fetch(token_form(config, &fields), false).await?;
     let mut record = token_record(&token, now)?;
-    let url = format!("{API}/v2/user/info/?fields=open_id,avatar_url,display_name");
+    let url = format!(
+        "{}/v2/user/info/?fields=open_id,avatar_url,display_name",
+        api(config)
+    );
     let info = net::fetch(bearer(http::client().get(url), &record), false).await?;
     let user = info
         .pointer("/data/user")
@@ -155,7 +175,7 @@ pub async fn revoke(config: &Config, record: &JsonValue) -> Sd<()> {
         ),
     ];
     net::fetch(
-        net::form_post(&format!("{API}/v2/oauth/revoke/"), &fields),
+        net::form_post(&format!("{}/v2/oauth/revoke/", api(config)), &fields),
         false,
     )
     .await
@@ -177,7 +197,12 @@ pub async fn describe(config: &Config, record: &JsonValue) -> Sd<JsonValue> {
         return Ok(view);
     }
     let info = net::fetch(
-        post("/v2/post/publish/creator_info/query/", record, json!({})),
+        post(
+            config,
+            "/v2/post/publish/creator_info/query/",
+            record,
+            json!({}),
+        ),
         false,
     )
     .await?;
@@ -369,7 +394,11 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
         } else {
             "/v2/post/publish/inbox/video/init/"
         };
-        let init = net::fetch(post(path, ctx.record, JsonValue::Object(body)), false).await?;
+        let init = net::fetch(
+            post(ctx.config, path, ctx.record, JsonValue::Object(body)),
+            false,
+        )
+        .await?;
         let publish_id = init
             .pointer("/data/publish_id")
             .filter(|v| js::truthy(Some(v)))
@@ -403,7 +432,12 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
     let init = ctx
         .hooks
         .reaching(net::fetch(
-            post("/v2/post/publish/content/init/", ctx.record, body),
+            post(
+                ctx.config,
+                "/v2/post/publish/content/init/",
+                ctx.record,
+                body,
+            ),
             true,
         ))
         .await?;
@@ -421,9 +455,15 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
     wait_for_status(ctx, json!({ "publish_id": publish_id })).await
 }
 
-pub async fn status(record: &JsonValue, remote: &JsonValue, view: &JsonValue) -> Sd<JsonValue> {
+pub async fn status(
+    config: &Config,
+    record: &JsonValue,
+    remote: &JsonValue,
+    view: &JsonValue,
+) -> Sd<JsonValue> {
     let body = net::fetch(
         post(
+            config,
             "/v2/post/publish/status/fetch/",
             record,
             json!({ "publish_id": remote.get("publish_id") }),
@@ -487,7 +527,7 @@ pub async fn status(record: &JsonValue, remote: &JsonValue, view: &JsonValue) ->
 
 async fn wait_for_status(ctx: &Ctx<'_>, remote: JsonValue) -> Sd<JsonValue> {
     for _ in 0..30 {
-        let result = status(ctx.record, &remote, ctx.view).await?;
+        let result = status(ctx.config, ctx.record, &remote, ctx.view).await?;
         if result["status"] != json!("remote_processing") {
             return Ok(result);
         }

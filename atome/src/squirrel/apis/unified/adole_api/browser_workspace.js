@@ -10,16 +10,17 @@ const owns = message => ['events', 'state-current', 'atome'].includes(message?.t
     || (message?.type === 'snapshot' && message.action === 'create');
 export function ownsBrowserWorkspaceMessage(message) { return !isTauriRuntime() && owns(message); }
 
-// Realtime frames invalidate the local projection; the existing recovery pass
-// imports authoritative pages and preserves pending local writes. Coalesce a
-// replay burst so it does not enumerate the workspace for every event.
+// A realtime frame names the Atome another device changed: only those states are read
+// again (`{ pull: ids }`), never the whole workspace; a replay burst is coalesced into one pass.
 export function subscribeBrowserWorkspaceChanges(env, requestSync) {
     if (isTauriRuntime() || !env?.addEventListener) return () => {};
-    let timer = null;
-    const cancel = () => { clearTimeout(timer); timer = null; };
+    let timer = null, ids = new Set();
+    const cancel = () => { clearTimeout(timer); timer = null; ids = new Set(); };
     const changed = event => {
-        if (event.detail?.origin !== 'ws/sync' || event.detail?.durable !== true || timer) return;
-        timer = setTimeout(() => { timer = null; requestSync(); }, 250);
+        const id = String(event.detail?.atome_id || '');
+        if (event.detail?.origin !== 'ws/sync' || event.detail?.durable !== true || !id) return;
+        ids.add(id);
+        if (!timer) timer = setTimeout(() => { const pull = ids; timer = null; ids = new Set(); requestSync({ pull }); }, 250);
     };
     const names = ['squirrel:atome-updated', 'squirrel:atome-restored', 'squirrel:atome-deleted'];
     for (const name of names) env.addEventListener(name, changed);
@@ -92,7 +93,6 @@ export async function requeueRefusedBrowserWorkspaceEvents() {
 }
 
 let synchronization;
-let synchronizationRequested = false;
 let progress = null;
 const environment = () => String(globalThis.window?.__SQUIRREL_ENVIRONMENT_FINGERPRINT__ || getFastifyHttpBaseUrl() || '');
 export const readBrowserWorkspaceSyncProgress = () => progress?.principal_id === getSessionState().user?.id
@@ -102,35 +102,47 @@ const publishProgress = (owner, fingerprint, restore, error = null) => {
     progress = { principal_id: owner, environment_fingerprint: fingerprint, restore_state: restore, last_error_code: error };
     globalThis.window?.dispatchEvent(new CustomEvent('squirrel:sync:status', { detail: { principal_id: owner } }));
 };
-// Un commit arrive PENDANT une passe n'est pas dans la liste qu'elle a deja lue : il etait
-// laisse en attente jusqu'au commit suivant (la derniere modification avant fermeture ou
-// deconnexion ne partait jamais). Une demande recue en cours de passe relance une passe.
-export function synchronizeBrowserWorkspace(transport) {
+// What a pass reads back after sending the outbox: `'all'` walks the whole workspace (a recovery: sign-in,
+// reconnection, back online), a Set reads only those Atome (a realtime frame), `'none'` nothing (a local commit:
+// this device already holds what it wrote). Requests met during a pass are merged into the next one, so a commit
+// arriving while a pass runs is still sent (the last change before closing or disconnecting always leaves),
+// and what a failed pass did not read is kept for the next.
+const mergePull = (a, b) => (a === 'all' || b === 'all' ? 'all'
+    : a === 'none' ? b : b === 'none' ? a : new Set([...a, ...b]));
+const pullOf = options => {
+    const pull = options?.pull ?? 'all';
+    if (pull === 'all' || pull === 'none' || pull instanceof Set) return pull;
+    throw new Error('workspace_sync_pull_invalid');
+};
+let requestedPull = null;
+export function synchronizeBrowserWorkspace(transport, options = {}) {
     if (isTauriRuntime()) return Promise.resolve({ ok: true });
-    if (synchronization) {
-        synchronizationRequested = true;
-        return synchronization;
-    }
+    const pull = pullOf(options);
+    requestedPull = requestedPull ? mergePull(requestedPull, pull) : pull;
+    if (synchronization) return synchronization;
     synchronization = (async () => {
         let result;
         do {
-            synchronizationRequested = false;
+            const next = requestedPull;
+            requestedPull = null;
             const owner = getSessionState().user?.id, fingerprint = environment();
             publishProgress(owner, fingerprint, 'receiving');
             try {
-                result = await synchronizeBrowserWorkspaceOnce(transport);
+                result = await synchronizeBrowserWorkspaceOnce(transport, next);
                 publishProgress(owner, fingerprint, result?.ok ? 'ready' : 'unknown');
             } catch (error) {
+                // What this pass did not read stays asked: the next request (the retry) reads it too.
+                requestedPull = requestedPull ? mergePull(next, requestedPull) : next;
                 publishProgress(owner, fingerprint, 'error', String(error?.message || 'workspace_sync_failed'));
                 throw error;
             }
-        } while (synchronizationRequested && result?.ok === true);
+        } while (requestedPull && result?.ok === true);
         return result;
     })().finally(() => { synchronization = null; });
     return synchronization;
 }
 
-async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile }) {
+async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile }, pull) {
     const owner = getSessionState().user?.id;
     if (!owner || getSessionState().mode !== 'authenticated') return { ok: false, reason: 'remote_authentication_required' };
     const stillAuthorized = () => {
@@ -168,24 +180,49 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
     if (refused.length) {
         globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-sync-refused', { detail: { userId: owner, refused } }));
     }
-    // Oldest change first, from after the last state received: a state changed during
-    // the walk comes again at its end instead of slipping between two pages.
+    if (pull instanceof Set) await pullWorkspaceStates(owner, pull, send, stillAuthorized);
+    else if (pull === 'all') await walkWorkspaceStates(owner, send, stillAuthorized);
+    stillAuthorized();
+    globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-synchronized', { detail: { userId: owner } }));
+    return { ok: true };
+}
+
+// Readers re-read on `projection-ready` (the Dashboard lists the workspace again): announced once per
+// pass, never once per page — a 400-page walk re-read the whole workspace 400 times on the phone.
+const announceProjection = owner => globalThis.window?.dispatchEvent(new CustomEvent('squirrel:sync:projection-ready', {
+    detail: { principal_id: owner, replay: true }
+}));
+
+// The states another device changed, read one by one; one the server no longer serves is left as it is here.
+async function pullWorkspaceStates(owner, ids, send, stillAuthorized) {
+    const states = [];
+    for (const id of ids) {
+        stillAuthorized();
+        const response = await send({ type: 'state-current', action: 'get', atome_id: id });
+        if (response?.ok && response.state) states.push(response.state);
+        else if (response?.error !== 'State not found') throw new Error(response?.error || 'workspace_sync_failed');
+    }
+    await importWorkspaceStates(owner, states);
+    stillAuthorized();
+    if (states.length) announceProjection(owner);
+}
+
+// The whole workspace, oldest change first, from after the last state received: a state changed during
+// the walk comes again at its end instead of slipping between two pages. The first page is announced at
+// once (a device restoring shows its first states), then the end of the walk.
+async function walkWorkspaceStates(owner, send, stillAuthorized) {
+    let received = 0;
     for (let after = null; ;) {
         stillAuthorized();
         const response = await send({ type: 'state-current', action: 'list', owner_id: owner, include_deleted: true, limit: 250, order: 'oldest', ...(after ? { after } : {}) });
         if (!response?.ok || !Array.isArray(response.states)) throw new Error(response?.error || 'workspace_sync_failed');
         await importWorkspaceStates(owner, response.states);
         stillAuthorized();
-        // Each committed page is available immediately; readers coalesce this
-        // invalidation and never wait for enumeration to finish.
-        if (response.states.length) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:sync:projection-ready', {
-            detail: { principal_id: owner, replay: true }
-        }));
+        if (response.states.length && received === 0) announceProjection(owner);
+        received += response.states.length;
         if (response.states.length < 250) break;
         const last = response.states[response.states.length - 1];
         after = { updated_at: last.meta?.updated_at || last.updated_at || '', atome_id: last.id || last.atome_id };
     }
-    stillAuthorized();
-    globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-synchronized', { detail: { userId: owner } }));
-    return { ok: true };
+    if (received > 250) announceProjection(owner);
 }

@@ -16,10 +16,10 @@ path = "../../../tests/atome_vault/worker_process.rs"
 
 [dependencies]
 base64.workspace = true
-chrono = "0.4"
 ring = "0.17"
 sha2.workspace = true
 atome-confine = { path = "../atome-confine" }
+atome-js-values = { path = "../../engines/js-values" }
 atome-store = { path = "../../engines/atome-store" }
 rusqlite.workspace = true
 serde_json.workspace = true

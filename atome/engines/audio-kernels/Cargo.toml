@@ -18,3 +18,5 @@ workspace = true
 [dev-dependencies]
 # The tests decode what the encoders write with the engines' own decoder.
 symphonia = { workspace = true, features = ["flac", "wav", "pcm"] }
+# The Motif tests write their Motifs as the page sends them, in JSON.
+serde_json.workspace = true

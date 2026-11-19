@@ -41,6 +41,10 @@ impl<'a> Layout<'a> {
         })
     }
 
+    pub(crate) fn module(&self, id: &str) -> Option<(usize, usize)> {
+        self.module_at.get(id).copied()
+    }
+
     pub(crate) fn strip(&self, id: &str) -> Result<usize, String> {
         self.strip_of
             .get(id)
@@ -50,7 +54,7 @@ impl<'a> Layout<'a> {
 
     pub(crate) fn target(&self, target: &Target) -> Result<Option<usize>, String> {
         match target {
-            Target::Strip { id } => self.strip(id).map(Some),
+            Target::Strip { id, .. } => self.strip(id).map(Some),
             _ => Ok(None),
         }
     }
@@ -177,6 +181,13 @@ pub(crate) fn ports_of(spec: &ModuleSpec) -> usize {
     }
 }
 
+/// Each route's compensation delay (frames), by strip then route, and the latency the main mix arrives
+/// with (the graph's output latency, which a host compensates).
+pub struct Compensation {
+    pub delays: Vec<Vec<usize>>,
+    pub output_latency: usize,
+}
+
 // Plugin-delay compensation over the forward routes: every route into a
 // summing point is delayed so all arrivals line up with the slowest one. A
 // return is the loop's own delay and is never compensated. Returns each
@@ -185,7 +196,7 @@ pub fn compensation(
     program: &Program,
     order: &[usize],
     module_latency: &dyn Fn(&ModuleSpec) -> usize,
-) -> Result<Vec<Vec<usize>>, String> {
+) -> Result<Compensation, String> {
     let layout = Layout::new(program)?;
     let count = program.strips.len();
     let mut position = vec![0usize; count];
@@ -224,7 +235,7 @@ pub fn compensation(
             route_latency[index].push(entry);
         }
     }
-    Ok(route_latency
+    let delays = route_latency
         .iter()
         .map(|routes| {
             routes
@@ -236,5 +247,9 @@ pub fn compensation(
                 })
                 .collect()
         })
-        .collect())
+        .collect();
+    Ok(Compensation {
+        delays,
+        output_latency: main_arrival,
+    })
 }

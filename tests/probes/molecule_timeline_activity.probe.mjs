@@ -24,7 +24,12 @@ const fakeMoleculeApi = ({ append = async () => ({ ok: true }) } = {}) => {
         },
         readGroupTimeline: ({ group_id }) => ({ ok: true, timeline: sessions.get(group_id).getState() }),
         applyGroupTimelineBatch: async ({ group_id, operations }) => sessions.get(group_id).applyBatch(operations, {}),
-        applyGroupTimelineOperation: async ({ group_id, operation, command }) => sessions.get(group_id).applyTimelineOperation(operation, command)
+        applyGroupTimelineOperation: async ({ group_id, operation, command }) => sessions.get(group_id).applyTimelineOperation(operation, command),
+        // Stopped, the playhead cues the transport and a drag scrubs it (runtime_api_transport.js); no engine here.
+        cues: [],
+        scrubs: [],
+        async cueGroupTimelineTransport({ group_id, seconds }) { this.cues.push({ group_id, seconds }); return { ok: true }; },
+        async scrubGroupTimelineTransport({ group_id, seconds }) { this.scrubs.push({ group_id, seconds }); return { ok: true }; }
     };
 };
 
@@ -146,7 +151,7 @@ test('Mute and Solo answer the touch and are stored in the order of the touches'
             content.build({ width: 900, height: 420, emit: () => {} }).forEach(walk);
             return key?.style?.background?.[3] === 1; // on: the opaque Solo colour; off: a translucent dark square
         };
-        await content.handleEvent({ type: 'project_view.timeline.headers.toggle' });
+        await content.handleEvent({ type: 'project_view.timeline.header.tap', trackId });
         const tap = () => content.handleEvent({ type: 'project_view.timeline.track.mix', trackId, mode: 'solo' });
         const first = tap();
         assert.equal(soloShown(), true, 'shown at the touch');
@@ -166,9 +171,9 @@ test('Mute and Solo answer the touch and are stored in the order of the touches'
     });
 });
 
-// A tap on a header selects its track (again: releases it); holding it opens
-// or folds the headers — a tap no longer makes every header jump.
-test('a header tap selects the track, a hold opens the headers', async () => {
+// A tap on a header opens that header's keys and selects its track; a tap again folds it and releases the track; a hold
+// opens it too (R-199, mockup g1). Only that header opens.
+test('a header tap opens its own keys and selects the track', async () => {
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
@@ -180,11 +185,21 @@ test('a header tap selects the track, a hold opens the headers', async () => {
         content.build({ width: 900, height: 420, emit: (intent) => emitted.push(intent) }).forEach(walk);
         header.on.activate();
         header.on.long_press();
-        assert.deepEqual(emitted.map((intent) => intent.type), ['project_view.timeline.track.select', 'project_view.timeline.headers.toggle']);
+        assert.deepEqual(emitted.map((intent) => intent.type), ['project_view.timeline.header.tap', 'project_view.timeline.header.tap']);
+        assert.equal(emitted[1].held, true);
+        const keysShown = () => {
+            let found = false;
+            const look = (node) => { if (!node) return; if (node.id.endsWith(`${trackId}_mute`)) found = true; (node.children || []).forEach(look); };
+            content.build({ width: 900, height: 420, emit: () => {} }).forEach(look);
+            return found;
+        };
+        assert.equal(keysShown(), false);
         await content.handleEvent(emitted[0]);
         assert.equal(content.readState().selectedTrackId, trackId);
+        assert.equal(keysShown(), true, 'its keys show');
         await content.handleEvent(emitted[0]);
         assert.equal(content.readState().selectedTrackId, '', 'a second tap releases it');
+        assert.equal(keysShown(), false, 'and folds its keys');
     });
 });
 

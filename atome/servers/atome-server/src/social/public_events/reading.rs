@@ -299,7 +299,7 @@ impl PublicEvents {
         directory: &Directory,
         around: &Around<'_>,
     ) -> Result<JsonValue, String> {
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         self.refresh(directory, now).await?;
         let needle = text(Some(&json!(around.query)), 80).to_lowercase();
         let rows = self
@@ -375,7 +375,7 @@ impl PublicEvents {
         language: &str,
         viewer: Option<&str>,
     ) -> Result<JsonValue, String> {
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = atome_js_values::dates::now_ms();
         self.refresh(directory, now).await?;
         let row = self
             .store

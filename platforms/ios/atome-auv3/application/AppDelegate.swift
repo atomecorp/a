@@ -28,8 +28,8 @@ struct atomeApp: App {
                     }
                     // The bundled page pulls pending authentication links when ready.
                 }
-                // Handle custom activation scheme (e.g., atomeapp://activate) from AUv3 nudge
-                .onOpenURL { url in AuthLinkInbox.receive(url) }
+                // A file handed to atome (Ouvrir dans, Copier vers) goes to the shared files' inbox; any other URL to the links' inbox
+                .onOpenURL { url in if !SharedFileInbox.receive(url) { AuthLinkInbox.receive(url) } }
                 // Handle NSUserActivity-based activation (fallback path)
                 .onContinueUserActivity(SharedBus.userActivityType) { _ in /* inbox disabled */ }
                 // Also handle general web-browsing user activities (universal links)

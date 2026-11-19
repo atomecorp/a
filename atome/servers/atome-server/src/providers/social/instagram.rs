@@ -7,23 +7,27 @@ use crate::providers::http::{self, form};
 use crate::vault_router::js;
 use serde_json::{Value as JsonValue, json};
 
-const AUTHORIZE: &str = "https://www.instagram.com/oauth/authorize";
-const TOKEN: &str = "https://api.instagram.com/oauth/access_token";
-const GRAPH: &str = "https://graph.instagram.com";
-const VERSION: &str = "v25.0";
-const RUPLOAD: &str = "https://rupload.facebook.com/ig-api-upload";
-const SCOPES: [&str; 2] = [
+pub const VERSION: &str = "v25.0";
+// Publishing, and since R-190 the comments and the direct messages (webhook, `meta_inbox`).
+const SCOPES: [&str; 4] = [
     "instagram_business_basic",
     "instagram_business_content_publish",
+    "instagram_business_manage_comments",
+    "instagram_business_manage_messages",
 ];
+
+/// Graph's origin, or the fake provider's.
+pub fn graph_host(config: &Config) -> String {
+    config.api("instagram", "https://graph.instagram.com")
+}
 const DAY: f64 = 86_400_000.0;
 
 pub fn configured(config: &Config) -> bool {
-    !config.get("INSTAGRAM_APP_ID").is_empty() && !config.get("INSTAGRAM_APP_SECRET").is_empty()
+    config.app("INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET")
 }
 
-fn graph(path: &str, params: &[(&str, &str)]) -> String {
-    format!("{GRAPH}/{VERSION}/{path}?{}", form(params))
+fn graph(config: &Config, path: &str, params: &[(&str, &str)]) -> String {
+    format!("{}/{VERSION}/{path}?{}", graph_host(config), form(params))
 }
 
 fn get(url: String) -> reqwest::RequestBuilder {
@@ -39,7 +43,11 @@ pub fn authorize_url(config: &Config, state: &str, redirect: &str) -> String {
         ("scope", &scope),
         ("state", state),
     ];
-    format!("{AUTHORIZE}?{}", form(&pairs))
+    format!(
+        "{}/oauth/authorize?{}",
+        config.api("instagram", "https://www.instagram.com"),
+        form(&pairs)
+    )
 }
 
 fn text(value: Option<&JsonValue>) -> String {
@@ -57,7 +65,11 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
         ("redirect_uri", json!(redirect)),
         ("code", json!(code)),
     ];
-    let short = net::fetch(net::form_post(TOKEN, &fields), false).await?;
+    let token_url = format!(
+        "{}/oauth/access_token",
+        config.api("instagram", "https://api.instagram.com")
+    );
+    let short = net::fetch(net::form_post(&token_url, &fields), false).await?;
     let granted = match short.get("data").and_then(JsonValue::as_array) {
         Some(data) => data.first().cloned().unwrap_or(JsonValue::Null),
         None => short.clone(),
@@ -71,14 +83,19 @@ pub async fn exchange(config: &Config, code: &str, redirect: &str, now: i64) -> 
         ("client_secret", config.get("INSTAGRAM_APP_SECRET")),
         ("access_token", &short_token),
     ];
-    let long = net::fetch(get(format!("{GRAPH}/access_token?{}", form(&pairs))), false).await?;
+    let url = format!("{}/access_token?{}", graph_host(config), form(&pairs));
+    let long = net::fetch(get(url), false).await?;
     if !js::truthy(long.get("access_token")) {
         return Err(Se::new("social_provider_rejected"));
     }
     let token = js::string(&long["access_token"]);
     let fields = "user_id,username,name,account_type,profile_picture_url";
     let me = net::fetch(
-        get(graph("me", &[("fields", fields), ("access_token", &token)])),
+        get(graph(
+            config,
+            "me",
+            &[("fields", fields), ("access_token", &token)],
+        )),
         false,
     )
     .await?;
@@ -115,7 +132,7 @@ pub fn needs_refresh(record: &JsonValue, now: i64) -> bool {
         && js::number(record.get("expires_at")) - now < 7.0 * DAY
 }
 
-pub async fn refresh(record: &JsonValue, now: i64) -> Sd<JsonValue> {
+pub async fn refresh(config: &Config, record: &JsonValue, now: i64) -> Sd<JsonValue> {
     if now as f64 >= js::number(record.get("expires_at")) {
         return Err(Se::new("social_session_expired"));
     }
@@ -125,7 +142,11 @@ pub async fn refresh(record: &JsonValue, now: i64) -> Sd<JsonValue> {
         ("access_token", token.as_str()),
     ];
     let body = net::fetch(
-        get(format!("{GRAPH}/refresh_access_token?{}", form(&pairs))),
+        get(format!(
+            "{}/refresh_access_token?{}",
+            graph_host(config),
+            form(&pairs)
+        )),
         false,
     )
     .await?;
@@ -176,7 +197,10 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
     fields.push(("access_token", json!(token)));
     let id = js::text(ctx.record.pointer("/identity/id"));
     let container = net::fetch(
-        net::form_post(&format!("{GRAPH}/{VERSION}/{id}/media"), &fields),
+        net::form_post(
+            &format!("{}/{VERSION}/{id}/media", graph_host(ctx.config)),
+            &fields,
+        ),
         false,
     )
     .await?;
@@ -192,7 +216,10 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
             .await
             .map_err(|e| Se::from(e.to_string()))?;
         let request = http::client()
-            .post(format!("{RUPLOAD}/{VERSION}/{container_id}"))
+            .post(format!(
+                "{}/ig-api-upload/{VERSION}/{container_id}",
+                ctx.config.api("instagram", "https://rupload.facebook.com")
+            ))
             .header("Authorization", format!("OAuth {token}"))
             .header("offset", "0")
             .header("file_size", (media.size as u64).to_string())
@@ -203,11 +230,12 @@ pub async fn publish(ctx: &Ctx<'_>) -> Sd<JsonValue> {
     finish(ctx, json!({ "container_id": container_id }), 120).await
 }
 
-async fn container_status(record: &JsonValue, remote: &JsonValue) -> Sd<String> {
+async fn container_status(config: &Config, record: &JsonValue, remote: &JsonValue) -> Sd<String> {
     let token = js::text(record.get("access_token"));
     let id = js::text(remote.get("container_id"));
     let body = net::fetch(
         get(graph(
+            config,
             &id,
             &[("fields", "status_code"), ("access_token", &token)],
         )),
@@ -222,7 +250,7 @@ async fn container_status(record: &JsonValue, remote: &JsonValue) -> Sd<String> 
 async fn finish(ctx: &Ctx<'_>, remote: JsonValue, attempts: usize) -> Sd<JsonValue> {
     let token = js::text(ctx.record.get("access_token"));
     for _ in 0..attempts {
-        let state = container_status(ctx.record, &remote).await?;
+        let state = container_status(ctx.config, ctx.record, &remote).await?;
         if state == "PUBLISHED" {
             return Ok(json!({ "status": "published", "remote": remote }));
         }
@@ -244,7 +272,8 @@ async fn finish(ctx: &Ctx<'_>, remote: JsonValue, attempts: usize) -> Sd<JsonVal
                 ),
                 ("access_token", json!(token)),
             ];
-            let request = net::form_post(&format!("{GRAPH}/{VERSION}/{id}/media_publish"), &fields);
+            let url = format!("{}/{VERSION}/{id}/media_publish", graph_host(ctx.config));
+            let request = net::form_post(&url, &fields);
             let published = ctx.hooks.reaching(net::fetch(request, true)).await?;
             let media_id = text(published.get("id"));
             // The post is live at this point: a failed permalink read only loses the link.
@@ -252,6 +281,7 @@ async fn finish(ctx: &Ctx<'_>, remote: JsonValue, attempts: usize) -> Sd<JsonVal
                 JsonValue::Null
             } else {
                 let url = graph(
+                    ctx.config,
                     &media_id,
                     &[("fields", "permalink"), ("access_token", &token)],
                 );
@@ -282,7 +312,7 @@ async fn finish(ctx: &Ctx<'_>, remote: JsonValue, attempts: usize) -> Sd<JsonVal
 }
 
 pub async fn status(ctx: &Ctx<'_>, verify_only: bool) -> Sd<JsonValue> {
-    let state = container_status(ctx.record, &ctx.remote).await?;
+    let state = container_status(ctx.config, ctx.record, &ctx.remote).await?;
     let remote = ctx.remote.clone();
     if state == "PUBLISHED" {
         return Ok(json!({ "status": "published", "remote": remote }));

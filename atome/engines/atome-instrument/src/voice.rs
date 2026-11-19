@@ -13,7 +13,6 @@ use crate::markers::Hits;
 use crate::reading::Source;
 use crate::sample::{SampleBank, SampleData};
 use crate::segment::{LoopMode, SegmentPlayer};
-#[cfg(not(target_arch = "wasm32"))]
 use crate::stretch::VoiceStretch;
 use crate::zone::{MAX_PLAYERS, ZoneFilter};
 use atome_dsp::biquad::{Coefficients, Section};
@@ -98,15 +97,12 @@ pub struct Voice {
     holds_gate: bool,
     // Stretched segments: the takes are read at the note's pitch into the stretcher,
     // which keeps the segment's duration.
-    #[cfg(not(target_arch = "wasm32"))]
     stretcher: Option<VoiceStretch>,
     stretching: bool,
     factor: f32,
     root: u8,
     tail: usize,
-    #[cfg(not(target_arch = "wasm32"))]
     input_left: Vec<f32>,
-    #[cfg(not(target_arch = "wasm32"))]
     input_right: Vec<f32>,
     // Crossings of each marker of the instrument during this note.
     crossings: Vec<u32>,
@@ -145,15 +141,12 @@ impl Voice {
             one_shot: false,
             started_at: 0,
             holds_gate: false,
-            #[cfg(not(target_arch = "wasm32"))]
             stretcher: None,
             stretching: false,
             factor: 1.0,
             root: 60,
             tail: 0,
-            #[cfg(not(target_arch = "wasm32"))]
             input_left: Vec::new(),
-            #[cfg(not(target_arch = "wasm32"))]
             input_right: Vec::new(),
             crossings: Vec::new(),
             composition: Composition::IDLE,
@@ -168,18 +161,12 @@ impl Voice {
         self.sample_rate = sample_rate;
         self.crossings = vec![0; markers];
         self.envelope.prepare(sample_rate, max_block);
-        #[cfg(not(target_arch = "wasm32"))]
         if stretch {
             let stretcher = VoiceStretch::new(max_block);
             self.input_left = vec![0.0; stretcher.input_capacity()];
             self.input_right = vec![0.0; stretcher.input_capacity()];
             self.stretcher = Some(stretcher);
         }
-        #[cfg(target_arch = "wasm32")]
-        assert!(
-            !stretch,
-            "the keymap refuses stretched segments on this platform"
-        );
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -423,7 +410,6 @@ impl Voice {
     }
 
     // Reads `frames` input frames at this pitch into the stretcher's input buffers, from `at`.
-    #[cfg(not(target_arch = "wasm32"))]
     fn read_takes(&mut self, context: &mut Context, pitch: f32, at: usize, frames: usize) {
         let mut left = std::mem::take(&mut self.input_left);
         let mut right = std::mem::take(&mut self.input_right);
@@ -441,12 +427,10 @@ impl Voice {
     }
 
     // How fast the first take is read at this pitch, relative to its own rate.
-    #[cfg(not(target_arch = "wasm32"))]
     fn speed(&self, pitch: f32) -> f32 {
         2f32.powf((pitch - self.root as f32) / 12.0)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn prime(&mut self, context: &mut Context, pitch: f32) {
         let ratio = VoiceStretch::ratio(self.factor, self.speed(pitch));
         let (opening, ahead) = self
@@ -467,12 +451,6 @@ impl Voice {
         );
     }
 
-    #[cfg(target_arch = "wasm32")]
-    fn prime(&mut self, _context: &mut Context, _pitch: f32) {
-        unreachable!("the keymap refuses stretched segments on this platform");
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     fn render_stretched(
         &mut self,
         context: &mut Context,
@@ -513,17 +491,6 @@ impl Voice {
         if self.envelope.is_idle() || self.tail >= ringing {
             self.active = false;
         }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn render_stretched(
-        &mut self,
-        _context: &mut Context,
-        _transpose: f32,
-        _left: &mut [f32],
-        _right: &mut [f32],
-    ) {
-        unreachable!("the keymap refuses stretched segments on this platform");
     }
 
     // Started on a stretched take: its stretcher was primed at the note.

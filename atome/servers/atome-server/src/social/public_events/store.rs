@@ -5,6 +5,7 @@
 // than 72 h; 30 events still to come at most; 3 events hidden by reports within 30 days suspend
 // publishing for 30 days. Three reports from distinct accounts hide an event.
 use super::super::news::db::{all, get, run};
+use crate::social::request_guard::time_of;
 use crate::vault_router::central::Central;
 use crate::vault_router::js;
 use crate::vault_router::js::iso;
@@ -24,17 +25,6 @@ pub const REPORTS_TO_HIDE: i64 = 3;
 // `sqlTime(ms).replace('T', ' ').slice(0, 19)`: SQLite's `datetime('now')` form.
 fn sql_seconds(ms: i64) -> String {
     iso(ms).replace('T', " ")[..19].to_string()
-}
-
-// `timeOf(value)`: SQLite's `YYYY-MM-DD HH:MM:SS` read as UTC, else an ISO date; none when unreadable.
-fn time_of(value: &str) -> Option<i64> {
-    let value = js::trim(value);
-    chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S")
-        .map(|time| time.and_utc().timestamp_millis())
-        .or_else(|_| {
-            chrono::DateTime::parse_from_rfc3339(value).map(|time| time.timestamp_millis())
-        })
-        .ok()
 }
 
 fn count(db: &Connection, sql: &str, values: &[&dyn rusqlite::ToSql]) -> Result<i64, String> {

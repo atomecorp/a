@@ -3,7 +3,7 @@
 // atome/src/squirrel/calendar/icalendar.js turns back into its occurrence objects. The events come as
 // their JSON (`JSON.stringify`: a Date as its ISO string, which the engine reads back to the same
 // instant), the results as flat Float64Arrays, a refusal as an Error carrying the engine's message.
-// Its local time is the browser's (chrono reads it from `Date`), its named zones the browser's Intl.
+// Its local time is the browser's (atome-calendar reads it from `Date`), its named zones the browser's Intl.
 use atome_calendar::{Range, expand_event, occurrence_end, range_occurrences};
 use js_sys::Float64Array;
 use serde_json::Value as JsonValue;

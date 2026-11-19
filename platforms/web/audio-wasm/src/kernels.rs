@@ -1,7 +1,9 @@
 // The page's offline audio kernels (atome-audio-kernels), reached from JS: planar
 // channels come as an Array of Float32Array (or Int32Array), results go back as
 // typed arrays or plain objects, a refusal as an Error carrying its `code`.
-use atome_audio_kernels::{KernelError, analysis, flac, onsets, peaks, render, takes, tones, wav};
+use atome_audio_kernels::{
+    KernelError, analysis, flac, motif, onsets, peaks, render, takes, tones, wav,
+};
 use js_sys::{Array, Float32Array, Int32Array, Object, Reflect, Uint8Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -307,7 +309,9 @@ pub fn tone_samples(hz: f64, seconds: f64, rate: f64, edge_seconds: f64, gain: f
     tones::tone(hz, seconds, rate, edge_seconds, gain)
 }
 
+// `voice`: 0 beep, 1 wood, 2 clave, 3 bell (atome-audio-kernels tones.rs#ClickVoice); `accent`: the first beat higher.
 #[wasm_bindgen(js_name = clickBar)]
+#[allow(clippy::too_many_arguments)]
 pub fn click_bar(
     rate: f64,
     bpm: f64,
@@ -315,13 +319,49 @@ pub fn click_bar(
     click_seconds: f64,
     accent_hz: f64,
     beat_hz: f64,
-) -> Vec<f32> {
-    tones::click_bar(&tones::ClickBar {
+    voice: u32,
+    accent: bool,
+) -> Result<Vec<f32>, JsValue> {
+    let voice = tones::ClickVoice::from_index(voice)
+        .ok_or_else(|| JsValue::from_str("click_voice_unknown"))?;
+    Ok(tones::click_bar(&tones::ClickBar {
         rate,
         bpm,
         beats: beats as usize,
         click_seconds,
         accent_hz,
         beat_hz,
-    })
+        voice,
+        accent,
+    }))
+}
+
+// The slice Motif as an edit's pieces (atome-audio-kernels motif.rs): `motif` and `slices` the page's own objects.
+#[wasm_bindgen(js_name = compileSliceMotif)]
+pub fn compile_slice_motif(
+    motif: JsValue,
+    slices: JsValue,
+    source_frames: f64,
+    step_frames: f64,
+    fade_frames: f64,
+) -> Result<JsValue, JsValue> {
+    let read = |message: String| {
+        refusal(KernelError::new(
+            atome_audio_kernels::INVALID_ARGUMENT,
+            message,
+        ))
+    };
+    let motif: motif::Motif =
+        serde_wasm_bindgen::from_value(motif).map_err(|error| read(format!("motif: {error}")))?;
+    let slices: Vec<motif::SliceRange> =
+        serde_wasm_bindgen::from_value(slices).map_err(|error| read(format!("slices: {error}")))?;
+    let pieces = motif::compile(
+        &motif,
+        &slices,
+        source_frames as u64,
+        step_frames as u64,
+        fade_frames as u64,
+    )
+    .map_err(refusal)?;
+    serialized(&pieces)
 }

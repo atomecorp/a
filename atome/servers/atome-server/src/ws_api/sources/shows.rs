@@ -304,7 +304,7 @@ fn page_of(entries: &[JsonValue], spec: &Spec) -> (f64, Vec<JsonValue>) {
 }
 
 pub(super) async fn answer(asker: &Asker<'_>, message: &JsonValue) -> Result<JsonValue, String> {
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = atome_js_values::dates::now_ms();
     let request_id = super::common::request_id(message);
     let Some(asked) = read_spec(message) else {
         return Ok(reply(

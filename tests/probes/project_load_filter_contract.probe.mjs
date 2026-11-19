@@ -46,6 +46,8 @@ let prefetchCount = 0;
 let remoteListCount = 0;
 const perfEvents = [];
 const runtime = createToolGenesisProjectLoadRuntime({
+    // The project shown at boot is the one loaded (required since 2026-10-01).
+    getCurrentProjectId: () => projectId,
     clearProjectLoadInFlightIfCurrent: () => {},
     dispatchProjectRenderDone: () => {},
     emitPerfEvent: (name, detail) => { perfEvents.push({ name, detail }); },
@@ -94,7 +96,8 @@ const runtime = createToolGenesisProjectLoadRuntime({
 
 const nonBlockingStart = Date.now();
 const loaded = await runtime.loadProjectAtomes(projectId, { force: true, staleFirst: false });
-assert.ok(Date.now() - nonBlockingStart < 120, 'project load must not await view projection restoration');
+const nonBlockingMs = Date.now() - nonBlockingStart;
+assert.ok(nonBlockingMs < 120, `project load must not await view projection restoration (${nonBlockingMs} ms)`);
 
 assert.deepEqual(loaded.map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
 assert.deepEqual(rendered.at(-1).map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
@@ -123,6 +126,8 @@ assert.equal(
 const preservedRenders = [];
 window.Atome = { listStateCurrent: () => new Promise((resolve) => setTimeout(() => resolve([]), 105)) };
 const preservedRuntime = createToolGenesisProjectLoadRuntime({
+    // The project shown at boot is the one loaded (required since 2026-10-01).
+    getCurrentProjectId: () => projectId,
     clearProjectLoadInFlightIfCurrent: () => {}, dispatchProjectRenderDone: () => {}, emitPerfEvent: () => {},
     ensureProjectLayer: () => view, fetchSharedOverrideAtomes: async () => [], filterAtomesByOwner: (records) => records,
     getAdoleApi: () => ({ atomes: { list: async () => ({ atomes: [] }) } }),
@@ -156,6 +161,8 @@ window.Atome = {
     }]), 105))
 };
 const raceRuntime = createToolGenesisProjectLoadRuntime({
+    // The project shown at boot is the one loaded (required since 2026-10-01).
+    getCurrentProjectId: () => projectId,
     clearProjectLoadInFlightIfCurrent: () => {},
     dispatchProjectRenderDone: () => {},
     emitPerfEvent: (name, detail) => { racePerfEvents.push({ name, detail }); },
@@ -220,6 +227,8 @@ window.Atome = {
     }]), 150))
 };
 const slowRuntime = createToolGenesisProjectLoadRuntime({
+    // The project shown at boot is the one loaded (required since 2026-10-01).
+    getCurrentProjectId: () => projectId,
     clearProjectLoadInFlightIfCurrent: () => {},
     dispatchProjectRenderDone: () => {},
     emitPerfEvent: () => {},

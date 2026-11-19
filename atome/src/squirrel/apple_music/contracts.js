@@ -5,6 +5,9 @@ const id = { type: 'string', minLength: 1, maxLength: 200, pattern: '^[A-Za-z0-9
 const requestId = { type: 'string', pattern: '^[A-Za-z0-9_-]{1,160}$' };
 const scope = { type: 'string', enum: ['catalog', 'library'] };
 const kind = { type: 'string', enum: ['song', 'playlist', 'artist'] };
+// The list a song is played from (its order kept), so next and previous move through it.
+export const MUSIC_QUEUE_MAX = 100;
+const queueIds = { type: 'array', minItems: 1, maxItems: MUSIC_QUEUE_MAX, items: id, uniqueItems: true };
 const page = { limit: { type: 'integer', minimum: 1, maximum: 25 }, offset: { type: 'integer', minimum: 0, maximum: 10000 } };
 export const APPLE_MUSIC_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'CONTEXT_CHANGED', 'HOST_UNSUPPORTED',
     'AUTHORIZATION_REQUIRED', 'PERMISSION_DENIED', 'SUBSCRIPTION_REQUIRED', 'PROVIDER_UNAVAILABLE', 'ITEM_NOT_FOUND',
@@ -23,8 +26,8 @@ const definitions = {
     list_library: [{ kind: { type: 'string', enum: ['song', 'playlist'] }, ...page }, ['kind'], 'read',
         'Browse songs or playlists in the authorized personal Apple Music library, with pagination and native IDs. Does not play or modify them.'],
     playlist_tracks: [{ id, scope, ...page }, ['id'], 'read', 'Read the songs of an Apple Music playlist. Does not play or modify it.'],
-    play: [{ query: text, id, scope, kind }, [], 'control',
-        'Play Apple Music on this iPhone/iPad: a song, playlist, or an artist’s top songs. Pass query with the user’s words, or an exact returned id with kind and scope. Ambiguous names return candidates to ask the user; never select a candidate yourself.'],
+    play: [{ query: text, id, scope, kind, queue_ids: queueIds }, [], 'control',
+        'Play Apple Music on this iPhone/iPad: a song, playlist, or an artist’s top songs. Pass query with the user’s words, or an exact returned id with kind and scope. queue_ids (songs of one scope, id among them) queues the list a song was chosen in, so next and previous move through it. Ambiguous names return candidates to ask the user; never select a candidate yourself.'],
     resume: [{}, [], 'control', 'Resume the current Apple Music queue.'],
     pause: [{}, [], 'control', 'Pause Apple Music without clearing its queue.'],
     stop: [{}, [], 'control', 'Stop Apple Music playback.'],
@@ -61,6 +64,7 @@ export function validateAppleMusicInput(action, input = {}) {
     const command = APPLE_MUSIC_COMMANDS.find(entry => entry.action === action);
     if (!command || !validateParams(command.input_schema, input).ok) return 'INVALID_ARGUMENT';
     if (action === 'play' && (!!input.id === !!input.query || (input.id && !input.kind))) return 'INVALID_ARGUMENT';
+    if (action === 'play' && input.queue_ids && (input.kind !== 'song' || !input.queue_ids.includes(input.id))) return 'INVALID_ARGUMENT';
     return null;
 }
 export const appleMusicError = error => APPLE_MUSIC_ERRORS.includes(error?.code || error?.message || error)

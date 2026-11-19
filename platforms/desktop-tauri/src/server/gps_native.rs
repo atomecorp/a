@@ -228,7 +228,7 @@ async fn process_effect(effect: Value) -> Result<(), String> {
             invoke(json!({"operation":"stop"})).await?;
             persist(
                 &session,
-                json!({"status":effect["type"], "ended_at":chrono::Utc::now().to_rfc3339()}),
+                json!({"status":effect["type"], "ended_at":atome_js_values::dates::now_rfc3339()}),
             )
             .await?;
             *SESSION.lock().map_err(|_| "HOST_UNSUPPORTED")? = None;
@@ -397,7 +397,7 @@ async fn execute(
                 invoke(json!({"operation":"stop"})).await?;
                 persist(
                     &session,
-                    json!({"status":"stopped", "ended_at":chrono::Utc::now().to_rfc3339()}),
+                    json!({"status":"stopped", "ended_at":atome_js_values::dates::now_rfc3339()}),
                 )
                 .await?;
                 *SESSION.lock().map_err(|_| "HOST_UNSUPPORTED")? = None;
@@ -442,7 +442,7 @@ async fn execute(
             if let Err(error) = persist(
                 &session,
                 json!({"status":"navigating", "navigation_device":"tauri_macos",
-                "started_at":chrono::Utc::now().to_rfc3339(), "ended_at":""}),
+                "started_at":atome_js_values::dates::now_rfc3339(), "ended_at":""}),
             )
             .await
             {

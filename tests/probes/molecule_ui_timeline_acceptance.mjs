@@ -53,8 +53,21 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
             const outTile = await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_out`, treeId: 'eve_bevy_ui_project_view' });
             assert(outTile, 'molecule_mix_out_not_actionable');
             await clickCanvasTarget(page, outTile);
-            const none = await awaitBevyUiNodeTarget(page, { nodeId: 'molecule_mix_picker_0', treeId: 'eve_bevy_ui_project_view' });
-            assert(none, 'molecule_mix_destination_not_actionable');
+            // R-183: OUT opens its welded panel of choices (molecule_mix_welded_choices.js#mixWeldedPanel, laid by
+            // molecule_mix_welded_tools.js as `<strip>_panel_choice_<i>`): the physical outputs, the main one (1-2)
+            // first, then « Aucune » last; a choice routes and folds the panel.
+            const outChoices = await waitFor(page, async (prefix) => {
+                const root = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_project_view')?.tree?.root;
+                const ids = [];
+                const isChoice = (id) => id.startsWith(prefix) && id.length > prefix.length
+                    && [...id.slice(prefix.length)].every((char) => char >= '0' && char <= '9');
+                const visit = (node) => { if (!node) return; if (isChoice(String(node.id))) ids.push(String(node.id)); (node.children || []).forEach(visit); };
+                visit(root);
+                return { ok: ids.length >= 2, ids };
+            }, `${nodeId}_panel_choice_`);
+            const noneId = `${nodeId}_panel_choice_${outChoices.ids.length - 1}`;
+            const none = await awaitBevyUiNodeTarget(page, { nodeId: noneId, treeId: 'eve_bevy_ui_project_view' });
+            assert(none, `molecule_mix_destination_not_actionable:${JSON.stringify(outChoices.ids)}`);
             await clickCanvasTarget(page, none);
             const committed = await waitFor(page, async ({ owner, id }) => {
                 const state = await window.Atome.getStateCurrent(owner);
@@ -63,7 +76,7 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
             }, { owner: fixture.ownerId, id: audio.strip_id });
             // Restore the audible main output through the same picker before playback acceptance.
             await clickCanvasTarget(page, await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_out`, treeId: 'eve_bevy_ui_project_view' }));
-            const main = await awaitBevyUiNodeTarget(page, { nodeId: 'molecule_mix_picker_1', treeId: 'eve_bevy_ui_project_view' });
+            const main = await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_panel_choice_0`, treeId: 'eve_bevy_ui_project_view' });
             assert(main, 'molecule_mix_main_output_not_actionable');
             await clickCanvasTarget(page, main);
             await waitFor(page, async ({ owner, id }) => {
@@ -90,13 +103,10 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
         });
 
         await check('real Multitrack and Timeline clicks show the Timeline tree: headers, lanes, clips, ruler, playhead', async () => {
-            // Timeline, Cells and Mix are the rail's Multitrack tool (not the Vue palette).
-            const RAIL = 'eve_bevy_panel_atome_contextual_edit';
-            const multitrack = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack', treeId: RAIL });
-            assert(multitrack, 'multitrack_not_actionable');
-            await clickMenuTarget(page, multitrack);
-            await wait(650);
-            const timelineChoice = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack_multitrack_timeline', treeId: RAIL });
+            // R-182: in the Console the multitrack views (Timeline · Cellules · Scène · Mixage) lie in the views row
+            // above the bottom band (project_view_views_row.js, `project_view_mix_row_<key>`), no longer in the rail's
+            // Multitrack palette, which left the project's rails (R-175).
+            const timelineChoice = await awaitBevyUiNodeTarget(page, { nodeId: 'project_view_mix_row_multitrack_timeline', treeId: 'eve_bevy_ui_project_view' });
             assert(timelineChoice, 'multitrack_timeline_not_actionable');
             await clickMenuTarget(page, timelineChoice);
             return waitFor(page, async () => {

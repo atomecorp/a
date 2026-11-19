@@ -192,7 +192,7 @@ impl VaultRouter {
                 .await?
                 .filter(|parent_owner| parent_owner != actor)
             {
-                self.authorize_shared_create(actor, &parent_owner, &parent)
+                self.authorize_shared_create(actor, &parent_owner, &parent, &normalized)
                     .await?;
                 owner = Some(parent_owner);
             }
@@ -347,7 +347,22 @@ impl VaultRouter {
         if owner == principal {
             return Ok(js::with(&state, [("vault_principal_id", json!(owner))]));
         }
-        match self.share_for_atome(principal, &id, Some(owner)).await? {
+        if let Some(share) = self
+            .share_for_atome(principal, &id, Some(owner.clone()))
+            .await?
+        {
+            return Ok(shares::project_shared_state(&state, &share));
+        }
+        // A media a shared folder plays (`uses_media`, R-194): read only (media/shared_folders.rs#used_through).
+        match crate::media::shared_folders::used_through(
+            self,
+            self.central(),
+            principal,
+            &owner,
+            &id,
+        )
+        .await?
+        {
             Some(share) => Ok(shares::project_shared_state(&state, &share)),
             None => Ok(JsonValue::Null),
         }

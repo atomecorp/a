@@ -9,8 +9,13 @@ export function registerServerIdentityRoutes(server, { dataSource, isProduction 
     // challenge, sends an SMS, or creates an authenticated session.
     server.get('/.well-known/apple-app-site-association', async (_request, reply) => {
         reply.type('application/json').header('Cache-Control', 'public, max-age=3600');
-        return { applinks: { apps: [], details: [{ appID: '2W25PVZ57F.one.atome.app', paths: ['/auth/v/*'] }] } };
+        return { applinks: { apps: [], details: [{ appID: '2W25PVZ57F.one.atome.app', paths: ['/auth/v/*', '/eve', '/music'] }] } };
     });
+    // A domain link (R-192, eVe/domains/dashboard/dashboard_domain.js) opens the Web app on that domain: a browser keeps
+    // the link's fragment (an invitation's `#invite=`) across this redirect. The iOS app takes the link itself.
+    for (const domain of ['eve', 'music']) {
+        server.get(`/${domain}`, { logLevel: 'silent' }, async (_request, reply) => reply.header('Cache-Control', 'no-store').redirect(`/?domain=${domain}`));
+    }
     server.get('/auth/v/:attemptId', { logLevel: 'silent' }, async (request, reply) => {
         reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer')
             .header('X-Content-Type-Options', 'nosniff').header('X-Robots-Tag', 'noindex, nofollow')

@@ -99,6 +99,14 @@ fn media_token_of(query: &str) -> String {
     }
 }
 
+// The owner a media URL names (`?media_user_id=`): a file of a shared project lies in its author's files (R-202).
+fn media_owner_of(query: &str) -> Option<String> {
+    url::form_urlencoded::parse(query.as_bytes())
+        .find(|(key, _)| key == "media_user_id")
+        .map(|(_, value)| value.trim().to_string())
+        .filter(|owner| !owner.is_empty() && owner.len() <= 256)
+}
+
 pub(super) fn failed(status: u16, error: &str) -> Response {
     fastify_reply::json(
         StatusCode::from_u16(status).unwrap_or(StatusCode::NOT_FOUND),
@@ -304,7 +312,11 @@ pub async fn answer(downloads: &Downloads<'_>, sessions: &Sessions, request: Req
             user = principal;
         }
     }
-    let response = match (route, downloads.target(&param, &user).await) {
+    let hint = media_owner_of(request.uri().query().unwrap_or(""));
+    let response = match (
+        route,
+        downloads.target_for(&param, &user, hint.as_deref()).await,
+    ) {
         (_, Err(Missed::Refused(status, error))) => failed(status, &error),
         (Route::ExtractAudio, found) => {
             let answered = match found {

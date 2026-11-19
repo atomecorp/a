@@ -9,7 +9,7 @@ import { INSTRUMENT_BANK_ASSISTANT_INSTRUCTIONS, INSTRUMENT_BANK_COMMANDS } from
 // `dsp:<effect>` (Délai dsp:echo, Ampli dsp:amp, Baffle dsp:convolution, Réverb dsp:reverb…) or `user:<effect id>`
 // (Mes effets); a chain by its `strip_id`, a module of it by its `module_id` (audio_fx.catalog gives them).
 export const AUDIO_FX_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'NOT_FOUND', 'NOT_LIT', 'NAME_REQUIRED',
-    'VOLUME_REQUIRED', 'EFFECT_LOOP', 'PLAY_FAILED', 'WRITE_FAILED', 'HOST_UNSUPPORTED', 'SOURCE_UNAVAILABLE']);
+    'VOLUME_REQUIRED', 'EFFECT_LOOP', 'PLAY_FAILED', 'WRITE_FAILED', 'HOST_UNSUPPORTED', 'SOURCE_UNAVAILABLE', 'NOT_LISTENING']);
 
 const text = { type: 'string', minLength: 1, maxLength: 200 };
 const key = { type: 'string', pattern: '^((dsp|user):[A-Za-z0-9_\\-]+|input)$', maxLength: 200 };
@@ -39,6 +39,9 @@ const definitions = {
     compose: [{ effect_id: text, effects: { type: 'array', minItems: 1, maxItems: 32, items: key } }, ['effect_id', 'effects'],
         'Give an effect of Mes effets a new composition (its effects in order); everywhere it plays, it plays the new one.', true, 'write'],
     delete: [{ effect_id: text }, ['effect_id'], 'Delete an effect of Mes effets (put out first where it plays).', true, 'write'],
+    master: [{ device_id: text }, [], 'Light the Master chain of Mes effets (Égaliseur → Multibande → Maximiseur), made once the first time, on the input in use (or device_id).', true, 'write'],
+    auto: [{ strip_id: text, module_id: text, target_lufs: { type: 'number', minimum: -24, maximum: -6 } }, [],
+        'Set a Maximiseur\'s gain from what it has heard: its integrated loudness brought to its target (the target chosen, or target_lufs). The first Maximiseur lit when no module_id is given. NOT_LISTENING while it has heard nothing yet.', true, 'write'],
     favorite: [{ effect: key, favorite: { type: 'boolean' } }, ['effect', 'favorite'], 'Mark an effect as a favourite (its tile comes first in Capture › Effets), or no longer.', true, 'write'],
     save_preset: [{ effect: key, name: text, params: { type: 'object', additionalProperties: { type: 'number' } } }, ['effect', 'name'],
         'Save the effect\'s values as a preset under its name (the same name replaces it): its values as they play, or params (a project console module\'s).', true, 'write'],
@@ -47,7 +50,11 @@ const definitions = {
         'Search the TONE3000 amp captures (an empty query lists the most downloaded): tones with id, title, author, image.', false, 'read'],
     tone3000_models: [{ tone_id: { type: 'integer', minimum: 1 } }, ['tone_id'], 'The models (sizes) of one TONE3000 tone: id, name, size.', false, 'read'],
     tone3000_take: [{ model_id: { type: 'integer', minimum: 1 }, effect: key }, ['model_id'],
-        'Bring one TONE3000 model into the person\'s media (once); with effect (dsp:amp), that Ampli plays it at once.', true, 'write']
+        'Bring one TONE3000 model into the person\'s media (once); with effect (dsp:amp), that Ampli plays it at once.', true, 'write'],
+    // Home › My hardware › Audio (eVe/domains/audio_fx/audio_driver.js): the driver of the desktop app on Windows.
+    driver: [{}, [], 'The audio driver the engine plays through: selectable (Windows desktop only), driver (wasapi or asio), asio_driver, asio_built, asio_drivers (the ASIO drivers installed), error (why the saved one could not play).', false, 'read'],
+    driver_set: [{ driver: { type: 'string', enum: ['wasapi', 'asio'] }, name: text }, ['driver'],
+        'Play through WASAPI exclusive, or through an ASIO driver (asio with its name, from audio_fx.driver); kept for this device. Refused with its reason when ASIO is missing or the driver cannot open: the previous one keeps playing.', true, 'write']
 };
 const moduleSchema = { type: 'object', properties: { module_id: { type: 'string' }, key: { type: 'string' }, params: { type: 'object' }, bypass: { type: 'boolean' },
     source: { type: ['object', 'null'] } } };
@@ -61,7 +68,8 @@ const EFFECT_COMMANDS = Object.entries(definitions).map(([action, [properties, r
         my_instruments: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, favorite: { type: 'boolean' }, lit: { type: 'boolean' } } } },
         strips: { type: 'array', items: { type: 'object', properties: { strip_id: { type: 'string' }, name: { type: 'string' }, on: { type: 'boolean' },
             device_id: { type: 'string' }, instrument_id: { type: 'string' }, output: { type: 'integer' }, modules: { type: 'array', items: moduleSchema } } } },
-        effect_id: { type: 'string' }, asset_id: { type: 'string' },
+        effect_id: { type: 'string' }, asset_id: { type: 'string' }, reason: { type: 'string' },
+        selectable: { type: 'boolean' }, driver: { type: 'string' }, asio_driver: { type: ['string', 'null'] }, asio_drivers: { type: 'array', items: { type: 'string' } },
         tones: { type: 'array', items: { type: 'object' } }, models: { type: 'array', items: { type: 'object' } } } }
 }));
 // Instruments and effects are one family (synthe_sampler_briques §6): the Sampler's commands join it, with its Slice
@@ -76,5 +84,5 @@ export const AUDIO_FX_ASSISTANT_INSTRUCTIONS = 'Live effects: « mets de la rév
     + '« plus de réverb », « délai plus long » call audio_fx.catalog for the params then audio_fx.set_param on that effect; « enregistre cette chaîne sous Voix '
     + 'radio » audio_fx.save with its strip_id. « mélange le micro dans la chaîne du synthé » audio_fx.add effect input with from live_audio; « les charleston '
     + 'sur leur propre tranche » audio_fx.zone_set output 1 on their zone, then audio_fx.set_input instrument_id and output 1 on a chain. « cherche un ampli Marshall » audio_fx.tone3000_search, then tone3000_models and '
-    + 'tone3000_take with effect dsp:amp; « garde ces réglages sous Clair » audio_fx.save_preset; « mets la réverb en favori » audio_fx.favorite. Never invent a strip_id, module_id or effect id: read audio_fx.catalog first. '
+    + 'tone3000_take with effect dsp:amp; « garde ces réglages sous Clair » audio_fx.save_preset; « mets la réverb en favori » audio_fx.favorite; « masterise » audio_fx.master, then after a few seconds of the song audio_fx.auto; « plus fort, niveau club » audio_fx.set_param on dsp:maximizer target 2 then audio_fx.auto. « joue en ASIO » (Windows) reads audio_fx.driver, then audio_fx.driver_set asio with a name it lists; « reviens en WASAPI » audio_fx.driver_set wasapi. A choice param (the character of a compressor, the space of a reverb) takes its index. Never invent a strip_id, module_id or effect id: read audio_fx.catalog first. '
     + INSTRUMENT_ASSISTANT_INSTRUCTIONS + ' ' + SAMPLE_EDIT_ASSISTANT_INSTRUCTIONS + ' ' + INSTRUMENT_BANK_ASSISTANT_INSTRUCTIONS;

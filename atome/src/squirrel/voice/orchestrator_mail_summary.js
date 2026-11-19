@@ -1,7 +1,6 @@
 import {
     normalizeAiProviderError,
-    requestProviderCompletion,
-    resolveActiveAiProviderConfig
+    requestProviderCompletion
 } from '../ai/provider_client.js';
 import { defaultEnv } from './orchestrator_env.js';
 
@@ -73,32 +72,19 @@ const buildMailSummaryPrompt = ({
 };
 
 export const createDefaultMailAiSummarizer = ({
-    env = defaultEnv(),
-    fetchImpl = null
+    env = defaultEnv()
 } = {}) => async ({
     items = [],
     stats = {},
     locale = 'fr-FR'
 } = {}) => {
-        const providerConfig = await resolveActiveAiProviderConfig();
-        if (providerConfig?.ok !== true) {
-            return {
-                ok: false,
-                error: String(providerConfig?.error || 'no_ai_key_configured')
-            };
-        }
         try {
             const completion = await requestProviderCompletion({
-                providerId: providerConfig.providerId,
-                model: providerConfig.model,
-                apiKey: providerConfig.apiKey,
+                env,
                 systemPrompt: buildMailSummaryPrompt({ items, stats, locale }),
                 prompt: String(locale || '').toLowerCase().startsWith('en')
                     ? 'Summarize these recent emails for the user.'
-                    : 'Resume ces derniers emails pour l utilisateur.',
-                ...(typeof fetchImpl === 'function'
-                    ? { fetchImpl }
-                    : (typeof env?.fetch === 'function' ? { fetchImpl: env.fetch.bind(env) } : {}))
+                    : 'Resume ces derniers emails pour l utilisateur.'
             });
             const text = completion?.text;
             const normalized = String(text || '').trim();

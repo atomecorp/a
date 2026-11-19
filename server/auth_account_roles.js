@@ -10,7 +10,7 @@ import db from '../database/adole.js';
 import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 import { wsResponse } from './wsResponse.js';
 
-export const ACCOUNT_ROLES = Object.freeze(['admin']);
+export const ACCOUNT_ROLES = Object.freeze(['admin', 'tester', 'owner']);
 export const ACCOUNT_ROLES_FRAME = 'account-roles';
 
 const requireRole = (role) => {

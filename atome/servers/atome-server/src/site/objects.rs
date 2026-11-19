@@ -186,6 +186,18 @@ fn object_html(item: &mut Item<'_>, origin: (f64, f64), context: &Context<'_>) -
                     item.style
                 );
             }
+            if kind == "file" || kind == "raw" {
+                let name = escape_html(&string_of(
+                    [p.get("name"), p.get("file_name")]
+                        .into_iter()
+                        .flatten()
+                        .find(|value| js::truthy(Some(*value))),
+                ));
+                return format!(
+                    "<a class=\"o\"  style=\"{}\" href=\"{media}\" download=\"{name}\">{name}</a>",
+                    item.style
+                );
+            }
             if kind == "audio" || kind == "sound" {
                 return format!(
                     "<audio class=\"o\"  style=\"{}\" src=\"{media}\" controls preload=\"none\"></audio>",

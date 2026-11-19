@@ -61,13 +61,28 @@ export function audio_mix_cut_tail(module_id: string): void;
 
 export function audio_mix_levels(): Array<any>;
 
-export function audio_mix_live_push(device_id: string, pcm: Float32Array): void;
+export function audio_mix_live_push(device_id: string, pcm: Float32Array, start_frame: number): void;
 
 export function audio_mix_module_state(module_id: string): number | undefined;
+
+export function audio_mix_readings(): Array<any>;
+
+export function audio_mix_record_drain(strip_id: string): object;
+
+export function audio_mix_record_release(strip_id: string): void;
+
+export function audio_mix_record_start(strip_id: string, device_id?: string | null): number;
+
+export function audio_mix_record_stop(strip_id: string): void;
 
 export function audio_play(id: string): number;
 
 export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, pan: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null, strip_id?: string | null): number;
+
+/**
+ * A sound's length in seconds, read from its container without decoding nor loading a clip (an upload's duration).
+ */
+export function audio_probe_duration(data: Uint8Array): number;
 
 /**
  * `{ frames_rendered, base_context_frame, sample_rate, discontinuities, block_frames }`.
@@ -128,7 +143,9 @@ export function calendarOccurrenceEnd(event: string, start: number): number | un
  */
 export function calendarRangeOccurrences(events: string, from: number | null | undefined, until: number | null | undefined, future_only: boolean, exclude_completed: boolean, limit: number): Float64Array;
 
-export function clickBar(rate: number, bpm: number, beats: number, click_seconds: number, accent_hz: number, beat_hz: number): Float32Array;
+export function clickBar(rate: number, bpm: number, beats: number, click_seconds: number, accent_hz: number, beat_hz: number, voice: number, accent: boolean): Float32Array;
+
+export function compileSliceMotif(motif: any, slices: any, source_frames: number, step_frames: number, fade_frames: number): any;
 
 /**
  * `windows`: `[from, hold_end, to]` per planned note; each answer a `{ start, end, truncated }` or null.
@@ -157,12 +174,36 @@ export function endOfSound(channels: Array<any>, threshold_db: number, tail_fram
 
 export function findLoop(channels: Array<any>, start: number, end: number, radius: number, window: number, candidates: number): any;
 
+/**
+ * `interchangeReadDawproject(projectXml, metadataXml, entriesJson)`: `entriesJson`
+ * is the archive's entry names as a JSON array of strings.
+ */
+export function interchangeReadDawproject(project_xml: string, metadata_xml: string, entries_json: string): string;
+
+/**
+ * `interchangeReadFcpxml(text)`: a Final Cut Pro XML document (a `.fcpxmld`
+ * bundle's `Info.fcpxml`).
+ */
+export function interchangeReadFcpxml(text: string): string;
+
+/**
+ * `interchangeReadOtio(text)`: an OpenTimelineIO `Timeline.1` document.
+ */
+export function interchangeReadOtio(text: string): string;
+
 export function isWav(bytes: Uint8Array): boolean;
 
 /**
  * `ramps`: `[from, to]` per ramp.
  */
 export function layEditPiece(channels: Array<any>, length: number, gain: number, ramps: Float64Array): Array<any>;
+
+/**
+ * `lpprojRead(storeBytes, resourcesJson, name)`: `resourcesJson` is an array of
+ * `{ resource_id, file_name, sha256, byte_length }`; the answer is the Molecule
+ * import (`{ document, report, media, midi }`, atome-interchange) as JSON.
+ */
+export function lpprojRead(store: Uint8Array, resources: string, name: string): string;
 
 export function nearestZeroCrossing(channels: Array<any>, frame: number, radius: number): number;
 
@@ -180,12 +221,35 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly calendarExpand: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+    readonly calendarOccurrenceEnd: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly calendarRangeOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+    readonly lpprojRead: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly audio_mix_record_drain: (a: number, b: number) => [number, number, number];
+    readonly audio_mix_record_release: (a: number, b: number) => [number, number];
+    readonly audio_mix_record_start: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly audio_mix_record_stop: (a: number, b: number) => [number, number];
+    readonly interchangeReadDawproject: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly interchangeReadFcpxml: (a: number, b: number) => [number, number, number, number];
+    readonly interchangeReadOtio: (a: number, b: number) => [number, number, number, number];
+    readonly audio_instrument: (a: any) => [number, number, number];
+    readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly audio_mix_apply: (a: any) => [number, number, number];
+    readonly audio_mix_asset_load_capture: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly audio_mix_asset_load_impulse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly audio_mix_asset_unload: (a: number, b: number) => [number, number];
+    readonly audio_mix_cut_tail: (a: number, b: number) => [number, number];
+    readonly audio_mix_levels: () => [number, number, number];
+    readonly audio_mix_live_push: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly audio_mix_module_state: (a: number, b: number) => [number, number, number];
+    readonly audio_mix_readings: () => [number, number, number];
     readonly audio_destroy_clip: (a: number, b: number) => [number, number];
     readonly audio_hold: (a: number, b: number, c: number) => [number, number, number];
     readonly audio_init: () => [number, number];
     readonly audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly audio_play: (a: number, b: number) => [number, number, number];
     readonly audio_play_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
+    readonly audio_probe_duration: (a: number, b: number) => [number, number, number];
     readonly audio_render_clock: () => any;
     readonly audio_schedule_voices: (a: any) => [number, number, number, number];
     readonly audio_set_pan: (a: number, b: number, c: number) => [number, number];
@@ -197,29 +261,9 @@ export interface InitOutput {
     readonly audio_stop: (a: number, b: number) => [number, number];
     readonly audio_stop_instance: (a: number, b: number) => [number, number];
     readonly audio_wake: () => [number, number, number];
-    readonly audio_instrument: (a: any) => [number, number, number];
-    readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly audio_mix_apply: (a: any) => [number, number, number];
-    readonly audio_mix_asset_load_capture: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly audio_mix_asset_load_impulse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly audio_mix_asset_unload: (a: number, b: number) => [number, number];
-    readonly audio_mix_cut_tail: (a: number, b: number) => [number, number];
-    readonly audio_mix_levels: () => [number, number, number];
-    readonly audio_mix_live_push: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly audio_mix_module_state: (a: number, b: number) => [number, number, number];
-    readonly calendarExpand: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
-    readonly calendarOccurrenceEnd: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly calendarRangeOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
     readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
-    readonly voiceconversation_inputDb: (a: number) => number;
-    readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
-    readonly voiceconversation_new: () => number;
-    readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
-    readonly voiceconversation_reset: (a: number) => void;
-    readonly voiceconversation_setRecording: (a: number, b: number) => void;
-    readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
-    readonly voiceconversation_takeRecording: (a: number) => any;
-    readonly clickBar: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly clickBar: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly compileSliceMotif: (a: any, b: any, c: number, d: number, e: number) => [number, number, number];
     readonly cutTakes: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly decodeWav: (a: number, b: number) => [number, number, number];
     readonly decodeWavIntegers: (a: number, b: number) => [number, number, number];
@@ -235,9 +279,17 @@ export interface InitOutput {
     readonly readEditWindow: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly sourceRate: (a: any) => [number, number, number];
     readonly toneSamples: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly voiceconversation_inputDb: (a: number) => number;
+    readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
+    readonly voiceconversation_new: () => number;
+    readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
+    readonly voiceconversation_reset: (a: number) => void;
+    readonly voiceconversation_setRecording: (a: number, b: number) => void;
+    readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
+    readonly voiceconversation_takeRecording: (a: number) => any;
     readonly wavInfo: (a: any) => [number, number, number];
     readonly waveformPeaks: (a: any, b: number) => [number, number, number, number];
-    readonly wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

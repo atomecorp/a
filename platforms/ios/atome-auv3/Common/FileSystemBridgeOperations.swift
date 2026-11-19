@@ -211,6 +211,8 @@ extension FileSystemBridge {
         }
         let types = body["fileTypes"] as? [String] ?? ["atome", "json", "m4a", "mp3", "wav"]
         let allowsMultiple = body["multiple"] as? Bool ?? true
+        // « Ouvrir » takes a file or a folder, what is chosen deciding (R-205): staged on disk, answered as paths.
+        let allowsFolders = body["folders"] as? Bool ?? false
         guard let controller = findViewController(from: webView) else {
             sendErrorResponse(to: webView, error: "Cannot find view controller")
             return
@@ -223,7 +225,8 @@ extension FileSystemBridge {
                 sources: requested,
                 kinds: body["kinds"] as? [String] ?? [],
                 labels: body["labels"] as? [String: String] ?? [:],
-                allowsMultiple: allowsMultiple
+                allowsMultiple: allowsMultiple,
+                allowsFolders: allowsFolders
             )
             presentImportSources(request, controller: controller, webView: webView)
             return
@@ -240,12 +243,26 @@ extension FileSystemBridge {
             presentImportSourceChoice(allowsMultiple: allowsMultiple, controller: controller, webView: webView)
             return
         }
+        if allowsFolders {
+            presentStagedImport(allowsMultiple: allowsMultiple, controller: controller, webView: webView)
+            return
+        }
         presentImportDocumentPicker(
             types: types,
             allowsMultiple: allowsMultiple,
             controller: controller,
             webView: webView
         )
+    }
+
+    private func presentStagedImport(allowsMultiple: Bool, controller: UIViewController, webView: WKWebView) {
+        ImportStagingPicker.present(multiple: allowsMultiple, from: controller) { [weak self] success, files, error in
+            if success {
+                self?.sendSuccessResponse(to: webView, data: ["files": files])
+            } else {
+                self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Unknown error")
+            }
+        }
     }
 
     private func presentPhotoLibraryPicker(
@@ -326,6 +343,7 @@ extension FileSystemBridge {
         let kinds: [String]
         let labels: [String: String]
         let allowsMultiple: Bool
+        let allowsFolders: Bool
 
         func label(_ key: String, _ fallback: String) -> String {
             let value = labels[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -412,6 +430,10 @@ extension FileSystemBridge {
                 }
             }
         default:
+            if request.allowsFolders {
+                presentStagedImport(allowsMultiple: request.allowsMultiple, controller: controller, webView: webView)
+                return
+            }
             presentImportDocumentPicker(
                 types: Self.documentTypes(for: request.kinds),
                 allowsMultiple: request.allowsMultiple,
@@ -422,7 +444,8 @@ extension FileSystemBridge {
     }
 
     // The document picker vocabulary of `iCloudFileManager`: an empty list
-    // opens every document; a kind restricts to its family.
+    // opens every document; a kind restricts to its family ("image",
+    // "video", "audio", and "document" for what the document import reads).
     private static func documentTypes(for kinds: [String]) -> [String] {
         let all = ["image", "video", "audio"]
         if kinds.isEmpty || Set(kinds).isSuperset(of: all) { return [] }

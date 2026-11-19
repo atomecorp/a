@@ -48,6 +48,7 @@ HOST_EXCLUDES=(--exclude squirrel-bevy-renderer --exclude squirrel-audio-wasm --
 clippy_target host --workspace "${HOST_EXCLUDES[@]}" --all-targets
 clippy_target wasm_bevy -p squirrel-bevy-renderer -p atome-bevy-renderer-core --lib --target wasm32-unknown-unknown
 clippy_target wasm_audio -p squirrel-audio-wasm --lib --target wasm32-unknown-unknown
+clippy_target wasm_script -p atome-script-wasm --lib --target wasm32-unknown-unknown
 RUSTFLAGS="-C target-feature=-reference-types,+simd128" clippy_target wasm_direct -p atome-direct-wasm --lib --target wasm32-unknown-unknown
 clippy_target ios -p atome-ios-bevy-renderer --lib --target aarch64-apple-ios
 # The vault confinement is Linux code (the production host).
@@ -57,8 +58,8 @@ clippy_target linux_confine -p atome-confine --lib --target x86_64-unknown-linux
 # it (a workspace-wide run would give every engine the Tauri voice feature).
 : > "$LOG_DIR/test.log"
 TEST_RC=0
-for package in atome-dsp atome-instrument atome-mix-graph atome-store atome-voice-turns \
-    atome-bevy-renderer-core tauri-plugin-billing tauri-plugin-health tauri-plugin-mobile-host; do
+for package in atome-dsp atome-instrument atome-interchange atome-mix-graph atome-store atome-voice-turns \
+    atome-script-wasm atome-bevy-renderer-core tauri-plugin-billing tauri-plugin-health tauri-plugin-mobile-host; do
     echo "== $package" >> "$LOG_DIR/test.log"
     cargo test -p "$package" >> "$LOG_DIR/test.log" 2>&1 || TEST_RC=1
 done

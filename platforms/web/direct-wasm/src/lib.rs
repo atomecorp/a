@@ -113,6 +113,14 @@ impl Direct {
         self.text.len()
     }
 
+    fn readings(&mut self) -> usize {
+        let readings: Vec<serde_json::Value> = self.graph.readings().into_iter()
+            .map(|reading| serde_json::json!({ "module_id": reading.module_id, "values": reading.values }))
+            .collect();
+        self.text = serde_json::Value::Array(readings).to_string();
+        self.text.len()
+    }
+
     // A failed call returns the length of its error, readable in `direct_text`.
     fn fail(&mut self, error: String) -> i32 {
         self.text = error;
@@ -404,6 +412,14 @@ pub unsafe extern "C" fn direct_module_state(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn direct_levels(handle: *mut Direct) -> usize {
     unsafe { direct(handle).levels() }
+}
+
+/// The dsp modules' live measurements as JSON in `direct_text`; returns its length.
+/// # Safety
+/// See `direct`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn direct_readings(handle: *mut Direct) -> usize {
+    unsafe { direct(handle).readings() }
 }
 
 #[unsafe(no_mangle)]

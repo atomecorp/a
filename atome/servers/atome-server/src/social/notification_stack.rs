@@ -119,6 +119,54 @@ fn write_stack(
     }
 }
 
+// The fields an origin keeps, each object's own (R-190 §5 bis): where a network's message or
+// comment came from and how a reply goes back.
+const ORIGIN_KEYS: [&str; 8] = [
+    "network",
+    "account",
+    "kind",
+    "thread",
+    "remote_id",
+    "post",
+    "author",
+    "reply",
+];
+const ORIGIN_POST_KEYS: [&str; 5] = ["id", "url", "title", "job_id", "thumbnail_url"];
+const ORIGIN_AUTHOR_KEYS: [&str; 4] = ["id", "name", "handle", "avatar_url"];
+const ORIGIN_REPLY_KEYS: [&str; 3] = ["mode", "until", "private_until"];
+
+// An object's listed fields, its other ones dropped; a nested object only where it is one.
+fn kept_fields(value: &JsonValue, keys: &[&str]) -> JsonValue {
+    let mut kept = JsonMap::new();
+    for key in keys {
+        let Some(field) = value.get(*key) else {
+            continue;
+        };
+        let nested = match *key {
+            "post" => Some(&ORIGIN_POST_KEYS[..]),
+            "author" => Some(&ORIGIN_AUTHOR_KEYS[..]),
+            "reply" => Some(&ORIGIN_REPLY_KEYS[..]),
+            _ => None,
+        };
+        let field = match (nested, field) {
+            (Some(keys), JsonValue::Object(_)) => kept_fields(field, keys),
+            (Some(_), _) => JsonValue::Null,
+            (None, JsonValue::Object(_) | JsonValue::Array(_)) => JsonValue::Null,
+            (None, scalar) => scalar.clone(),
+        };
+        kept.insert((*key).into(), field);
+    }
+    JsonValue::Object(kept)
+}
+
+// A notice's `origin`: an object with its listed fields only, else null.
+fn origin_of(value: Option<&JsonValue>) -> JsonValue {
+    match value {
+        Some(origin @ JsonValue::Object(_)) => kept_fields(origin, &ORIGIN_KEYS),
+        _ => JsonValue::Null,
+    }
+}
+
 // `normalizeNotification`: the stored shape of a notice, or None without an id.
 fn normalized(input: &JsonValue) -> Result<Option<JsonValue>, String> {
     let Some(id) = js::first(input, &["message_id", "messageId", "id"]).cloned() else {
@@ -171,6 +219,7 @@ fn normalized(input: &JsonValue) -> Result<Option<JsonValue>, String> {
         "expires_at": or(&["expires_at"], JsonValue::Null),
         "starts_at": or(&["starts_at", "startsAt"], JsonValue::Null),
         "ends_at": or(&["ends_at", "endsAt"], JsonValue::Null),
+        "origin": origin_of(input.get("origin")),
     })))
 }
 
@@ -417,5 +466,36 @@ impl NotificationStack {
             "stack:remove" => self.remove(&user, payload.get("notification_id")).await,
             _ => Err(format!("notification_stack_operation_unknown:{operation}")),
         }
+    }
+}
+
+#[cfg(test)]
+mod origin_tests {
+    use super::*;
+
+    #[test]
+    fn a_notice_keeps_its_origin_fields_only() {
+        let notice = json!({ "id": "n", "kind": "social-comment", "origin": {
+            "network": "instagram", "account": "178", "kind": "comment", "thread": "m1",
+            "remote_id": "c1", "token": "secret",
+            "post": { "id": "m1", "url": "https://x", "title": null, "job_id": null,
+                "thumbnail_url": "https://i.ytimg.com/vi/m1/hqdefault.jpg", "extra": 1 },
+            "author": { "id": "u", "name": "Ann", "handle": "ann", "avatar_url": null, "email": "e" },
+            "reply": { "mode": "comment", "until": null, "private_until": "2026-11-23T00:00:00.000Z" } } });
+        let stored = normalized(&notice).unwrap().unwrap();
+        let origin = &stored["origin"];
+        assert_eq!(origin["network"], "instagram");
+        assert!(origin.get("token").is_none());
+        assert!(origin["post"].get("extra").is_none());
+        assert_eq!(
+            origin["post"]["thumbnail_url"],
+            "https://i.ytimg.com/vi/m1/hqdefault.jpg"
+        );
+        assert!(origin["author"].get("email").is_none());
+        assert_eq!(origin["reply"]["private_until"], "2026-11-23T00:00:00.000Z");
+        let plain = normalized(&json!({ "id": "p", "origin": "x" }))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plain["origin"], JsonValue::Null);
     }
 }

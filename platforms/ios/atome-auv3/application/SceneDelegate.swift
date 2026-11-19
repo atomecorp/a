@@ -7,10 +7,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         _ = scene as? UIWindowScene
         receiveAuthenticationLinks(from: connectionOptions.userActivities)
         receiveAuthenticationLinks(from: connectionOptions.urlContexts)
-        // App-only: optionally observe external display events (no-op in AUv3)
-        if FeatureFlags.externalDisplayObservation {
-            ExternalDisplayGuards.shared.startObservingIfApp(observer: DummyExternalDisplayObserver.shared)
-        }
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
@@ -36,15 +32,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     private func receiveAuthenticationLinks(from contexts: Set<UIOpenURLContext>) {
-        contexts.forEach { _ = AuthLinkInbox.receive($0.url) }
-    }
-}
-
-// Lightweight observer to hook ExternalDisplayGuards without altering app architecture
-final class DummyExternalDisplayObserver: ExternalDisplayObserver {
-    static let shared = DummyExternalDisplayObserver()
-    private init() {}
-    func externalDisplayChanged(_ state: ExternalDisplayState) {
-        print("[ExternalDisplay] state=\(state.rawValue)")
+        contexts.forEach { if !SharedFileInbox.receive($0.url) { _ = AuthLinkInbox.receive($0.url) } }
     }
 }

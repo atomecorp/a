@@ -1,7 +1,8 @@
 // The websites (server/site_services.js and ws_site.js, ported; todo/publication_web_2026-10-28.md):
 // the publishing of a project at atome.one/<slug> (publishing.rs, its pages made by
-// projection.rs), the domains and mail of a simulated provider and the hosting summary
-// (domains.rs), the public pages, media and personal domains (http.rs) and the contact form
+// projection.rs), the domains (domains.rs: OVHcloud's registrar when its order keys are set,
+// ovh_registrar.rs and domain_orders.rs, else a simulated registry), their mail (simulated) and
+// the hosting summary, the public pages, media and personal domains (http.rs) and the contact form
 // (contact.rs). The `site` frames of `/ws/api` are an account's.
 mod assets;
 mod contact;
@@ -9,12 +10,15 @@ pub mod contract;
 mod css;
 mod dns;
 mod domain_link;
+mod domain_offers;
+mod domain_orders;
 mod domains;
 pub mod http;
 mod mail;
 mod media;
 mod objects;
 mod operations;
+mod ovh_registrar;
 mod projection;
 mod publishing;
 mod store;
@@ -50,9 +54,10 @@ struct Preview {
 
 /// What the environment says of the websites, read as Fastify reads it: `ATOME_SITE_ORIGIN`,
 /// `ATOME_SITES_ROOT` (from the project's root), `ATOME_SITE_CERT_COMMAND`; the font and the mark
-/// the pages use.
+/// the pages use; the domain registrar (`OVH_ORDER_*`, ovh_registrar.rs).
 #[derive(Clone)]
 pub struct Setup {
+    registrar: Result<Option<ovh_registrar::Registrar>, String>,
     origin: String,
     sites_root: PathBuf,
     cert_command: Option<String>,
@@ -65,6 +70,7 @@ impl Setup {
         let set = |name: &str| settings.get(name).filter(|value| !value.is_empty());
         let assets = project_root.join("atome").join("src").join("assets");
         Self {
+            registrar: ovh_registrar::Registrar::load(settings),
             origin: set("ATOME_SITE_ORIGIN").unwrap_or_else(|| "https://atome.one".into()),
             sites_root: project_root
                 .join(set("ATOME_SITES_ROOT").unwrap_or_else(|| "data/sites".into())),
@@ -80,6 +86,8 @@ pub struct Site {
     router: Arc<VaultRouter>,
     sync: Arc<SyncRuntime>,
     billing: Arc<Billing>,
+    // OVHcloud's registrar; none: the simulated registry; an error: its keys are incomplete.
+    registrar: Result<Option<ovh_registrar::Registrar>, String>,
     origin: String,
     sites_root: PathBuf,
     // The people's homes, whose size the hosting summary tells.
@@ -88,8 +96,9 @@ pub struct Site {
     logo: PathBuf,
     cert_command: Option<String>,
     previews: Mutex<HashMap<String, Preview>>,
-    // A domain's price held for a quarter of an hour (`domain_quote`, then `domain_buy`).
-    quotes: Mutex<HashMap<String, JsonValue>>,
+    // A domain's price held for a quarter of an hour (`domain_quote`, then `domain_buy`), by
+    // account and domain.
+    quotes: Mutex<HashMap<(String, String), JsonValue>>,
     // Woken when a planned operation is added or moved.
     clock: Notify,
 }
@@ -99,7 +108,7 @@ fn fail(error: &str) -> JsonValue {
 }
 
 fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 fn random_bytes(count: usize) -> Vec<u8> {
@@ -136,6 +145,7 @@ impl Site {
             router,
             sync,
             billing,
+            registrar: setup.registrar,
             origin: setup.origin,
             sites_root: setup.sites_root,
             user_root,

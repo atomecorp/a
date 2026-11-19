@@ -20,73 +20,89 @@ final class MIDIOutputSender {
     }
 
     func sendNoteOn(note: UInt8, velocity: UInt8, channel: UInt8 = 0, port: MIDIPortRef) {
-        let noteOnStatus: UInt8 = 0x90 | (channel & 0x0F)
-        let midiData: [UInt8] = [noteOnStatus, note & 0x7F, velocity & 0x7F]
-        sendMIDIMessage(data: midiData, port: port)
-        logger.info("MIDI OUT: Note ON \(note) vel:\(velocity) ch:\(channel)")
+        sendMIDIMessage(data: [0x90 | (channel & 0x0F), note & 0x7F, velocity & 0x7F], port: port)
     }
 
     func sendNoteOff(note: UInt8, velocity: UInt8, channel: UInt8 = 0, port: MIDIPortRef) {
-        let noteOffStatus: UInt8 = 0x80 | (channel & 0x0F)
-        let midiData: [UInt8] = [noteOffStatus, note & 0x7F, velocity & 0x7F]
-        sendMIDIMessage(data: midiData, port: port)
-        logger.info("MIDI OUT: Note OFF \(note) vel:\(velocity) ch:\(channel)")
+        sendMIDIMessage(data: [0x80 | (channel & 0x0F), note & 0x7F, velocity & 0x7F], port: port)
     }
 
     func sendControlChange(controller: UInt8, value: UInt8, channel: UInt8 = 0, port: MIDIPortRef) {
-        let ccStatus: UInt8 = 0xB0 | (channel & 0x0F)
-        let midiData: [UInt8] = [ccStatus, controller & 0x7F, value & 0x7F]
-        sendMIDIMessage(data: midiData, port: port)
-        logger.info("MIDI OUT: CC \(controller) val:\(value) ch:\(channel)")
+        sendMIDIMessage(data: [0xB0 | (channel & 0x0F), controller & 0x7F, value & 0x7F], port: port)
     }
 
     func sendRaw(bytes: [UInt8], port: MIDIPortRef) {
         sendMIDIMessage(data: bytes, port: port)
     }
 
+    // One message to every CoreMIDI destination (the page's single broadcast output).
     private func sendMIDIMessage(data: [UInt8], port: MIDIPortRef) {
         guard data.count > 0 && data.count <= 3 else {
             logger.error("Invalid MIDI data length: \(data.count)")
             return
         }
-
-        let destCount = MIDIGetNumberOfDestinations()
-        logger.info("MIDI destinations available: \(destCount)")
-
-        guard destCount > 0 else {
-            logger.warning("No MIDI destinations available - Cannot send MIDI")
+        guard port != 0 else {
+            logger.error("MIDI output port unavailable: MIDI not started")
             return
         }
-
-        let destination = MIDIGetDestination(0)
-        guard destination != 0 else {
-            logger.error("Failed to get MIDI destination")
+        guard let words = Self.universalPacketWords(data) else {
+            logger.error("Unsupported MIDI message: \(data.map { String(format: "%02X", $0) }.joined(separator: " "))")
             return
         }
-
-        if let destName = objectNameResolver(destination) {
-            logger.info("Sending MIDI to destination: '\(destName)'")
-        } else {
-            logger.info("Sending MIDI to destination ID: \(destination)")
+        // MIDI 1.0 protocol, as the input port. One MIDIEventList holds a packet of 64 words,
+        // so the one or two words of a message always fit (MIDIEventListAdd cannot fail here).
+        var eventList = MIDIEventList()
+        let packet = MIDIEventListInit(&eventList, ._1_0)
+        _ = MIDIEventListAdd(&eventList, MemoryLayout<MIDIEventList>.size, packet, 0, words.count, words)
+        for index in 0..<MIDIGetNumberOfDestinations() {
+            let destination = MIDIGetDestination(index)
+            guard destination != 0 else { continue }
+            let result = MIDISendEventList(port, destination, &eventList)
+            if result != noErr {
+                logger.error("MIDI send to \(self.objectNameResolver(destination) ?? String(destination)) failed: \(result)")
+            }
         }
+    }
 
-        var packetListBuffer = Data(count: 1024)
-        let packetListPtr = packetListBuffer.withUnsafeMutableBytes { ptr in
-            return ptr.bindMemory(to: MIDIPacketList.self).baseAddress!
+    /// Universal MIDI Packet words (group 0) of one MIDI 1.0 byte message:
+    /// channel voice → type 0x2, system common / real time → type 0x1,
+    /// a complete short SysEx `F0 … F7` → type 0x3. Nil for a byte sequence that is no message.
+    private static func universalPacketWords(_ data: [UInt8]) -> [UInt32]? {
+        let status = data[0]
+        switch status {
+        case 0x80...0xEF:
+            let expected = (status & 0xF0 == 0xC0 || status & 0xF0 == 0xD0) ? 2 : 3
+            guard data.count == expected else { return nil }
+            return [0x2000_0000 | packedBytes(data)]
+        case 0xF0:
+            guard data.count >= 2, data[data.count - 1] == 0xF7 else { return nil }
+            let payload = data[1..<(data.count - 1)]
+            guard payload.allSatisfy({ $0 < 0x80 }) else { return nil }
+            var words: [UInt32] = [0x3000_0000 | UInt32(payload.count) << 16, 0]
+            for (offset, byte) in payload.enumerated() {
+                let shift = offset < 2 ? 8 * (1 - offset) : 8 * (5 - offset)
+                words[offset < 2 ? 0 : 1] |= UInt32(byte) << shift
+            }
+            return words
+        case 0xF1...0xFE where status != 0xF7:
+            let expected: Int
+            switch status {
+            case 0xF1, 0xF3: expected = 2
+            case 0xF2: expected = 3
+            default: expected = 1
+            }
+            guard data.count == expected else { return nil }
+            return [0x1000_0000 | packedBytes(data)]
+        default:
+            return nil
         }
+    }
 
-        let packet = MIDIPacketListInit(packetListPtr)
-        let timestamp = mach_absolute_time()
-        _ = MIDIPacketListAdd(packetListPtr, 1024, packet, timestamp, data.count, data)
-
-        let dataString = data.map { String(format: "0x%02X", $0) }.joined(separator: " ")
-        logger.info("MIDI Data: [\(dataString)] -> Destination: \(destination)")
-
-        let result = MIDISend(port, destination, packetListPtr)
-        if result != noErr {
-            logger.error("Failed to send MIDI: \(result)")
-        } else {
-            logger.info("MIDI sent successfully to host")
-        }
+    /// `[status][data1][data2]` laid in the low 24 bits of a UMP word, data bytes masked to 7 bits.
+    private static func packedBytes(_ data: [UInt8]) -> UInt32 {
+        var word = UInt32(data[0]) << 16
+        if data.count > 1 { word |= UInt32(data[1] & 0x7F) << 8 }
+        if data.count > 2 { word |= UInt32(data[2] & 0x7F) }
+        return word
     }
 }

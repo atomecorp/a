@@ -55,7 +55,7 @@ pub fn filter_sync_event_for_user(
             "atome_id": atome_id,
             "atome": atome
         },
-        "timestamp": Utc::now().to_rfc3339()
+        "timestamp": atome_js_values::dates::now_rfc3339()
     }))
 }
 
@@ -145,10 +145,14 @@ pub(crate) fn queue_committed_events(
     Ok(())
 }
 
-// Tells the views of every atome the committed events touched, once each.
+// Tells the views of every atome the committed events touched, once each. A retry or a
+// `set` that changed nothing (`inserted: false`) changed no state: no view is told.
 pub(crate) fn announce_committed_events(db: &Connection, committed: &[JsonValue]) {
     let mut emitted = HashSet::new();
-    for event in committed {
+    for event in committed
+        .iter()
+        .filter(|event| event["inserted"] != json!(false))
+    {
         let record = append::record_of(event.as_object().expect("committed event"));
         if let Some(atome_id) = record.atome_id.clone()
             && emitted.insert(atome_id)

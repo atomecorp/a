@@ -73,6 +73,21 @@ PUSH_EVENTS['shop-changed'] = (message) => ({ sellerId: typeof message.sellerId 
 PUSH_EVENTS['coaches-changed'] = (message) => ({ coachId: typeof message.coachId === 'string' ? message.coachId : '' });
 PUSH_EVENTS['coach-bookings-changed'] = (message) => ({ bookingId: typeof message.bookingId === 'string' ? message.bookingId : '' });
 // A scheduled send of this account left or changed (server/scheduled_sends.js): its Agenda event follows.
+// A bottle's thread changed (CB sociale, social/cb/bottles/actions.rs `live_thread`): its open thread reads again (lot L2b).
+PUSH_EVENTS['cb-bottle-thread'] = (message) => ({ bottle: typeof message.bottle === 'string' ? message.bottle : '', thread: typeof message.thread === 'string' ? message.thread : '' });
+// An Appel's invitation or call (social/cb/random_call.rs, lot L5): its state, the invitation `cbi_…`, the room `cbr_…` and
+// pseudonyms only; eVe/domains/cb_social/cb_call_model.js#cbCallFrame checks their shape.
+PUSH_EVENTS['cb-call'] = (message) => ({ state: String(message.state || ''), invite: String(message.invite || ''), room: String(message.room || ''),
+    handle: String(message.handle || ''), peer: String(message.peer || ''), expires_ms: Number(message.expires_ms) || 0 });
+// A piece of a CB channel's or an Appel's voice translated for this listener (social/cb/live_translate/, lot TR): pseudonyms
+// and words only; eVe/domains/cb_social/cb_live_translate_runtime.js keeps it by take, in memory.
+PUSH_EVENTS['cb-tr-segment'] = (message) => ({ subscription: String(message.subscription || ''), take: String(message.take || ''),
+    handle: String(message.handle || ''), state: String(message.state || ''), text: typeof message.text === 'string' ? message.text : '',
+    lang: String(message.lang || ''), seconds: Number(message.seconds) || 0, error: String(message.error || ''), voice: String(message.voice || ''),
+    audio: message.audio && typeof message.audio.base64 === 'string' ? { base64: message.audio.base64, mime: String(message.audio.mime || ''), rate: Number(message.audio.rate) || 0 } : null });
+// Who speaks on this listener's CB channel (social/cb/channel_actions.rs, lot L3): its number, a pseudonym, taken or free.
+PUSH_EVENTS['cb-floor'] = (message) => ({ channel: Number(message.channel) || 0, state: message.state === 'taken' ? 'taken' : 'free',
+    handle: String(message.handle || ''), reason: String(message.reason || ''), until_ms: Number(message.until_ms) || 0 });
 PUSH_EVENTS['scheduled-send-changed'] = (message) => ({ send: message.send && typeof message.send === 'object' ? message.send : null });
 PUSH_EVENTS['share-revoked'] = (message) => ({
     share_id: message.share_id || null,

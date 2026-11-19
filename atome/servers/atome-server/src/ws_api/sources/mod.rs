@@ -17,11 +17,12 @@ mod gps;
 mod gps_route;
 mod peertube;
 mod tone3000;
-mod video_catalog;
+pub(crate) mod video_catalog;
 mod video_titles;
 mod youtube;
 // The families of batch B.
-mod account_roles;
+pub(crate) mod account_roles;
+mod atome_thread;
 mod bug_reports;
 mod feature_requests;
 mod health_reference;
@@ -72,6 +73,7 @@ pub(super) const KINDS: &[&str] = &[
     "feature-request-roadmap",
     "feature-request-admin",
     "account-roles",
+    "atome-thread",
 ];
 
 /// `wsResponse(type, message, success, fields)`: `<type>-response`, the message's request id.
@@ -137,6 +139,7 @@ async fn decided(
             feature_requests::answer(&asker, message).await
         }
         account_roles::KIND => account_roles::answer(&asker, message).await,
+        atome_thread::KIND => atome_thread::answer(&asker, message).await,
         _ => Err(format!("no family answers {kind} ({})", asker.address)),
     }
 }

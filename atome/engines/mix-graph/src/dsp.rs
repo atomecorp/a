@@ -29,34 +29,62 @@ impl AtomicParam {
     }
 }
 
-// Gain ramped linearly across each block so level changes never click.
+// Gain ramped linearly over RAMP_FRAMES whenever its target changes, the ramp
+// carried across calls: level changes never click, and the same changes sound
+// the same whatever the block size (R-191).
+pub const RAMP_FRAMES: u32 = 32;
+
 pub struct SmoothedGain {
     current: f32,
+    start: f32,
+    target: f32,
+    done: u32,
 }
 
 impl SmoothedGain {
     pub fn new(initial: f32) -> Self {
-        Self { current: initial }
+        Self {
+            current: initial,
+            start: initial,
+            target: initial,
+            done: RAMP_FRAMES,
+        }
+    }
+
+    fn next(&mut self, target: f32) -> f32 {
+        if target != self.target {
+            self.start = self.current;
+            self.target = target;
+            self.done = 0;
+        }
+        if self.done < RAMP_FRAMES {
+            self.done += 1;
+            self.current = match self.done {
+                RAMP_FRAMES => target,
+                done => self.start + (target - self.start) * (done as f32 / RAMP_FRAMES as f32),
+            };
+        }
+        self.current
     }
 
     pub fn apply(&mut self, buffer: &mut [Frame], target: f32) {
-        let start = self.current;
-        let count = buffer.len().max(1) as f32;
-        for (index, frame) in buffer.iter_mut().enumerate() {
-            let gain = start + (target - start) * ((index + 1) as f32 / count);
-            *frame *= gain;
+        for frame in buffer.iter_mut() {
+            *frame *= self.next(target);
         }
-        self.current = target;
+    }
+
+    // The gain a modulation left it at: the next ramp starts there.
+    pub fn hold(&mut self, gain: f32) {
+        self.current = gain;
+        self.start = gain;
+        self.target = gain;
+        self.done = RAMP_FRAMES;
     }
 
     pub fn add_into(&mut self, source: &[Frame], destination: &mut [Frame], target: f32) {
-        let start = self.current;
-        let count = source.len().max(1) as f32;
-        for (index, (out, input)) in destination.iter_mut().zip(source.iter()).enumerate() {
-            let gain = start + (target - start) * ((index + 1) as f32 / count);
-            *out += *input * gain;
+        for (out, input) in destination.iter_mut().zip(source.iter()) {
+            *out += *input * self.next(target);
         }
-        self.current = target;
     }
 }
 

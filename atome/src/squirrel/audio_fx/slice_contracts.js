@@ -14,6 +14,9 @@ const note = { type: 'integer', minimum: 0, maximum: 127 };
 const media = { ...text, description: 'The audio atome (a sound of the Médiathèque, a clip\'s sound, a Sampler sample).' };
 const slice = { type: 'integer', minimum: 0, description: 'A slice by its index (0 the first), as slice_read lists them.' };
 const magnet = { type: 'string', enum: ['free', 'beat', '1/8', '1/16'], description: 'Aimant: the point is drawn to the tempo\'s beats, eighths or sixteenths.' };
+export const MOTIF_ORDERS = Object.freeze(['free', 'original', 'reverse', 'random', 'random_no_repeat', 'follow']);
+export const MOTIF_DIVISIONS = Object.freeze(['1/4', '1/8', '1/16', '1/32']);
+export const MOTIF_FOLLOWS = Object.freeze(['next', 'previous', 'repeat', 'random', 'stop', 'target']);
 const definitions = {
     slice_read: [{ media_atome_id: media }, ['media_atome_id'],
         'Read the Slice tool of a sound: its points (frame, origin division / dynamics / hand, locked, warp_at), the slices they make, the edit\'s pieces, its length and tempo.', false, 'read'],
@@ -57,6 +60,23 @@ const definitions = {
         'Analyze the edited sound: end_silence (where it really ends; apply trims it), loop (the best loop near start..end, at zero crossings, with its score), root (its root note, by the local Basic Pitch transcriber).', false, 'read'],
     sample_play: [{ media_atome_id: media, slice, start: frame, end: frame }, ['media_atome_id'],
         'Listen to a slice of the source, or to the edited sound (start..end of the result, all of it unless given). Writes nothing.', false, 'read'],
+    motif_read: [{ media_atome_id: media }, ['media_atome_id'],
+        'Read the Motif of a sliced sound (how its slices play): steps (slice, force, pitch, roll, chance, reverse), order, seed, swing, division, follows.', false, 'read'],
+    motif_set: [{ media_atome_id: media, steps: { type: 'integer', minimum: 1, maximum: 64 }, order: { type: 'string', enum: MOTIF_ORDERS },
+        seed: { type: 'integer', minimum: 0, maximum: 4294967295 }, swing: { type: 'number', minimum: 0, maximum: 75 }, division: { type: 'string', enum: MOTIF_DIVISIONS } },
+        ['media_atome_id'], 'Set the Motif: its number of steps, its order (free: each step its slice; original; reverse; random; random_no_repeat; follow: each slice\'s follow action), its seed (the random draws), its swing (percent of a step) and its step (division of the sound\'s tempo).', true, 'write'],
+    motif_step_set: [{ media_atome_id: media, step: { type: 'integer', minimum: 0, maximum: 63 }, slice: { type: 'integer', minimum: -1, description: 'The slice the step plays (slice_read index), -1 for a rest.' },
+        force: { type: 'integer', minimum: 1, maximum: 127 }, pitch: { type: 'number', minimum: -24, maximum: 24 }, roll: { type: 'integer', minimum: 1, maximum: 8 },
+        chance: { type: 'integer', minimum: 0, maximum: 100 }, reverse: { type: 'boolean' } }, ['media_atome_id', 'step'],
+        'Set one step of the Motif: the slice it plays (order free), its force, pitch in semitones (length kept), roll (replayed N times in the step), chance (percent) and direction.', true, 'write'],
+    motif_follow_set: [{ media_atome_id: media, slice, follow: { type: 'string', enum: MOTIF_FOLLOWS }, target: slice }, ['media_atome_id', 'slice', 'follow'],
+        'What a slice does after it played in the order follow: next, previous, repeat, random, stop, or target (another slice).', true, 'write'],
+    motif_shuffle: [{ media_atome_id: media }, ['media_atome_id'],
+        'Mélanger: in the order free, the steps\' slices laid in a new random order; in the other orders, a new seed (new draws).', true, 'write'],
+    motif_duplicate: [{ media_atome_id: media }, ['media_atome_id'], 'Double the Motif: its steps played twice in a row (64 steps at most).', true, 'write'],
+    motif_play: [{ media_atome_id: media }, ['media_atome_id'], 'Listen to the Motif (its render). Writes nothing.', false, 'read'],
+    motif_to_cell: [{ media_atome_id: media, project_id: text, track_id: text, name: { type: 'string', minLength: 1, maxLength: 80 } }, ['media_atome_id', 'project_id'],
+        'The Motif rendered into the person\'s media and laid in a new cell of the project (a Scene after the last one, on track_id or the first content track): play it by touching the cell, place it on the Timeline. Returns media_atome_id, scene_ids, clip_ids.', true, 'write'],
     sample_freeze: [{ media_atome_id: media, name: { type: 'string', minLength: 1, maxLength: 80 } }, ['media_atome_id'],
         'Figer: the edited sound becomes a new sound in the person\'s media (32-bit float WAV), its origin kept (source_atome_id). Returns media_atome_id.', true, 'write']
 };
@@ -68,11 +88,14 @@ export const SAMPLE_EDIT_COMMANDS = Object.freeze(Object.entries(definitions).ma
         track_id: { type: 'string' }, sample_edit_id: { type: 'string' }, revision: { type: 'number' }, points: { type: 'array', items: { type: 'object' } },
         slices: { type: 'array', items: { type: 'object' } }, pieces: { type: 'array', items: { type: 'object' } }, length: { type: 'integer' },
         tempo: { type: 'object' }, instrument_id: { type: 'string' }, zone_ids: { type: 'array', items: { type: 'string' } },
-        slice_atome_ids: { type: 'array', items: { type: 'string' } }, media_atome_id: { type: 'string' }, analysis: { type: 'object' } } }
+        slice_atome_ids: { type: 'array', items: { type: 'string' } }, media_atome_id: { type: 'string' }, analysis: { type: 'object' }, motif: { type: 'object' },
+        cells_link: { type: 'object' }, source: { type: 'object', properties: { frames: { type: 'integer' }, sample_rate: { type: 'number' } } } } }
 })));
 export const SAMPLE_EDIT_ASSISTANT_INSTRUCTIONS = 'Slice tool and sample editor (any sound): « coupe cette boucle en 8 » calls audio_fx.slice_divide parts 8; '
     + '« redivise la deuxième partie en 4 » slice_divide slice 1 parts 4; « coupe aux attaques » audio_fx.slice_detect; « fais-en un kit » '
     + 'audio_fx.slices_to_keys on an instrument (audio_fx.instrument_create first if none); « dans les cellules » audio_fx.slices_to_cells with the project id; « en clip MIDI » audio_fx.slices_to_midi (the tempo first: '
     + 'audio_fx.slice_tempo_set); « enlève le silence de la fin » audio_fx.sample_analyze what end_silence apply true; « fige-le » audio_fx.sample_freeze; '
     + '« monte la sélection d\'un ton » audio_fx.edit_apply op pitch semitones 2 on its start..end; « coupe la sélection » op cut. '
+    + '« joue les tranches au hasard » audio_fx.motif_set order random; « mélange » audio_fx.motif_shuffle; « double le motif » audio_fx.motif_duplicate; « roulé de 3 sur le pas 4 » motif_step_set step 3 roll 3; '
+    + '« mets le motif dans une cellule » audio_fx.motif_to_cell. '
     + 'Never invent a point_id or a slice index: read audio_fx.slice_read first.';

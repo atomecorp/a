@@ -8,7 +8,8 @@
 // routable to its own strip); output 0 unless it says another.
 // Read from banks (SFZ): a one-shot zone plays its take to the end whatever the
 // key does; a zone with a switch sounds only while that keyswitch is the last
-// one pressed (keymap.rs); a zone's filter colours each of its voices.
+// one pressed (keymap.rs); a zone's filter colours each of its voices; a zone's
+// envelope shapes its voices instead of the instrument's (a region's ampeg_*).
 
 use crate::composed::Composed;
 use crate::segment::Segment;
@@ -60,6 +61,42 @@ pub struct Zone {
     // The keyswitch (a key of the keymap's switch range) this zone answers to.
     pub switch: Option<u8>,
     pub filter: Option<ZoneFilter>,
+    // Its own amplitude envelope; none: the instrument's settings apply.
+    pub envelope: Option<ZoneEnvelope>,
+}
+
+// A zone's amplitude envelope, in the sampler's units and ranges (sampler.rs PARAMS).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ZoneEnvelope {
+    pub attack_ms: f32,
+    pub decay_ms: f32,
+    pub sustain: f32,
+    pub release_ms: f32,
+}
+
+impl ZoneEnvelope {
+    // Each value within its sampler parameter's range.
+    pub fn validate(&self) -> Result<(), String> {
+        use crate::sampler::{ATTACK_MS, DECAY_MS, PARAMS, RELEASE_MS, SUSTAIN};
+        [
+            (ATTACK_MS, self.attack_ms),
+            (DECAY_MS, self.decay_ms),
+            (SUSTAIN, self.sustain),
+            (RELEASE_MS, self.release_ms),
+        ]
+        .into_iter()
+        .try_for_each(|(id, value)| {
+            let spec = &PARAMS[id as usize];
+            if value.is_finite() && (spec.min..=spec.max).contains(&value) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "envelope {} = {value} is outside {}..{}",
+                    spec.key, spec.min, spec.max
+                ))
+            }
+        })
+    }
 }
 
 // A voice filter, fixed for the note: its cutoff follows the key (cents per key
@@ -101,6 +138,7 @@ impl Zone {
             one_shot: false,
             switch: None,
             filter: None,
+            envelope: None,
         }
     }
 

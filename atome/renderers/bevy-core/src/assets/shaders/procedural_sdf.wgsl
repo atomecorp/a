@@ -27,9 +27,9 @@ struct ProceduralSdfUniform {
     // `mystic_tile_colors[i]` = [R, G, B, family dose]
     // `mystic_count` = [tile count, hole dose, shadow blur, -]
     // `mystic_style` = [perspective in tiles, reserved, reserved, edge softness]
-    mystic_tiles: array<vec4<f32>, 24>,
-    mystic_tile_motion: array<vec4<f32>, 24>,
-    mystic_tile_colors: array<vec4<f32>, 24>,
+    mystic_tiles: array<vec4<f32>, 64>,
+    mystic_tile_motion: array<vec4<f32>, 64>,
+    mystic_tile_colors: array<vec4<f32>, 64>,
     mystic_count: vec4<f32>,
     mystic_style: vec4<f32>,
 }
@@ -49,7 +49,8 @@ struct ProceduralSdfUniform {
 @group(#{MATERIAL_BIND_GROUP}) @binding(9) var menu_back_blur: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(10) var menu_back_blur_sampler: sampler;
 
-const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
+// The same value as backdrop_surface.wgsl: both read the one tent pyramid (backdrop_downsample.wgsl), σ = radius.
+const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.75;
 
 // Backdrop blur, read from the capture's mip pyramid. Each level is a 2x box
 // average of the one below; sampling one of them with a plain bilinear fetch
@@ -588,7 +589,8 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
     if declared <= 0 {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
-    let count = min(declared, 24);
+    // MYSTIC_MAX_TILES (types_procedural.rs).
+    let count = min(declared, 64);
     // `mystic_count.y` is the dose of the HOLE: how much of the menu surface fills
     // the cell a turning plate leaves behind.
     let hole_dose = clamp(material.mystic_count.y, 0.0, 1.0);
@@ -642,7 +644,11 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         let cosine = cos(progress * INTUITION_MYSTIC_PI);
         let sine = sin(progress * INTUITION_MYSTIC_PI) * select(-1.0, 1.0, motion.z >= 0.0);
         let eye = perspective * half_side * 2.0;
+        // A colour's alpha above 1 marks a selected plate (AGENTS.md rule 15): its glass at its own dose (the alpha less 1),
+        // pressed in, its contact shadow turned inward.
+        let pressed = material.mystic_tile_colors[index].a > 1.001;
         let family = clamp(material.mystic_tile_colors[index], vec4(0.0), vec4(1.0));
+        let plate_tint = select(tint, vec4(tint.rgb, clamp(material.mystic_tile_colors[index].a - 1.0, 0.0, 1.0)), pressed);
 
         // THE PLATE. Inverse projection: for this pixel, the plate coordinate that
         // projects onto it. A zero denominator means the pixel sits on the profile
@@ -699,7 +705,11 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                 let source = select(tile.xy + vec2(-aside, bside), tile.xy + vec2(bside, -aside), turning_y);
                 let face_uv = screen_uv + (source - pixel_position) * screen_per_record;
                 let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
-                plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
+                plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, plate_tint);
+                if pressed {
+                    let inner = (1.0 - smoothstep(0.0, shadow_blur, max(-box_distance, 0.0))) * shadow_dose;
+                    plate_color = mix(plate_color, shadow_color, inner);
+                }
                 plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
             } else {
                 // WORKSPACE side: the piece of image the plate was cut from, still
@@ -730,7 +740,9 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // A plate lying flat keeps atome's standard tool shadow at
         // `mystic_style.y` (the open menu reads as raised tools, like the
         // ribbon and the rail); a turning plate casts its full contact shadow.
-        let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0 || level_turn));
+        // A pressed-in plate lying flat casts none (its shadow is inside it); turning, it casts the contact shadow as every plate.
+        let resting = clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, (cosine < 0.0 || level_turn) && !pressed);
+        let lifted = max(abs(sine), resting);
         let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))
             * shadow_dose * (1.0 - plate_mask) * lifted * select(1.0, 0.0, faceless);
         let shadow_contribution = shadow_value * (1.0 - alpha);

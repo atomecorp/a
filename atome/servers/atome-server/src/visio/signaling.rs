@@ -42,6 +42,7 @@ impl Visio {
         state.rooms.entry(room_id.to_string()).or_insert(Room {
             router,
             peers: IndexMap::new(),
+            cb: state::cb_room(room_id),
         });
         state
             .metas
@@ -55,12 +56,31 @@ impl Visio {
             return Err("Missing room_id".into());
         };
         if !self
-            .can_join(&caller.user, &room_id, caller.device_key.as_deref())
+            .can_join_on(
+                &caller.user,
+                &room_id,
+                caller.device_key.as_deref(),
+                caller.live,
+            )
             .await?
         {
             return Err("Access denied".into());
         }
         self.ensure_room(&room_id, &caller.user).await?;
+        // In a CB room the peer is its pseudonym of the channel (its id and every frame's), kept apart from those it
+        // blocked or who blocked it (lot L3).
+        let cb = state::cb_room(&room_id);
+        let shown = if cb {
+            self.cb_handle_on(&room_id, &caller.user, caller.live)
+                .ok_or("Access denied")?
+        } else {
+            caller.user.clone()
+        };
+        let apart = if cb {
+            self.apart_in(&room_id, &caller.user).await?
+        } else {
+            Default::default()
+        };
         let (fields, frames) = {
             let mut guard = self.state();
             let state = &mut *guard;
@@ -77,13 +97,24 @@ impl Visio {
             {
                 held
             } else {
-                let id = seat.peer_id.clone().unwrap_or_else(|| caller.user.clone());
+                let id = if cb {
+                    shown.clone()
+                } else {
+                    seat.peer_id.clone().unwrap_or_else(|| caller.user.clone())
+                };
+                for other in room.peers.values_mut() {
+                    if apart.contains(&other.id) {
+                        other.apart.insert(id.clone());
+                    }
+                }
                 room.peers.insert(
                     id.clone(),
                     Peer {
                         id: id.clone(),
                         serial: state.serial,
                         user: caller.user.clone(),
+                        shown: shown.clone(),
+                        apart: apart.clone(),
                         sender: caller.sender.clone(),
                         consumers: IndexMap::new(),
                         producers: IndexMap::new(),
@@ -96,14 +127,19 @@ impl Visio {
                 id
             };
             let (mut existing, mut participants) = (Vec::new(), Vec::new());
-            for other in room.peers.values().filter(|other| other.id != peer_id) {
-                participants.push(json!({ "peer_user_id": other.user, "username": null }));
+            let own_apart = room.peers[&peer_id].apart.clone();
+            for other in room
+                .peers
+                .values()
+                .filter(|other| other.id != peer_id && !own_apart.contains(&other.id))
+            {
+                participants.push(json!({ "peer_user_id": other.shown, "username": null }));
                 for (id, produced) in &other.producers {
                     existing.push(json!({ "producer_id": id, "kind": produced.producer.kind(),
-                        "peer_user_id": other.user, "paused": produced.producer.paused() }));
+                        "peer_user_id": other.shown, "paused": produced.producer.paused() }));
                 }
             }
-            let user = room.peers[&peer_id].user.clone();
+            let user = room.peers[&peer_id].shown.clone();
             let fields = json!({ "room_id": room_id, "rtpCapabilities": shapes::rtp_capabilities(&room.router),
                 "existingProducers": existing, "participants": participants });
             let joined =

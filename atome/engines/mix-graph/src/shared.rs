@@ -67,6 +67,19 @@ pub struct LiveInput {
     mask: usize,
     written: AtomicUsize,
     read: AtomicUsize,
+    // Where the last pull started, and the capture clock of the last push
+    // (its first frame's index, its clock): a REC point takes its start from
+    // them (record_tap.rs). The clock is the pusher's: host ns natively, the
+    // context frame on the Web.
+    pulled_from: AtomicUsize,
+    anchor: Mutex<Option<(usize, f64)>>,
+}
+
+// Where a strip's input stood when a take's first frame was rendered.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InputPosition {
+    pub pulled_from: usize,
+    pub anchor: Option<(usize, f64)>,
 }
 
 impl LiveInput {
@@ -77,15 +90,51 @@ impl LiveInput {
             mask: frames - 1,
             written: AtomicUsize::new(0),
             read: AtomicUsize::new(0),
+            pulled_from: AtomicUsize::new(0),
+            anchor: Mutex::new(None),
         })
+    }
+
+    // A push whose first frame was captured at `clock` (never waits: a busy
+    // anchor keeps the previous one, still exact for a steady input).
+    pub fn push_at(&self, input: &[Frame], clock: f64) -> usize {
+        let first = self.written.load(Ordering::Relaxed);
+        if let Ok(mut anchor) = self.anchor.try_lock() {
+            *anchor = Some((first, clock));
+        }
+        self.push(input)
+    }
+
+    pub fn position(&self) -> InputPosition {
+        InputPosition {
+            pulled_from: self.pulled_from.load(Ordering::Relaxed),
+            anchor: self.anchor.try_lock().ok().and_then(|anchor| *anchor),
+        }
+    }
+
+    // Moves every waiting frame (up to `out.len()`) into `out`, dropping none:
+    // a REC point's ring, drained by its writer (record_tap.rs).
+    pub fn take(&self, out: &mut [Frame]) -> usize {
+        let written = self.written.load(Ordering::Acquire);
+        let read = self.read.load(Ordering::Relaxed);
+        let count = written.wrapping_sub(read).min(out.len());
+        for (index, slot) in out.iter_mut().take(count).enumerate() {
+            let at = (read.wrapping_add(index) & self.mask) * 2;
+            *slot = Frame::new(
+                f32::from_bits(self.samples[at].load(Ordering::Relaxed)),
+                f32::from_bits(self.samples[at + 1].load(Ordering::Relaxed)),
+            );
+        }
+        self.read.store(read.wrapping_add(count), Ordering::Release);
+        count
     }
 
     fn frames(&self) -> usize {
         self.mask + 1
     }
 
-    // A full ring drops what does not fit.
-    pub fn push(&self, input: &[Frame]) {
+    // A full ring drops what does not fit; returns the frames kept.
+    pub fn push(&self, input: &[Frame]) -> usize {
         let written = self.written.load(Ordering::Relaxed);
         let read = self.read.load(Ordering::Acquire);
         let free = self.frames() - written.wrapping_sub(read);
@@ -98,6 +147,7 @@ impl LiveInput {
             written.wrapping_add(input.len().min(free)),
             Ordering::Release,
         );
+        input.len().min(free)
     }
 
     // Frames waiting to be pulled.
@@ -115,15 +165,9 @@ impl LiveInput {
         if backlog > self.frames() / 2 {
             read = written.wrapping_sub(self.frames() / 2);
         }
-        let count = written.wrapping_sub(read).min(out.len());
-        for (index, slot) in out.iter_mut().take(count).enumerate() {
-            let at = (read.wrapping_add(index) & self.mask) * 2;
-            *slot = Frame::new(
-                f32::from_bits(self.samples[at].load(Ordering::Relaxed)),
-                f32::from_bits(self.samples[at + 1].load(Ordering::Relaxed)),
-            );
-        }
-        self.read.store(read.wrapping_add(count), Ordering::Release);
+        self.pulled_from.store(read, Ordering::Relaxed);
+        self.read.store(read, Ordering::Relaxed);
+        self.take(out);
     }
 }
 
@@ -255,10 +299,8 @@ impl MixGraphEffect {
         };
         let sample_rate = self.shared.sample_rate.load(Ordering::Relaxed).max(1) as f64;
         for block in out.chunks_mut(MAX_BLOCK) {
-            graph
-                .automation
-                .run(self.shared.frames.load(Ordering::Relaxed), sample_rate);
-            graph.process(block.len());
+            let frame = self.shared.frames.load(Ordering::Relaxed);
+            graph.process(block.len(), frame, sample_rate);
             self.shared
                 .frames
                 .fetch_add(block.len() as u64, Ordering::Relaxed);

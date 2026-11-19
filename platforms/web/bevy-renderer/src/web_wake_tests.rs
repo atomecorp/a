@@ -55,6 +55,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         peaks: None,
         playback_progress: None,
         filters: None,
+        effects: None,
         transition: None,
         selected: None,
     }

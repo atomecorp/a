@@ -61,7 +61,12 @@ test('legacy track gain/pan/bus routing migrate into the strip chain and leave t
     const strip = readMixStrip(migrated, voice);
     assert.equal(Math.round(strip.chain.find((module) => module.type === 'volume').params.gain_db), -6);
     assert.equal(strip.chain.find((module) => module.type === 'pan').params.pan, -0.25);
-    assert.deepEqual(strip.output.destination, { kind: 'bus', id: 'mix_bus' });
+    // R-183: an OUT is a physical output only; the former OUT to a bus becomes an Aux sending all, none going on.
+    assert.deepEqual(strip.output.destination, { kind: 'main' });
+    const aux = strip.chain.find((module) => module.type === 'aux');
+    assert.deepEqual(aux.destination, { kind: 'bus', id: 'mix_bus' });
+    assert.deepEqual(aux.params, { send: 1, pass: 0 });
+    assert.equal(strip.chain[0].type, 'record');
     assert.equal('gain' in migrated.tracks.find((track) => track.track_id === 'mix_empty_1'), false);
 });
 
@@ -74,7 +79,7 @@ test('strips follow content lanes; a video with sound is a native group, a silen
     assert.deepEqual(resolveMixStrips(timeline, silent).map((strip) => strip.strip_id), [voice, filmVideo, busStrip]);
     assert.equal(resolveMixGroups(timeline, silent).length, 0);
     const defaults = readMixStrip(timeline, filmVideo);
-    assert.deepEqual(defaults.chain.map((module) => module.type), ['opacity']);
+    assert.deepEqual(defaults.chain.map((module) => module.type), ['record', 'opacity']);
     assert.deepEqual(defaults.output.destination, { kind: 'screen', id: 'main' });
 });
 
@@ -82,47 +87,56 @@ test('modules are added, tuned, moved, bypassed and removed on the chain', () =>
     let timeline = fixture();
     timeline = addMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', type: 'dsp', effect: 'reverb', index: 0 });
     timeline = updateMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', params: { mix: 0.5 } });
-    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'send_a', type: 'send', destination: { kind: 'bus', id: 'mix_bus' } });
+    // R-183: an audio strip sends through an Aux; a send is a MIDI strip's.
+    assert.throws(() => addMixModule(timeline, { strip_id: voice, module_id: 'send_a', type: 'send', destination: { kind: 'bus', id: 'mix_bus' } }), /not compatible/);
+    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'aux_a', type: 'aux', destination: { kind: 'bus', id: 'mix_bus' } });
     timeline = moveMixModule(timeline, { strip_id: voice, module_id: 'mix_empty_1:audio:volume', index: 0 });
     timeline = bypassMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', bypass: true });
     let chain = readMixStrip(timeline, voice).chain;
-    assert.deepEqual(chain.map((module) => module.module_id), ['mix_empty_1:audio:volume', 'fx_rev', 'mix_empty_1:audio:pan', 'send_a']);
+    assert.deepEqual(chain.map((module) => module.module_id), ['mix_empty_1:audio:volume', 'fx_rev', 'mix_empty_1:audio:record', 'mix_empty_1:audio:pan', 'aux_a']);
     assert.equal(chain[1].params.mix, 0.5);
     assert.equal(chain[1].bypass, true);
     timeline = updateMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', effect: 'echo' });
     assert.equal(readMixStrip(timeline, voice).chain[1].params.time_ms, 377);
     timeline = removeMixModule(timeline, { strip_id: voice, module_id: 'fx_rev' });
     chain = readMixStrip(timeline, voice).chain;
-    assert.equal(chain.length, 3);
+    assert.equal(chain.length, 4);
+    assert.throws(() => removeMixModule(timeline, { strip_id: voice, module_id: 'mix_empty_1:audio:record' }), /never removed/);
     assert.throws(() => addMixModule(timeline, { strip_id: filmVideo, module_id: 'bad', type: 'volume' }), /not compatible/);
     assert.throws(() => updateMixModule(timeline, { strip_id: voice, module_id: 'mix_empty_1:audio:volume', params: { gain_db: 40 } }), /between/);
 });
 
-test('outputs: none keeps sends, incompatible destinations are refused, loops are allowed', () => {
+test('outputs: none keeps Aux sends, incompatible destinations are refused, loops are allowed', () => {
     let timeline = fixture();
-    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'send_a', type: 'send', destination: { kind: 'bus', id: 'mix_bus' } });
+    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'aux_a', type: 'aux', destination: { kind: 'bus', id: 'mix_bus' } });
     timeline = setMixOutput(timeline, { strip_id: voice, destination: null });
     const strip = readMixStrip(timeline, voice);
     assert.equal(strip.output.destination, null);
-    assert.equal(strip.chain.find((module) => module.type === 'send').destination.id, 'mix_bus');
+    assert.equal(strip.chain.find((module) => module.type === 'aux').destination.id, 'mix_bus');
     timeline = setMixOutput(timeline, { strip_id: voice, enabled: false });
     assert.equal(readMixStrip(timeline, voice).output.enabled, false);
-    assert.throws(() => setMixOutput(timeline, { strip_id: filmVideo, destination: { kind: 'main' } }), /not compatible/);
-    assert.throws(() => setMixOutput(timeline, { strip_id: voice, destination: { kind: 'strip', id: filmVideo } }), /another signal type/);
+    assert.throws(() => setMixOutput(timeline, { strip_id: filmVideo, destination: { kind: 'main' } }), /not allowed here on the video lane/);
+    // R-183: an audio OUT is a physical output; buses and tracks are an Aux's.
+    assert.throws(() => setMixOutput(timeline, { strip_id: voice, destination: { kind: 'bus', id: 'mix_bus' } }), /not allowed here/);
+    assert.throws(() => addMixModule(timeline, { strip_id: voice, module_id: 'aux_v', type: 'aux', destination: { kind: 'strip', id: filmVideo } }), /another signal type/);
     // A loop is allowed: the engine closes it through a return (D27).
-    timeline = setMixOutput(timeline, { strip_id: voice, destination: { kind: 'bus', id: 'mix_bus' } });
-    timeline = setMixOutput(timeline, { strip_id: busStrip, destination: { kind: 'strip', id: voice } });
-    assert.deepEqual(readMixStrip(timeline, busStrip).output.destination, { kind: 'strip', id: voice });
+    timeline = addMixModule(timeline, { strip_id: busStrip, module_id: 'aux_back', type: 'aux', destination: { kind: 'strip', id: voice } });
+    assert.deepEqual(readMixStrip(timeline, busStrip).chain.find((module) => module.type === 'aux').destination, { kind: 'strip', id: voice });
 });
 
 test('audio groups are sub-mix buses; leaving restores the master destination; native groups detach', () => {
     let timeline = fixture();
+    // R-183: a member feeds its bus whole through its group Aux; its OUT stays on the main output.
+    const groupAux = (state, stripId) => readMixStrip(state, stripId).chain.find((module) => module.module_id === `${stripId}:group_aux`);
     timeline = createMixGroup(timeline, { group_id: 'g1', master_strip_id: busStrip, member_strip_ids: [voice] });
-    assert.deepEqual(readMixStrip(timeline, voice).output.destination, { kind: 'bus', id: 'mix_bus' });
+    assert.deepEqual(groupAux(timeline, voice).destination, { kind: 'bus', id: 'mix_bus' });
+    assert.deepEqual(groupAux(timeline, voice).params, { send: 1, pass: 0 });
+    assert.deepEqual(readMixStrip(timeline, voice).output.destination, { kind: 'main' });
     timeline = joinMixGroup(timeline, { strip_id: filmAudio, group_id: 'g1' });
     assert.equal(resolveMixGroups(timeline).some((group) => group.native), false);
-    assert.deepEqual(readMixStrip(timeline, filmAudio).output.destination, { kind: 'bus', id: 'mix_bus' });
+    assert.deepEqual(groupAux(timeline, filmAudio).destination, { kind: 'bus', id: 'mix_bus' });
     timeline = leaveMixGroup(timeline, { strip_id: voice });
+    assert.equal(groupAux(timeline, voice), undefined);
     assert.deepEqual(readMixStrip(timeline, voice).output.destination, { kind: 'main' });
     timeline = dissolveMixGroup(timeline, { group_id: 'g1' });
     assert.equal(resolveMixGroups(timeline).length, 0);
@@ -134,8 +148,9 @@ test('audio groups are sub-mix buses; leaving restores the master destination; n
 
 test('removing a bus track prunes routes to it and transfers carry strip settings', () => {
     let timeline = fixture();
-    timeline = setMixOutput(timeline, { strip_id: voice, destination: { kind: 'bus', id: 'mix_bus' } });
+    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'aux_a', type: 'aux', destination: { kind: 'bus', id: 'mix_bus' } });
     const pruned = removeTrack(timeline, { track_id: 'mix_bus' });
+    assert.equal(readMixStrip(pruned, voice).chain.find((module) => module.module_id === 'aux_a').destination, null);
     assert.deepEqual(readMixStrip(pruned, voice).output.destination, { kind: 'main' });
     const tuned = updateMixModule(fixture(), { strip_id: voice, module_id: 'mix_empty_1:audio:pan', params: { pan: 0.75 } });
     const result = transferTracksBetweenTimelines(tuned, fixture('other'), { track_id: 'mix_empty_1', target_section_id: 'other_section' });

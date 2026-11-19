@@ -90,13 +90,8 @@ impl Segment {
                 self.start, self.end, frames
             ));
         }
-        if self.is_stretched() {
-            if cfg!(target_arch = "wasm32") {
-                return Err("real-time stretch is not built for this platform".into());
-            }
-            if !(0.25..=4.0).contains(&self.stretch) {
-                return Err(format!("stretch ×{} outside ×0.25..×4", self.stretch));
-            }
+        if self.is_stretched() && !(0.25..=4.0).contains(&self.stretch) {
+            return Err(format!("stretch ×{} outside ×0.25..×4", self.stretch));
         }
         if let Some(spec) = self.looping {
             if spec.start < self.start || spec.end > self.end || spec.start + 2 > spec.end {

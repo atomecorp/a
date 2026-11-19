@@ -12,9 +12,11 @@ export const INSTRUMENT_TYPE = Object.freeze({ type: INSTRUMENT_ATOME_TYPE, kind
     // Its tool's label (≤ 6 letters, AGENTS.md rule 11) and glyph.
     short_name: { type: 'string', maxLength: 6 },
     icon: { type: 'string', maxLength: 64 },
-    // The normalized description: { id, kind: 'sampler', seed, params, samples, zones }.
+    // The normalized description: { id, kind: 'sampler', seed, params, samples, zones }, or a synth's
+    // { id, kind: 'synth', seed, params, samples: [], zones: [], synth: { bricks, routes, output } } (R-186).
     instrument: { type: 'object', required: ['kind', 'samples', 'zones'], properties: {
-        kind: { type: 'string', enum: ['sampler'] },
+        kind: { type: 'string', enum: ['sampler', 'synth'] },
+        synth: { type: 'object', required: ['bricks', 'routes', 'output'] },
         samples: { type: 'array', items: { type: 'object' } },
         zones: { type: 'array', maxItems: INSTRUMENT_ZONES_MAX, items: { type: 'object' } }
     } },

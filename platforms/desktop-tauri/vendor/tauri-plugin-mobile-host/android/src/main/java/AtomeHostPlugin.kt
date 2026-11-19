@@ -23,6 +23,7 @@ class AtomeHostPlugin(private val activity: Activity) : Plugin(activity) {
     override fun load(webView: WebView) {
         NativeCommunication.attach(activity, webView)
         StreamingView.attach(webView)
+        ExternalDisplay.attach(activity, webView)
         AtomeAlarms.noteIntent(activity, activity.intent, webView)
     }
     override fun onResume() { NativeCommunication.signal() }

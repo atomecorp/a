@@ -34,7 +34,7 @@ struct AppleMusicRequest {
         "search": ["query", "scope", "kind", "limit"], "list_playlists": ["limit", "offset"],
         "list_library": ["kind", "limit", "offset"],
         "favorite_current": ["song_id", "entry_id"],
-        "playlist_tracks": ["id", "scope", "limit", "offset"], "play": ["id", "query", "scope", "kind"],
+        "playlist_tracks": ["id", "scope", "limit", "offset"], "play": ["id", "query", "scope", "kind", "queue_ids"],
         "create_playlist": ["name", "description"], "add_tracks": ["playlist_id", "track_ids", "scope"]
     ]
     init(operation: String, input: [String: Any]) throws {
@@ -53,8 +53,8 @@ struct AppleMusicRequest {
                 guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
                       number.doubleValue == Double(number.intValue), number.intValue >= (key == "limit" ? 1 : 0),
                       number.intValue <= (key == "limit" ? 25 : 10000) else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
-            } else if key == "track_ids" || key == "ids" {
-                guard let ids = value as? [String], !ids.isEmpty, ids.count <= 25, Set(ids).count == ids.count,
+            } else if key == "track_ids" || key == "ids" || key == "queue_ids" {
+                guard let ids = value as? [String], !ids.isEmpty, ids.count <= (key == "queue_ids" ? 100 : 25), Set(ids).count == ids.count,
                       ids.allSatisfy(Self.validID) else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
             } else {
                 guard let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || key == "description",
@@ -75,6 +75,9 @@ struct AppleMusicRequest {
         if operation == "play" && ((input["id"] == nil) == (input["query"] == nil) || (input["id"] != nil && input["kind"] == nil)) {
             throw AppleMusicFailure(code: "INVALID_ARGUMENT")
         }
+        if let queue = input["queue_ids"] as? [String], input["kind"] as? String != "song" || !queue.contains(input["id"] as? String ?? "") {
+            throw AppleMusicFailure(code: "INVALID_ARGUMENT")
+        }
     }
     static func validID(_ value: String) -> Bool {
         !value.isEmpty && value.count <= 200 && value.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil
@@ -87,5 +90,6 @@ struct AppleMusicRequest {
     var seconds: Double { (input["seconds"] as? NSNumber)?.doubleValue ?? 0 }
     var size: Int { (input["size"] as? NSNumber)?.intValue ?? 256 }
     var ids: [String] { input["ids"] as? [String] ?? [] }
+    var queueIDs: [String] { input["queue_ids"] as? [String] ?? [] }
     func string(_ key: String) -> String { input[key] as? String ?? "" }
 }

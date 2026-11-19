@@ -191,12 +191,10 @@ impl News {
             .user_name(host)
             .await
             .unwrap_or_else(|| definition.host_name.into());
-        let now = chrono::Utc::now();
+        let now = atome_js_values::dates::now_ms();
         for (key, image, age_hours) in definition.opening_posts {
             let post_id = format!("{}_{key}", definition.id);
-            let created = (now - chrono::Duration::hours(*age_hours))
-                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-                .to_string();
+            let created = atome_js_values::iso(now - age_hours * 3_600_000);
             let publication = json!({ "id": post_id, "type": "news_publication", "properties": {
                 "source_domain": "community", "community": definition.id, "community_post_key": key, "news_id": post_id,
                 "news_post_id": post_id, "author_id": host, "author_name": author_name, "title": "", "preview": "",

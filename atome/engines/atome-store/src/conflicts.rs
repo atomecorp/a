@@ -1,19 +1,14 @@
 use crate::append::{
     ConflictMode, JsonEvent, event_payload_map, event_property_patch, event_touched_keys,
 };
-use chrono::{DateTime, NaiveDateTime};
+use atome_js_values::dates;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
 pub fn timestamp(value: &str) -> Option<i64> {
-    DateTime::parse_from_rfc3339(value)
-        .map(|date| date.timestamp_millis())
-        .ok()
-        .or_else(|| {
-            NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S")
-                .ok()
-                .map(|date| date.and_utc().timestamp_millis())
-        })
+    dates::rfc3339(value)
+        .map(|date| date.utc.millis())
+        .or_else(|| dates::naive(value, "%Y-%m-%d %H:%M:%S").map(dates::Instant::millis))
 }
 
 // Same deterministic timestamp/event-id ordering as database/adole_conflicts.js.
@@ -225,4 +220,19 @@ pub fn record_decisions(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[path = "../../../../tests/atome_js_values/golden_support.rs"]
+mod golden;
+
+#[cfg(test)]
+mod tests {
+    // `timestamp` reads every text as chrono read it before jiff (chrono_golden.tsv).
+    #[test]
+    fn timestamps_read_as_chrono_read_them() {
+        super::golden::check("", "store_timestamp", |text| {
+            super::golden::opt(super::timestamp(text))
+        });
+    }
 }

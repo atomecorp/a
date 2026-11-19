@@ -5,7 +5,8 @@ import {createHomePreferencesRuntime} from '../../eVe/intuition/runtime/bevy_pan
 const flatten=nodes=>nodes.flatMap(n=>[n,...flatten(n.children||[])]);
 test('profile preference defaults on, keeps an explicit refusal and stores no device state',()=>{
  const profile=normalizeHomeProfile({preferences:{assistant:{voiceActivation:false,armed:true}}});
- expect(profile.preferences.assistant).toEqual({voiceActivation:false,engine:false,locale:'fr-FR',ai_budget_tokens_per_day:0});
+ // With the Économie ↔ Qualité balance (R-120, 5 by default) and the translation of the CB, the Appel and the bottles (R-173: text, on, no refusal).
+ expect(profile.preferences.assistant).toEqual({voiceActivation:false,engine:false,locale:'fr-FR',ai_budget_tokens_per_day:0,tradeoff:5,translation:{mode:'text',no_translate:false,on:true}});
  expect(normalizeHomeProfile({}).preferences.assistant.voiceActivation).toBe(true);
 });
 test('the AI engine is off for a new profile and kept on only by an explicit choice (D18 item 7)',()=>{
@@ -16,7 +17,7 @@ test('the AI engine is off for a new profile and kept on only by an explicit cho
 test('the assistant section is the engine switch, the voice switch, the fixed phrase and the enrollment button',()=>{
  const intents=[]; const build=state=>flatten([buildHomeAssistantBody({state:{profile:normalizeHomeProfile({}),...state},width:420,emit:i=>intents.push(i)})]);
  const idle=build({});
- expect(idle.filter(n=>n.kind==='text').map(n=>n.id)).toEqual(['home_assistant_engine_label','home_assistant_enabled_label','home_assistant_phrase','home_assistant_improve_label'].filter(id=>idle.some(n=>n.id===id)));
+ expect(idle.filter(n=>n.kind==='text').map(n=>n.id)).toEqual(['home_assistant_engine_label','home_assistant_enabled_label','home_assistant_phrase','home_assistant_improve_label','home_assistant_translation_text_label','home_assistant_translation_voice_label','home_assistant_translation_none_label','home_assistant_translation_no_translate_label'].filter(id=>idle.some(n=>n.id===id)));
  expect(idle.filter(n=>n.kind==='button').map(n=>n.id)).toEqual(['home_assistant_improve']);
  const running=build({wakeEnrollment:{text:'Phrase 1 sur 4'}});
  expect(running.find(n=>n.id==='home_assistant_enrollment').kind).toBe('text');

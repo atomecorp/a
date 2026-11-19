@@ -153,7 +153,7 @@ pub(super) const GUEST_ADOPTION_FILES: [&str; 1] = [
 ];
 
 // Public events, the shop, coaches, scheduled sends, websites, the objectives network and moderation, in that order.
-pub(super) const SERVICES: [&str; 44] = [
+pub(super) const SERVICES: [&str; 46] = [
     r#"CREATE TABLE IF NOT EXISTS public_event_series (
         event_id TEXT PRIMARY KEY,
         author_id TEXT NOT NULL,
@@ -387,6 +387,25 @@ pub(super) const SERVICES: [&str; 44] = [
         total_cents INTEGER NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )"#,
+    // A domain ordered at the real registrar (site/domain_orders.rs, R-193): its money hold, its
+    // OVH order and the prices it was quoted, until OVH delivers it or gives up.
+    r#"CREATE TABLE IF NOT EXISTS site_domain_orders (
+        hold_ref TEXT PRIMARY KEY,
+        domain TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        order_id INTEGER,
+        state TEXT NOT NULL CHECK(state IN ('ordering', 'pending', 'delivered', 'cancelled', 'failed', 'uncertain')),
+        site_id TEXT NOT NULL DEFAULT '',
+        auto_renew INTEGER NOT NULL DEFAULT 1,
+        provider_cents INTEGER NOT NULL,
+        renew_provider_cents INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        commission_cents INTEGER NOT NULL,
+        total_cents INTEGER NOT NULL,
+        created_ms INTEGER NOT NULL,
+        closed_ms INTEGER
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_site_domain_orders_domain ON site_domain_orders(domain, state)"#,
     r#"CREATE TABLE IF NOT EXISTS objective_network_entries (
         objective_atome_id TEXT PRIMARY KEY,
         principal_id TEXT NOT NULL,
@@ -415,4 +434,152 @@ pub(super) const SERVICES: [&str; 44] = [
         handled_by TEXT,
         UNIQUE(kind, target_id)
     )"#,
+];
+
+// The CB sociale (social/cb/, database/adole_cb_social_schema.js): its pseudonyms, each behind one
+// account in one context, its reports, on a person or on a bottle (moderation.rs), and its bottles
+// (bottles.rs): each bottle, who has seen it, its anonymous reply threads and their messages; and the
+// takes of the CB's voices (recordings/, lot L4): their metadata (room token, pseudonym, times, file),
+// the holds a report's case puts on a room's last minutes, and the journal of the admins' listening.
+pub(crate) const CB: [&str; 17] = [
+    r#"CREATE TABLE IF NOT EXISTS cb_handles (
+        handle TEXT PRIMARY KEY,
+        context TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_handles_context ON cb_handles(context)"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_handles_principal ON cb_handles(principal_id)"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_person_reports (
+        target_id TEXT NOT NULL,
+        reporter_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(target_id, reporter_id)
+    )"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_bottle_reports (
+        target_id TEXT NOT NULL,
+        reporter_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(target_id, reporter_id)
+    )"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_bottles (
+        bottle_id TEXT PRIMARY KEY,
+        sender_id TEXT NOT NULL,
+        sender_handle TEXT NOT NULL,
+        zone_range TEXT NOT NULL,
+        zone_cell TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '',
+        media_file TEXT,
+        media_mime TEXT,
+        thumb_file TEXT,
+        duration_ms INTEGER,
+        state TEXT NOT NULL,
+        holder_id TEXT,
+        reserved_until INTEGER,
+        recirculations INTEGER NOT NULL DEFAULT 0,
+        created_ms INTEGER NOT NULL,
+        expires_ms INTEGER NOT NULL,
+        updated_ms INTEGER NOT NULL,
+        lang TEXT NOT NULL DEFAULT '',
+        no_translate INTEGER NOT NULL DEFAULT 0,
+        target_country TEXT
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_bottles_sea ON cb_bottles(state, zone_cell)"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_bottles_sender ON cb_bottles(sender_id, created_ms)"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_bottle_seen (
+        bottle_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        seen_ms INTEGER NOT NULL,
+        PRIMARY KEY(bottle_id, principal_id)
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_bottle_seen_principal ON cb_bottle_seen(principal_id, seen_ms)"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_bottle_threads (
+        thread_id TEXT PRIMARY KEY,
+        bottle_id TEXT NOT NULL,
+        replier_id TEXT NOT NULL,
+        replier_handle TEXT NOT NULL,
+        created_ms INTEGER NOT NULL,
+        UNIQUE(bottle_id, replier_id)
+    )"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_bottle_messages (
+        message_id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        from_sender INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        created_ms INTEGER NOT NULL,
+        lang TEXT NOT NULL DEFAULT '',
+        no_translate INTEGER NOT NULL DEFAULT 0
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_bottle_messages_thread ON cb_bottle_messages(thread_id, created_ms)"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_recordings (
+        recording_id TEXT PRIMARY KEY,
+        room TEXT NOT NULL,
+        room_kind TEXT NOT NULL,
+        handle TEXT NOT NULL,
+        started_ms INTEGER NOT NULL,
+        ended_ms INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        file TEXT NOT NULL,
+        bytes INTEGER NOT NULL,
+        sealing TEXT NOT NULL DEFAULT 'plain'
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_recordings_room ON cb_recordings(room, ended_ms)"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_recording_holds (
+        case_id TEXT NOT NULL,
+        room TEXT NOT NULL,
+        from_ms INTEGER NOT NULL,
+        held_ms INTEGER NOT NULL,
+        PRIMARY KEY(case_id, room, held_ms)
+    )"#,
+    r#"CREATE TABLE IF NOT EXISTS cb_recording_listens (
+        listen_id TEXT PRIMARY KEY,
+        case_id TEXT NOT NULL,
+        recording_id TEXT,
+        admin_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        at_ms INTEGER NOT NULL
+    )"#,
+];
+
+/// The columns lot L2b added to the bottles (lieu et traduction): an older table gains them, in this order
+/// (database/adole_cb_social_schema.js `CB_BOTTLE_COLUMNS`). The country a bottle was thrown to is the only one kept.
+/// The columns lot L2c took back (user, 16 Nov. 2026: no catcher's country is ever stored): a table made by lot L2b loses
+/// them, their values blanked first with `secure_delete` so no page keeps them (database/adole_cb_social_schema.js
+/// `CB_DROPPED_COLUMNS`).
+pub(crate) const CB_DROPPED_COLUMNS: [(&str, &str); 1] = [("cb_bottles", "catcher_country")];
+
+pub(crate) const CB_COLUMNS: [(&str, &[(&str, &str)]); 2] = [
+    (
+        "cb_bottles",
+        &[
+            (
+                "lang",
+                "ALTER TABLE cb_bottles ADD COLUMN lang TEXT NOT NULL DEFAULT ''",
+            ),
+            (
+                "no_translate",
+                "ALTER TABLE cb_bottles ADD COLUMN no_translate INTEGER NOT NULL DEFAULT 0",
+            ),
+            (
+                "target_country",
+                "ALTER TABLE cb_bottles ADD COLUMN target_country TEXT",
+            ),
+        ],
+    ),
+    (
+        "cb_bottle_messages",
+        &[
+            (
+                "lang",
+                "ALTER TABLE cb_bottle_messages ADD COLUMN lang TEXT NOT NULL DEFAULT ''",
+            ),
+            (
+                "no_translate",
+                "ALTER TABLE cb_bottle_messages ADD COLUMN no_translate INTEGER NOT NULL DEFAULT 0",
+            ),
+        ],
+    ),
 ];

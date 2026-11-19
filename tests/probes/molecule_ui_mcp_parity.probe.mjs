@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { registerTimelineDefaultTools } from '../../atome/src/squirrel/ai/default_tools_timeline.js';
+// The assistant tools run their Runtime V2 twins (ui.timeline.*, eVe/intuition/tools/timeline_actions.js).
+import '../../eVe/intuition/tools/timeline_actions.js';
+import { TOOL_REGISTRY } from '../../eVe/intuition/runtime/tool_state.js';
+import { clearGroupTimelineApi, registerGroupTimelineApi } from '../../eVe/intuition/runtime/group_timeline_api.js';
 import { createMoleculeSession } from '../../eVe/intuition/tools/molecule/session/index.js';
 import { createRichMoleculeFixture } from '../fixtures/molecule/canonical_v2_fixtures.mjs';
 
@@ -33,12 +37,16 @@ test('UI actions and MCP tools converge on the same Molecule state and history s
             return sessions.get(detail.group_id).redo();
         }
     };
-    globalThis.eveMoleculeTimelineApi = api;
+    registerGroupTimelineApi(api);
+    // The runtime's invocation envelope around the twin's own receipt (default_tools.js#invokeRuntimeDefaultTool).
+    const invokeRuntimeDefaultTool = async ({ tool_id, params }) => ({ ok: true, tool_id,
+        result: { ok: true, result: await TOOL_REGISTRY.get(tool_id).handler({ input: params }) } });
 
     try {
         const mcpTools = new Map();
         registerTimelineDefaultTools({
-            Agent: { registerTool(definition) { mcpTools.set(definition.name, definition); } }
+            Agent: { registerTool(definition) { mcpTools.set(definition.name, definition); } },
+            invokeRuntimeDefaultTool
         });
 
         const command = {
@@ -83,6 +91,6 @@ test('UI actions and MCP tools converge on the same Molecule state and history s
         assert.equal(sessions.get('ui').getState().transport.playhead_seconds, 0);
         assert.equal(sessions.get('mcp').getState().transport.playhead_seconds, 0);
     } finally {
-        delete globalThis.eveMoleculeTimelineApi;
+        clearGroupTimelineApi();
     }
 });

@@ -117,6 +117,11 @@ impl Keymap {
                     "zone {index}: its takes share one stretch (one stretcher per voice)"
                 ));
             }
+            if let Some(envelope) = zone.envelope {
+                envelope
+                    .validate()
+                    .map_err(|reason| format!("zone {index}: {reason}"))?;
+            }
             if zone.output as usize >= MAX_OUTPUTS {
                 return Err(format!(
                     "zone {index}: output {} past the {MAX_OUTPUTS} an instrument has",

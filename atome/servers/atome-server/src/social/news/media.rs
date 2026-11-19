@@ -3,14 +3,13 @@
 // media; the audience reads a clean copy, never the author's file (cahier FEAT-005 / O13: EXIF
 // and GPS always stripped): a picture loses its metadata byte by byte (media/metadata_strip.rs),
 // a sound or a video is copied by ffmpeg without its global and stream metadata, chapters or
-// data tracks. The copy lies under the author's `Downloads/news_shared/`, registered as a file
+// data tracks (media/clean.rs, shared with the CB sociale's bottles). The copy lies under the author's `Downloads/news_shared/`, registered as a file
 // of theirs: what the audience may read is its id alone. A third party's video an online service
 // hosts (atome/src/shared/online_video_refs.js `onlineVideoShareLink`) may not be redistributed:
 // it leaves as its link alone.
 use super::News;
 use super::db::{get, text};
 use crate::http::uri::{decode_uri_component, encode_uri_component};
-use crate::media::metadata_strip::{Format, format_of, strip_image};
 use crate::media::{files, storage};
 use crate::vault_router::js;
 use serde_json::{Value as JsonValue, json};
@@ -256,10 +255,9 @@ impl News {
         let bytes = tokio::fs::read(&source.file_path)
             .await
             .map_err(|e| e.to_string())?;
-        let format = format_of(&bytes);
-        if matches!(format, Format::Heif | Format::Unknown) {
-            return Err(format!("news_media_format_unsupported:{}", format.name()));
-        }
+        // A News keeps an SVG as it is (it carries no Exif); HEIF and unknown formats are refused.
+        let format = crate::media::clean::accepted(&bytes, &[])
+            .map_err(|error| error.replace("media_", "news_media_"))?;
         let named = js::first(meta, &["file_name", "original_name"])
             .map(js::string)
             .unwrap_or_else(|| source.file_path.to_string_lossy().into_owned());
@@ -271,54 +269,15 @@ impl News {
         let target = self
             .storage
             .asset_path(author, &format!("{CLEAN_DIR}/{name}"))?;
-        if format == Format::Av {
-            let mp4 = [".mp4", ".m4v", ".mov", ".m4a"].contains(&extension.as_str());
-            let mut command = tokio::process::Command::new("ffmpeg");
-            command
-                .args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
-                .arg(&source.file_path)
-                .args([
-                    "-map",
-                    "0:v?",
-                    "-map",
-                    "0:a?",
-                    "-c",
-                    "copy",
-                    "-map_metadata",
-                    "-1",
-                    "-map_metadata:s:v",
-                    "-1",
-                    "-map_metadata:s:a",
-                    "-1",
-                    "-map_chapters",
-                    "-1",
-                    "-fflags",
-                    "+bitexact",
-                ]);
-            if mp4 {
-                command.args(["-movflags", "+faststart"]);
-            }
-            let output = tokio::time::timeout(
-                std::time::Duration::from_secs(120),
-                command.arg(&target.file_path).output(),
-            )
-            .await
-            .map_err(|_| "news_media_clean_failed: timeout".to_string())?
-            .map_err(|e| format!("news_media_clean_failed: {e}"))?;
-            if !output.status.success() {
-                return Err(format!(
-                    "news_media_clean_failed: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                ));
-            }
-        } else {
-            let cleaned = if format == Format::Svg {
-                bytes
-            } else {
-                strip_image(&bytes)?
-            };
-            write_private(&target.file_path, &cleaned).await?;
-        }
+        crate::media::clean::copy(
+            &source.file_path,
+            bytes,
+            format,
+            &extension,
+            &target.file_path,
+        )
+        .await
+        .map_err(|error| error.replace("media_clean_failed", "news_media_clean_failed"))?;
         let size = tokio::fs::metadata(&target.file_path)
             .await
             .map_err(|e| e.to_string())?
@@ -345,17 +304,4 @@ impl News {
         .await?;
         Ok(id)
     }
-}
-
-async fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
-    use tokio::io::AsyncWriteExt;
-    let mut file = tokio::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)
-        .await
-        .map_err(|e| e.to_string())?;
-    file.write_all(bytes).await.map_err(|e| e.to_string())
 }

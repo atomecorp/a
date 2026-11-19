@@ -92,7 +92,8 @@ test.each([
 
     assert.equal(result.ok, true);
     assert.equal(calls.filter((call) => call.type === 'transform').length, 1);
-    assert.equal(calls.filter((call) => call.type === 'redraw').length + delayedRedraws, 1);
+    // The queued transform op wakes the engine and is drawn by the update that drains it: no second request.
+    assert.equal(calls.filter((call) => call.type === 'redraw').length + delayedRedraws, 0);
 });
 
 test('Bevy startup without diagnostics waits across the runner boundary and rejects asynchronous panics', async () => {
@@ -221,6 +222,9 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     // and the shared project-view item model used by every structured queue.
     // The media controls and cue seek a paused video's frame, the record preview
     // drives its own take and the Visual program drives its object playback.
+    // A connected screen's page (R-212) plays nothing of its own: it mirrors the
+    // device's playing videos, silent, from the device's time, so it drives the
+    // decode of those nodes itself (its own playback runtimes stay idle).
     // Guard that no other stray caller appears outside those canonical
     // transport owners and the defining runtime.
     const setBevyCallers = jsFilesUnder('eVe')
@@ -231,6 +235,7 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
         'eVe/domains/media/project_media_controls.js',
         'eVe/domains/media/project_media_cue.js',
         'eVe/domains/media/record_preview_playback.js',
+        'eVe/domains/rendering/external_display_follower.js',
         'eVe/domains/rendering/project_view_playback_item_model.js',
         'eVe/domains/rendering/project_view_transport_runtime.js',
         'eVe/domains/rendering/project_view_visual_program.js',
@@ -1000,13 +1005,14 @@ test('Bevy external-video shader linearizes the sampled frame before the sRGB ta
     // sRGB OETF on store, so the sample MUST be decoded to linear first. A raw
     // `frame.rgb` passthrough double-encodes it (lifted blacks, washed-out contrast).
     assert.match(shader, /fn\s+srgb_to_linear/);
-    // M1/M2 route the sample through color filters + transitions, but the final
-    // store MUST still linearize (now `srgb_to_linear(filtered)`), never a raw
-    // `frame.rgb` passthrough that would double-encode to the sRGB target.
-    assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(filtered\)\s*,\s*opacity\s*\)/);
+    // M1/M2 route the sample through color filters + transitions, then the media
+    // effects stack (`media_fx_apply`, R-184), but the final store MUST still
+    // linearize (now `srgb_to_linear(shaded.rgb)`), never a raw `frame.rgb`
+    // passthrough that would double-encode to the sRGB target.
+    assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(shaded\.rgb\)\s*,\s*opacity\s*\)/);
     assert.doesNotMatch(shader, /return\s+vec4<f32>\(\s*frame\.rgb\s*,\s*opacity\s*\)/);
-    assert.match(shader, /textureSample\(\s*mask_texture\s*,\s*mask_sampler\s*,\s*in\.uv\s*\)/,
-        'WGSL samples a regular texture through the textureSample builtin');
+    assert.match(shader, /textureSample(Level)?\(\s*mask_texture\s*,\s*mask_sampler\s*,\s*in\.uv\s*(,\s*0\.0\s*)?\)/,
+        'WGSL samples a regular texture through the textureSample builtins');
     assert.doesNotMatch(shader, /mask_texture\s*\.\s*sample\s*\(/,
         'method-call texture sampling is invalid WGSL and breaks the whole video pipeline');
 });

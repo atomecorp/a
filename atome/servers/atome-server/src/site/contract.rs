@@ -11,11 +11,12 @@ pub const SITE_SLUG_MAX: usize = 48;
 pub const SITE_ATOME_TYPE: &str = "site";
 pub const SITE_FORM_PROPERTY: &str = "site_form";
 // The top-level paths atome.one already serves, and the system words kept for later (Q7).
-const RESERVED_SITE_SLUGS: [&str; 65] = [
+const RESERVED_SITE_SLUGS: [&str; 66] = [
     "api",
     "ws",
     "atome",
     "eve",
+    "music",
     "src",
     "vendor",
     "assets",

@@ -102,7 +102,7 @@ pub(super) async fn answer(asker: &Asker<'_>, message: &JsonValue) -> Result<Jso
         Some("calendar_event") => false,
         _ => return Ok(failure(message, "dav_domain_invalid")),
     };
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = atome_js_values::dates::now_ms();
     let _running = {
         let mut inflight = INFLIGHT.lock().expect("personal import lock");
         if inflight.contains(user) || WINDOWS.limited(user, now) {

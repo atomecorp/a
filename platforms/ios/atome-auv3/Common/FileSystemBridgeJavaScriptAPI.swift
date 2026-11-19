@@ -75,7 +75,8 @@ extension FileSystemBridge {
                     multiple: multiple !== false,
                     sources: extra.sources || null,
                     kinds: extra.kinds || null,
-                    labels: extra.labels || null
+                    labels: extra.labels || null,
+                    folders: extra.folders === true
                 });
             },
             copy_to_ios_local: function(requestedDestPath, fileTypes, callback){

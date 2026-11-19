@@ -310,3 +310,124 @@ mod region {
         );
     }
 }
+
+// A source whose every frame tells its own time (0 at the start, 1 at one second).
+fn clock(frames: usize) -> StaticSoundData {
+    let data: Arc<[Frame]> = (0..frames)
+        .map(|index| Frame::from_mono(index as f32 / frames as f32))
+        .collect();
+    StaticSoundData {
+        sample_rate: RATE,
+        frames: data,
+        settings: Default::default(),
+        slice: None,
+    }
+}
+
+#[test]
+fn a_reversed_voice_plays_its_window_from_its_end_to_its_start() {
+    let request = VoiceRequest {
+        start_seconds: 0.25,
+        duration_seconds: Some(0.25),
+        reverse: true,
+        ..Default::default()
+    };
+    let frames = RATE as usize / 4;
+    let (left, _) = render(&request, clock(RATE as usize), frames + BLOCK * 4);
+    assert!(
+        (left[64] - 0.5).abs() < 0.01,
+        "starts at the window's end: {}",
+        left[64]
+    );
+    assert!(
+        (left[frames - 64] - 0.25).abs() < 0.01,
+        "ends at the window's start: {}",
+        left[frames - 64]
+    );
+    assert!(
+        left[64..frames - 64]
+            .windows(2)
+            .all(|pair| pair[1] <= pair[0] + 1e-6),
+        "runs backwards"
+    );
+    assert!(
+        left[frames + BLOCK * 2..]
+            .iter()
+            .all(|value| value.abs() < 1e-6),
+        "stops at the window's start"
+    );
+}
+
+#[test]
+fn a_reversed_voice_without_duration_plays_from_the_source_end_down_to_its_start() {
+    let request = VoiceRequest {
+        start_seconds: 0.5,
+        reverse: true,
+        ..Default::default()
+    };
+    let frames = RATE as usize / 2;
+    let (left, finished) = render(&request, clock(RATE as usize), frames + BLOCK * 4);
+    assert!(left[64] > 0.99, "starts at the source's end: {}", left[64]);
+    assert!(
+        (left[frames - 64] - 0.5).abs() < 0.01,
+        "ends at its start: {}",
+        left[frames - 64]
+    );
+    assert!(finished, "finishes once its window is played");
+}
+
+#[test]
+fn the_decay_falls_to_the_sustain_level_and_the_release_falls_from_it() {
+    let envelope = VoiceEnvelope {
+        duration_seconds: 1.0,
+        end_seconds: Some(1.0),
+        attack_seconds: 0.1,
+        decay_seconds: 0.2,
+        sustain_level: 0.5,
+        release_seconds: 0.2,
+        ..Default::default()
+    };
+    assert!(
+        (envelope.gain_at(0.05) - 0.5).abs() < 1e-6,
+        "half the attack"
+    );
+    assert!(
+        (envelope.gain_at(0.1) - 1.0).abs() < 1e-6,
+        "the attack's peak"
+    );
+    assert!(
+        (envelope.gain_at(0.2) - 0.75).abs() < 1e-6,
+        "half the decay"
+    );
+    assert!((envelope.gain_at(0.5) - 0.5).abs() < 1e-6, "the sustain");
+    assert!(
+        (envelope.gain_at(0.9) - 0.25).abs() < 1e-6,
+        "half the release, from the sustain"
+    );
+    let json: VoiceEnvelope = serde_json::from_str(r#"{"durationSeconds":1}"#).expect("json");
+    assert_eq!(
+        json.sustain_level, 1.0,
+        "no sustain given: the level holds at 1"
+    );
+}
+
+#[test]
+fn a_reversed_voice_of_its_whole_source_plays_it_from_its_end() {
+    let request = VoiceRequest {
+        duration_seconds: Some(1.0),
+        reverse: true,
+        envelope: Some(VoiceEnvelope {
+            duration_seconds: 1.0,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let frames = RATE as usize;
+    let (left, _) = render(&request, clock(RATE as usize), frames);
+    assert!(left[64] > 0.99, "starts at the source's end: {}", left[64]);
+    assert!(
+        left[frames - 64] < 0.01,
+        "ends at its start: {}",
+        left[frames - 64]
+    );
+}

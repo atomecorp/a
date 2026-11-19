@@ -14,7 +14,10 @@ use crate::workspace_backdrop::{
     AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER, set_workspace_backdrop_enabled,
 };
 use crate::workspace_blur::{AssistantOpticsSettings, backdrop_blur_lod};
-use crate::{types::AtomeProceduralSdf, video_external_texture::video_quad_mesh_handle_from_size};
+use crate::{
+    types::{AtomeProceduralSdf, MYSTIC_MAX_TILES},
+    video_external_texture::video_quad_mesh_handle_from_size,
+};
 
 const PROCEDURAL_SDF_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("aedaf527-1d86-49dd-bfea-e27453fa6932");
@@ -37,9 +40,9 @@ pub struct ProceduralSdfUniform {
     pub liquid_drops: [Vec4; 24],
     pub liquid_drop_shapes: [Vec4; 24],
     pub liquid_drop_count: Vec4,
-    pub mystic_tiles: [Vec4; 24],
-    pub mystic_tile_motion: [Vec4; 24],
-    pub mystic_tile_colors: [Vec4; 24],
+    pub mystic_tiles: [Vec4; MYSTIC_MAX_TILES],
+    pub mystic_tile_motion: [Vec4; MYSTIC_MAX_TILES],
+    pub mystic_tile_colors: [Vec4; MYSTIC_MAX_TILES],
     pub mystic_count: Vec4,
     pub mystic_style: Vec4,
 }
@@ -173,9 +176,9 @@ fn material_from_contract(
             // Un scalaire seul romprait l'alignement std140 du bloc : on le pousse
             // dans un vec4, comme tous les autres reglages de ce materiau.
             liquid_drop_count: Vec4::new(normalized.liquid_drop_count, 0.0, 0.0, 0.0),
-            mystic_tiles: normalized.mystic_tiles.map(Vec4::from_array),
-            mystic_tile_motion: normalized.mystic_tile_motion.map(Vec4::from_array),
-            mystic_tile_colors: normalized.mystic_tile_colors.map(Vec4::from_array),
+            mystic_tiles: normalized.mystic_tiles.0.map(Vec4::from_array),
+            mystic_tile_motion: normalized.mystic_tile_motion.0.map(Vec4::from_array),
+            mystic_tile_colors: normalized.mystic_tile_colors.0.map(Vec4::from_array),
             mystic_count: Vec4::from_array(normalized.mystic_count),
             mystic_style: Vec4::from_array(normalized.mystic_style),
         },

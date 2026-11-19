@@ -25,7 +25,9 @@ export const createWakeCapture = ({ env = globalThis, onFrame, onError }) => {
         // without it the native capture only delivered silence while eVe looked to be listening.
         if (isTauriAudioRuntime(env) && (await invoke('plugin:stt|request_permission'))?.microphone !== 'granted') throw new Error('microphone_permission_denied');
         if (closed) return;
-        let timer = null, subscribed = true;
+        // Subscribed only once the start is granted: a start refused (the capture busy elsewhere, a connected screen's
+        // page) must never stop the capture its owner holds.
+        let timer = null, subscribed = false;
         stopCapture = async () => {
             if (timer !== null) env.clearTimeout(timer);
             timer = null;
@@ -45,7 +47,9 @@ export const createWakeCapture = ({ env = globalThis, onFrame, onError }) => {
             }
         };
         await invoke('audio_wake_start', { sampleRate: WAKE_SAMPLE_RATE });
-        if (!closed) void read();
+        subscribed = true;
+        if (closed) { await stopCapture(); return; }
+        void read();
     };
 
     const startBrowser = async () => {

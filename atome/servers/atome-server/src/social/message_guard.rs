@@ -8,7 +8,7 @@ use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
 const MAX_BYTES: usize = 128 * 1024;
-const TEXT_MAX: usize = 8000;
+pub(crate) const TEXT_MAX: usize = 8000;
 // `publication` is no message: only the News broadcast makes one.
 const KINDS: [&str; 2] = ["message", "share-request"];
 

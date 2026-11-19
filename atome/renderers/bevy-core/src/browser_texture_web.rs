@@ -51,6 +51,8 @@ struct BrowserTextureJob {
     width: u32,
     height: u32,
     mask: Option<AtomeTexture>,
+    /// A new bitmap for an image already shown (`browser_texture_refresh.rs`).
+    refresh: bool,
 }
 
 // The renderer runs on the page's one thread: the bitmaps never leave it.
@@ -158,6 +160,7 @@ pub(crate) fn queue_browser_texture(
     image.texture_descriptor.view_formats = &[RAW_FORMAT];
     image.sampler = ImageSampler::linear();
     let handle = images.add(image);
+    crate::browser_texture_refresh::remember_mask(handle.id(), mask.as_ref());
     JOBS.with(|jobs| {
         jobs.borrow_mut().push(BrowserTextureJob {
             image: handle.id(),
@@ -165,9 +168,32 @@ pub(crate) fn queue_browser_texture(
             width: texture.width,
             height: texture.height,
             mask,
+            refresh: false,
         })
     });
     Ok(handle)
+}
+
+/// A new bitmap of the image's own size for an image made here (`browser_texture_refresh.rs`).
+pub(crate) fn queue_refresh_job(
+    image: AssetId<Image>,
+    source: wgpu::ExternalImageSource,
+    mask: Option<AtomeTexture>,
+) {
+    let (width, height) = (source.width(), source.height());
+    JOBS.with(|jobs| {
+        let mut jobs = jobs.borrow_mut();
+        // Only the latest bitmap of an image is copied.
+        jobs.retain(|job| !(job.refresh && job.image == image));
+        jobs.push(BrowserTextureJob {
+            image,
+            source,
+            width,
+            height,
+            mask,
+            refresh: true,
+        });
+    });
 }
 
 pub struct BrowserTexturePlugin;
@@ -180,6 +206,11 @@ impl Plugin for BrowserTexturePlugin {
             "assets/shaders/browser_texture.wgsl",
             Shader::from_wgsl
         );
+        app.add_systems(First, crate::browser_texture_refresh::run_frame_hook)
+            .add_systems(
+                PostUpdate,
+                crate::browser_texture_refresh::apply_browser_texture_refreshes,
+            );
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
@@ -290,6 +321,7 @@ fn texture_descriptor(width: u32, height: u32, label: &'static str) -> TextureDe
 fn forget_dropped_textures(main_world: Res<MainWorld>) {
     let images = main_world.resource::<Assets<Image>>();
     JOBS.with(|jobs| jobs.borrow_mut().retain(|job| images.contains(job.image)));
+    crate::browser_texture_refresh::forget_dropped_masks(images);
 }
 
 fn fill_browser_textures(
@@ -379,6 +411,9 @@ fn fill_browser_textures(
                 render_pipeline,
                 &bind_group,
             );
+            if job.refresh {
+                crate::browser_texture_refresh::count_refresh();
+            }
             None
         })
         .collect::<Vec<_>>();

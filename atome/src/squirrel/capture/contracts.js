@@ -12,9 +12,12 @@ export const CAPTURE_KINDS = Object.freeze(['audio', 'video', 'photo', 'text', '
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const definitions = {
     state: [{}, [], 'The list open on the Dashboard (a capture\'s or a creation\'s): its items (atome_id, kind, label, newest last), the current one, whether its preview shows, what plays and whether a take records.', false, 'read'],
-    start: [{ kind: { type: 'string', enum: CAPTURE_KINDS } }, ['kind'],
-        'Open a capture on the Dashboard and start it at once in the last project: a sound, a video, the photo camera, a dictated text, a MIDI take. Its list shows under the preview.', true, 'write'],
-    stop: [{}, [], 'End the take recording (it is kept and becomes current in its list).', true, 'write'],
+    start: [{ kind: { type: 'string', enum: CAPTURE_KINDS }, duration_seconds: { type: 'number', minimum: 1, maximum: 86400 } }, ['kind'],
+        'Open a capture on the Dashboard and start it at once in the last project: a sound, a video, the photo camera, a dictated text, a MIDI take. Its list shows under the preview. '
+        + 'duration_seconds (not for a photo): the take stops by itself that long after it really started, and is kept (« filme pendant 10 secondes »); '
+        + 'the result gives its take and stops_at.', true, 'write'],
+    stop: [{ take: { type: 'integer', minimum: 1 } }, [], 'End the take recording (it is kept and becomes current in its list). '
+        + 'take: only that take (the number captures.start gave); another one recording is left alone (NOTHING_RECORDING).', true, 'write'],
     close: [{}, [], 'Close the capture open on the Dashboard (its bottom record tool): a take recording is stopped and kept, the camera turned off; '
         + 'a capture begun from a list (Créer) gives that list back.', true, 'write'],
     camera: [{}, [], 'Film with the next camera while one shows (Dashboard capture, a take on a project, the import panel): the photo camera reopens on it; '
@@ -34,7 +37,7 @@ export const CAPTURE_COMMANDS = Object.freeze(Object.entries(definitions).map(([
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: CAPTURE_ERRORS },
         open: { type: 'boolean' }, project_id: { type: 'string' }, current: { type: 'string' }, previewing: { type: 'boolean' }, playing: { type: 'string' },
-        recording: { type: 'boolean' }, items: { type: 'array', items: itemSchema }, removed: { type: 'array', items: { type: 'string' } } } }
+        recording: { type: 'boolean' }, take: { type: 'integer' }, stops_at: { type: 'string' }, items: { type: 'array', items: itemSchema }, removed: { type: 'array', items: { type: 'string' } } } }
 })));
 export const validateCaptureInput = (action, input) => {
     const contract = CAPTURE_COMMANDS.find(command => command.action === action);
@@ -42,6 +45,8 @@ export const validateCaptureInput = (action, input) => {
 };
 export const captureError = error => (CAPTURE_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'WRITE_FAILED');
 export const CAPTURE_ASSISTANT_INSTRUCTIONS = 'Captures and their lists: « enregistre un son / une vidéo », « prends une photo », « dicte un texte » call captures.start '
-    + '(kind audio, video, photo, text); « arrête » during a take calls captures.stop; « ferme la capture » captures.close; « change de caméra », « l\'autre caméra » captures.camera. On the list open: captures.state gives its items; « la précédente », '
+    + '(kind audio, video, photo, text); a length asked (« filme pendant 10 secondes », « enregistre 30 secondes de son », « dicte pendant une minute ») '
+    + 'is its duration_seconds, never a stop called yourself; « arrête » during a take calls captures.stop; « arrête dans 2 minutes » calls timer.schedule '
+    + 'with tool captures.stop and delay_seconds 120; « ferme la capture » captures.close; « change de caméra », « l\'autre caméra » captures.camera. On the list open: captures.state gives its items; « la précédente », '
     + '« la suivante » call captures.show (step); « lis-la », « joue-la », « lis-moi ce texte » captures.play; « pause » captures.pause; « cache / montre l\'aperçu » '
     + 'captures.preview; « plein écran », « sors du plein écran » captures.fullscreen; « supprime-la » captures.delete with the atome_id of the current item (captures.state). Never invent an atome_id.';

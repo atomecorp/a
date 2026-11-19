@@ -75,7 +75,7 @@ async fn retention(root: PathBuf, active: Downloads) {
                 .collect::<HashSet<_>>(),
         );
         let swept = tokio::task::spawn_blocking(move || {
-            let now = chrono::Utc::now().timestamp_millis() as f64;
+            let now = atome_js_values::dates::now_ms() as f64;
             store::with_lock(&root, || store::cleanup(&root, &kept, now))
         })
         .await;
@@ -153,7 +153,7 @@ fn query_value(query: Option<&str>, name: &str) -> Option<JsonValue> {
 }
 
 pub(super) fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    atome_js_values::dates::now_ms()
 }
 
 // `POST /ios/session`: the tester's install link, under the store lock.

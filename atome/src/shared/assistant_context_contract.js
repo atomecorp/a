@@ -47,8 +47,8 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
     { name: 'assistant.session.end', required: [], properties: {},
         description: 'End the assistant session and stop listening, as a hang-up. Call it when the user dismisses the assistant: '
             + '"au revoir", "tu peux partir", "raccroche", "c\'est bon, tu peux raccrocher", "quitte", "arrête de m\'écouter", "c\'est tout, merci", "goodbye", '
-            + '"hang up". Not on a mere mention or a question about these words. The assistant says goodbye itself; '
-            + 'the wake phrase "Ève, écoute-moi" or the assistant button opens a new session.' },
+            + '"hang up". Not on a mere mention or a question about these words. Say nothing yourself: once she has left, eVe says '
+            + 'her own farewell, which names the wake phrase "Ève, écoute-moi" that, like the assistant button, opens a new session.' },
     // A call-back: an event of eVe's own calendar whose alarm rings, then reopens the assistant.
     { name: 'assistant.callback.schedule', persistent: true, required: ['reason'],
         description: 'Schedule a call-back when the user asks you to call them back or to talk to them later: « rappelle-moi dans '
@@ -63,6 +63,27 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
     { name: 'assistant.callback.run', required: ['reason'], properties: { reason: line(500), requested_at: line(40) },
         description: 'Run by a scheduled call-back\'s alarm: opens the assistant, which tells the user why it calls. Never call it '
             + 'yourself; use assistant.callback.schedule.' },
+    // Timed actions (eVe/intuition/runtime/timed_tool_runs.js): a tool run after a delay or at a time; the clocks are
+    // calendar.time.read.
+    { name: 'timer.schedule', required: ['tool'],
+        description: 'Run an Atome tool later, without asking again: after delay_seconds, or at a local time (HH:MM or '
+            + 'HH:MM:SS, the next one to come; date YYYY-MM-DD to pick another day), within 24 hours, while eVe stays open. '
+            + 'tool = the exact tool name (as for surface.run), input = its own input, action only when not pointer.click. '
+            + '« arrête l\'enregistrement dans 2 minutes » → tool captures.stop, delay_seconds 120; « à 18 h, ferme la capture » '
+            + '→ tool captures.close, time 18:00. To make a capture last a given time, prefer captures.start with duration_seconds. '
+            + 'A reminder that must ring, or a call-back, is not this tool: use the calendar or assistant.callback.schedule. '
+            + 'Then tell the user the result\'s when.',
+        properties: {
+            tool: line(128), input: { type: 'object', description: 'Input of the tool, as its own schema describes it.' },
+            action: { type: 'string', maxLength: 64 }, label: { type: 'string', maxLength: 200 },
+            delay_seconds: { type: 'number', minimum: 1, maximum: 86400 },
+            time: { type: 'string', pattern: '^\\d{1,2}:\\d{2}(:\\d{2})?$' }, date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+        } },
+    { name: 'timer.list', required: [], properties: {},
+        description: 'List the timed actions waiting (tool, when, seconds left) and the last ones run with their outcome.' },
+    { name: 'timer.cancel', required: [], properties: { timer_id: line(80), tool: line(128) },
+        description: 'Cancel timed actions: one by its timer_id (timer.list), every one of a tool, or, with neither, all of them '
+            + '(« annule le minuteur », « n\'arrête pas l\'enregistrement finalement »).' },
     // The user's other devices (surface registry + remote command relay).
     { name: 'surfaces.list', required: [], properties: {},
         description: 'List the other devices where Atome is open and connected now (spoken name, platform, shared by another '

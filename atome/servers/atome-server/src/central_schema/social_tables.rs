@@ -235,3 +235,27 @@ pub(super) const COMMUNICATION: [&str; 17] = [
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )"#,
 ];
+
+// The Appel's pairs put in touch (social/cb/random_call.rs, database/adole_cb_social_schema.js `ensureCbSocialTables`):
+// each pair a keyed fingerprint only (HMAC-SHA256 of its two accounts, its key derived from the recordings' key,
+// social/cb/recordings/seal.rs), never an account; and the instant of its invitation. A row leaves past
+// `cb.call_pair_days` (21 days), so a restart forgets no pair still kept apart.
+pub(super) const CB_CALL_PAIRS: [&str; 2] = [
+    r#"CREATE TABLE IF NOT EXISTS cb_call_pairs (
+        pair_hash TEXT PRIMARY KEY,
+        met_ms INTEGER NOT NULL
+    )"#,
+    r#"CREATE INDEX IF NOT EXISTS idx_cb_call_pairs_met ON cb_call_pairs(met_ms)"#,
+];
+
+// The number of each channel a report froze (social/cb/mod.rs `report`, recordings/mod.rs `hold_channels`), for the
+// moderator's case file once the channel is no longer in use; beside `cb_recording_holds`, which it leaves as it is, and
+// erased with the holds of a closed case (database/adole_cb_social_schema.js `ensureCbSocialTables`).
+pub(super) const CB_RECORDING_HOLD_CHANNELS: [&str; 1] =
+    [r#"CREATE TABLE IF NOT EXISTS cb_recording_hold_channels (
+        case_id TEXT NOT NULL,
+        room TEXT NOT NULL,
+        channel INTEGER NOT NULL,
+        held_ms INTEGER NOT NULL,
+        PRIMARY KEY(case_id, room)
+    )"#];

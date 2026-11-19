@@ -1,4 +1,5 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
+import { MUSIC_QUEUE_MAX } from '../apple_music/contracts.js';
 
 export const MUSIC_PROVIDERS = Object.freeze(['spotify', 'deezer']);
 export const MUSIC_WRITES = Object.freeze(['create_playlist', 'add_tracks', 'favorite_current']);
@@ -38,7 +39,7 @@ const shapes = {
     list_playlists: [page, [], 'read', 'Browse the authorized user’s playlists.'],
     playlist_tracks: [{ id, ...page }, ['id'], 'read', 'Read accessible playlist items by exact provider ID.'],
     devices: [{}, [], 'read', 'List Spotify Connect playback devices. This is not a local atome audio player.'],
-    play: [{ id, kind, query: text, device_id: id }, [], 'control', 'Play an exact returned ID or resolve the user query. Ambiguous results require user selection. Uses a Spotify device; Premium required. Returns opened_unconfirmed unless actual playback is observed.'],
+    play: [{ id, kind, query: text, queue_ids: { type: 'array', minItems: 1, maxItems: MUSIC_QUEUE_MAX, uniqueItems: true, items: id }, device_id: id }, [], 'control', 'Play an exact returned ID or resolve the user query. queue_ids (song IDs, id among them) plays the list a song was chosen in, from that song, so next and previous move through it. Ambiguous results require user selection. Uses a Spotify device; Premium required. Returns opened_unconfirmed unless actual playback is observed.'],
     resume: [{ device_id: id }, [], 'control', 'Resume the Spotify device queue.'],
     pause: [{ device_id: id }, [], 'control', 'Pause playback on the Spotify device.'],
     next: [{ device_id: id }, [], 'control', 'Skip to the next track on the Spotify device.'],
@@ -69,6 +70,7 @@ export function validateMusicInput(action, input = {}) {
     const schema = MUSIC_COMMANDS.find(command => command.action === action)?.input_schema;
     if (!schema || !validateParams(schema, input).ok) return 'INVALID_ARGUMENT';
     if (action === 'play' && (!!input.id === !!input.query || (input.id && !input.kind))) return 'INVALID_ARGUMENT';
+    if (action === 'play' && input.queue_ids && (input.kind !== 'song' || !input.queue_ids.includes(input.id))) return 'INVALID_ARGUMENT';
     return null;
 }
 export const musicError = error => {

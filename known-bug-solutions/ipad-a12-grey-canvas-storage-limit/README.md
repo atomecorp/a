@@ -33,9 +33,12 @@ to learn about it.
 ## Correction
 
 - `workspace_blur_pyramid.rs` + `assets/shaders/backdrop_downsample.wgsl`: the
-  pyramid is rendered with one colour-attachment pass per mip level, each texel
-  averaging its integer 2×2 source block (`textureLoad`, the same filter as
-  Bevy's SPD). No storage binding remains; the pyramid image drops
+  pyramid is rendered with one colour-attachment pass per mip level
+  (`textureLoad`). The first filter, an integer 2×2 average, drifted the blur by
+  up to half a texel per level; since 2026-11-18 (R-189) each level is the tent
+  [1, 3, 3, 1] / 8, and the ordered snapshot's mip 0 is an exact area average
+  (`workspace_blur_snapshot.rs`, `backdrop_snapshot.wgsl`) instead of Bevy's
+  one-pixel blit. No storage binding remains; the pyramid image drops
   `STORAGE_BINDING`. Both former `generate_mips_for_phase` call sites (capture
   after `upscaling`, ordered snapshot in `workspace_blur_composition.rs`) use it.
 - `platforms/web/bevy-renderer/src/render_error.rs`: same quit policy as Bevy,
@@ -52,7 +55,8 @@ to learn about it.
   change the grey screen.
 - A bilinear tap at the destination texel centre: with odd level sizes it drifts
   onto source texel centres and degrades into point sampling (stepped bands in
-  the blur at DPR 1.5). Use integer 2×2 loads.
+  the blur at DPR 1.5). Read texels with `textureLoad` and explicit weights
+  (the tent, R-189).
 
 ## Diagnosis method
 
@@ -63,13 +67,14 @@ Remove the feature afterwards.
 
 ## Regression checks
 
-- `cargo test --lib workspace_blur` in `atome/renderers/bevy-core`
+- `cargo test -p atome-bevy-renderer-core --lib workspace_blur`
   (pyramid has no `STORAGE_BINDING`, has `RENDER_ATTACHMENT`).
 - `tests/eve/bevy_web_renderer_runtime_contract.test.mjs`: "rejects startup when
   a wgpu error stopped the presented renderer" (fails without the JS check).
 - Real device: launch on the A12Z iPad, read diagnostics (`update_ticks` keeps
   growing, `wake_send_failures: 0`, `render_error: ""`), take a WDA screenshot,
   and tap a first-launch card.
-- `tests/probes/bevy_backdrop_realtime_pixel_probe.mjs` for blur appearance
-  (its 1 px alignment assertions already failed before this change; see
-  FRAMEWORK_STATE).
+- `tests/probes/bevy_backdrop_realtime_pixel_probe.mjs`: blur alignment within
+  0.1 logical px (linear-light centroid), one redraw per direct transform.
+- `cargo test -p atome-bevy-renderer-core --lib blur_alignment -- --ignored`
+  (real GPU): drift ≤ 0.1 px at DPR 1 and 1.5, σ within 7 % of the radius.

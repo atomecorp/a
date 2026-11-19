@@ -8,7 +8,7 @@
 // first filed under, so the reports filed before the Avancé rubric still list.
 export const BUG_REPORT_SOURCE_DOMAIN = 'assistant_debug';
 export const BUG_REPORT_SUBMIT = 'bug-report-submit';
-// Which of the device's sent reports the team marked fixed (scripts/bug_reports_admin.mjs).
+// Which of the device's sent reports the team marked fixed (the team's tool, atome-server src/bin/team_reports.rs).
 export const BUG_REPORT_STATUS = 'bug-report-status';
 export const BUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_failure', 'manual']);
 export const BUG_REPORT_STATUS_MAX = 50;

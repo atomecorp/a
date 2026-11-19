@@ -163,16 +163,11 @@ pub struct CaptureClock {
     pub discontinuities: u32,
 }
 
-// The host instant of an input callback. On Windows the output is no cpal
-// stream: both sides read the process clock when their period arrives.
+// The host instant of a cpal input callback. On Windows no input is a cpal stream: the driver's
+// thread reads the process clock when its period arrives (`now_host_ns`).
 #[cfg(not(target_os = "windows"))]
 pub fn capture_host_ns(info: &cpal::InputCallbackInfo) -> i64 {
     host_ns(&info.timestamp().callback)
-}
-
-#[cfg(target_os = "windows")]
-pub fn capture_host_ns(_info: &cpal::InputCallbackInfo) -> i64 {
-    now_host_ns()
 }
 
 #[cfg(target_os = "windows")]
@@ -182,6 +177,7 @@ pub(crate) fn now_host_ns() -> i64 {
 }
 
 // Called by an input callback: notes the capture clock once (never blocks).
+#[cfg(not(target_os = "windows"))]
 pub fn note_capture_start(slot: &Mutex<Option<CaptureClock>>, info: &cpal::InputCallbackInfo) {
     note_capture_start_at(slot, capture_host_ns(info));
 }
@@ -380,7 +376,7 @@ impl Backend for ScheduledCpalBackend {
             ));
         }
         #[cfg(target_os = "windows")]
-        let rate = super::wasapi_duplex::output_rate().map_err(ScheduledBackendError)?;
+        let rate = super::windows_driver::output_rate().map_err(ScheduledBackendError)?;
         #[cfg(not(target_os = "windows"))]
         let rate = default_output()?.1.sample_rate;
         SAMPLE_RATE.store(rate, Ordering::Release);
@@ -420,7 +416,7 @@ impl Backend for ScheduledCpalBackend {
     }
 }
 
-// On Windows the device thread is the WASAPI exclusive duplex one (wasapi_duplex.rs).
+// On Windows the device thread plays the chosen driver, WASAPI exclusive or ASIO (windows_driver.rs).
 #[cfg(target_os = "windows")]
 fn start_device_thread(
     consumer: SharedConsumer,
@@ -429,7 +425,8 @@ fn start_device_thread(
     stop: Arc<AtomicBool>,
     wake: std::sync::mpsc::Receiver<()>,
 ) -> Result<(), ScheduledBackendError> {
-    super::wasapi_duplex::start(OutputFill::new(consumer, aux, direct), stop, wake)
+    let fill = OutputFill::new(consumer, aux, direct);
+    super::windows_driver::start(fill, SAMPLE_RATE.load(Ordering::Acquire), stop, wake)
         .map_err(ScheduledBackendError)
 }
 

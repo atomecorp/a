@@ -48,7 +48,7 @@ pub(super) async fn log_request_middleware(req: Request<Body>, next: middleware:
     let duration_ms = start.elapsed().as_millis() as u64;
 
     let log_payload = json!({
-        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "timestamp": atome_js_values::dates::now_rfc3339(),
         "request_id": request_id,
         "method": method,
         "uri": uri,
@@ -387,7 +387,7 @@ pub(super) async fn db_status_handler(State(state): State<AppState>) -> impl Int
             "tables": tables,
             "schema": local_atome::schema_tables(),
             "schema_hash": local_atome::schema_hash(),
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "timestamp": atome_js_values::dates::now_rfc3339()
         })),
     )
         .into_response()

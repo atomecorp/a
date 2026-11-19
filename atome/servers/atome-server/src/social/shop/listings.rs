@@ -52,7 +52,7 @@ impl Shop {
         {
             return Ok(());
         }
-        let word = json!({ "status": status, "reason": reason, "at": js::iso(chrono::Utc::now().timestamp_millis()) });
+        let word = json!({ "status": status, "reason": reason, "at": js::iso(atome_js_values::dates::now_ms()) });
         let event = json!({ "kind": "set", "atome_id": listing_id,
             "payload": { "props": { "listing_status": word.to_string() } },
             "actor": { "type": "user", "id": seller } });

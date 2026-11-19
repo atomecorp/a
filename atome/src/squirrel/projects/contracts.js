@@ -5,11 +5,13 @@ import { MEDIA_CONTROL_ACTIONS } from '../media_lists/contracts.js';
 // as the Trouver panel lists and searches them, created and opened by the very tools of the interface
 // (`ui.new_project`, `ui.project.open`). Run by eVe/domains/projects/projects_runtime.js.
 export const PROJECTS_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'NOT_FOUND', 'NO_PROJECT', 'CREATE_FAILED', 'OPEN_FAILED', 'FAVORITE_FAILED', 'DELETE_FAILED',
-    'PRESENTATION_UNAVAILABLE', 'BAND_TOOL_UNKNOWN', 'BAND_TOOL_FAILED', 'MEDIA_FAILED']);
+    'PRESENTATION_UNAVAILABLE', 'BAND_TOOL_UNKNOWN', 'BAND_TOOL_FAILED', 'MEDIA_FAILED', 'ORDER_FAILED', 'FOLDER_FAILED', 'MOVE_FAILED', 'RENAME_FAILED']);
 // The Trouver panel's categories that hold a project's objects.
 export const PROJECT_SEARCH_KINDS = Object.freeze(['all', 'images', 'videos', 'sounds']);
 // A project's type, as the Projets rubric's Type tool keeps it (eVe/domains/projects/project_type.js).
 export const PROJECT_TYPES = Object.freeze(['health', 'code', 'creation', 'site']);
+// The order the Projets rubric lays its projects in, as its Date / Nom tool sets it (user, 17 Nov. 2026).
+export const PROJECT_ORDERS = Object.freeze(['date', 'name']);
 
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const text = { type: 'string', minLength: 1, maxLength: 200, pattern: '\\S' };
@@ -21,6 +23,17 @@ const definitions = {
     open: [{ project_id: id }, ['project_id'], 'Open one of the user\'s projects (its project_id from projects.list).', false],
     favorite: [{ project_id: id, favorite: { type: 'boolean' } }, ['project_id', 'favorite'],
         'Add one of the user\'s projects to the favourites (favorite true) or take it out of them (false), as a hold on its Dashboard tile does.', true],
+    order: [{ order: { type: 'string', enum: PROJECT_ORDERS } }, ['order'],
+        'Lay the Dashboard\'s projects (Projets, Réalisations › Créations) by date (the one last used first, then the last changed) or by name (alphabetical), as the rubric\'s Date / Nom tool does; kept in the account.', true],
+    // Médiathèque › Données (R-202): a folder is a project marked as a folder, nested in another (parent_id).
+    folder: [{ name: text, parent_id: id }, [],
+        'Create a folder in Médiathèque › Données (inside the folder parent_id, from projects.list, else at its root), as its « Dossier » tool does; named `name`, else « Dossier ». Returns its project_id.', true],
+    move: [{ atome_id: id, folder_id: id }, ['atome_id', 'folder_id'],
+        'Move a file or a folder of Médiathèque › Données (atome_id) into a folder (folder_id), as carrying it onto that folder does. A folder never goes into one of its own.', true],
+    rename: [{ project_id: id, name: { type: 'string', minLength: 1, maxLength: 512, pattern: '\\S' } }, ['project_id', 'name'],
+        'Rename one of the user\'s projects or Données folders (its project_id from projects.list), as « Nom » in its hold does.', true],
+    data_order: [{ order: { type: 'string', enum: PROJECT_ORDERS } }, ['order'],
+        'Lay Médiathèque › Données by name (alphabetical, the default) or by date (the last changed first), as its Nom / Date tool does; kept in the account.', true],
     delete: [{ project_id: id }, ['project_id'],
         'Delete one of the user\'s projects (its project_id from projects.list) with everything it holds, as « Supprimer » in a hold on its Dashboard tile does. Ask the user before calling it.', true],
     band_tool: [{ tool_id: id, project_id: id }, ['tool_id'],
@@ -48,8 +61,9 @@ export const validateProjectsInput = (action, input) => {
     const contract = PROJECTS_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';
 };
-export const PROJECTS_ASSISTANT_INSTRUCTIONS = 'Projects: « quels sont mes projets », « trouve mon projet <nom> » call projects.list '
+export const PROJECTS_ASSISTANT_INSTRUCTIONS = 'Données (the download folder of the Médiathèque, R-202): « crée un dossier <nom> » calls projects.folder (parent_id: the folder it goes in, from projects.list); « mets <fichier> dans <dossier> » calls projects.move; « renomme <dossier> en <nom> » calls projects.rename; « range Données par date / par nom » calls projects.data_order. '
+    + 'Projects: « quels sont mes projets », « trouve mon projet <nom> » call projects.list '
     + '(query: the name); « ouvre le projet <nom> » calls projects.open with the project_id read from projects.list; « crée un projet '
     + '<nom> » calls projects.create; « mes projets favoris » calls projects.list with favorites true; « supprime le projet <nom> » calls projects.delete with the project_id read from projects.list, once the user confirmed; « ajoute <projet> aux favoris » / « retire <projet> des favoris » '
-    + 'calls projects.favorite (favorite true / false, project_id from projects.list); « mets cette vidéo en plein écran », « la suivante », « montre les commandes » on a project\'s media calls projects.media; « mets l\'outil <outil> dans la bande du projet » calls projects.band_tool (tool_id); « cherche <mot> dans ce projet / dans <projet> » calls projects.search (project_id from '
+    + 'calls projects.favorite (favorite true / false, project_id from projects.list); « range mes projets par nom / par date » calls projects.order (name / date); « mets cette vidéo en plein écran », « la suivante », « montre les commandes » on a project\'s media calls projects.media; « mets l\'outil <outil> dans la bande du projet » calls projects.band_tool (tool_id); « cherche <mot> dans ce projet / dans <projet> » calls projects.search (project_id from '
     + 'projects.list for another project; kind images, videos or sounds when the user names them).';

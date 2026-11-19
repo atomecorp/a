@@ -6,7 +6,7 @@
 // nothing and says so (`system_mail_unconfigured`) — and the personal mail gateway (gateway.rs).
 // The clients are this crate's own, on tokio and rustls (socket.rs, smtp.rs, imap.rs).
 mod connector;
-mod dates;
+pub(crate) mod dates;
 pub mod gateway;
 mod imap;
 pub(crate) mod index;

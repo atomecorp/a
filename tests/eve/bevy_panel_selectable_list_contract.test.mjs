@@ -192,7 +192,9 @@ test('canonical pointer hold hands a row drag ownership only after the delay and
             end: () => scrollDragging, hover: () => {}, wheel: () => false
         },
         schedule: (callback) => { timers.push({ callback, cancelled: false }); return timers.length; },
-        cancelSchedule: (id) => { if (timers[id - 1]) timers[id - 1].cancelled = true; }
+        cancelSchedule: (id) => { if (timers[id - 1]) timers[id - 1].cancelled = true; },
+        // The input of this test is dispatched as it is sent: the frame a hold's rest waits for has nothing queued.
+        frame: (callback) => callback()
     });
 
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: { x: 10, y: 10 }, event: { pointerId: 1 } });

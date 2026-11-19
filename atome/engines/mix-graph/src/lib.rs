@@ -8,6 +8,9 @@
 //! modules whose bands leave for other strips, sidechain keys, and loops that
 //! close through a guarded return. Instruments expose several outputs, each
 //! playable on its own strip, and IN modules mix another source into a chain.
+//! Strips are 1, 2, 4 or 8 channels wide with routes mapped channel by channel
+//! (wide.rs); modulators move other modules' parameters, at every frame where
+//! the parameter allows it (modulation.rs); a module may run at 2× or 4×.
 
 pub mod automation;
 #[cfg(test)]
@@ -20,7 +23,9 @@ pub mod dsp_module;
 #[cfg(test)]
 mod dsp_tests;
 pub mod graph;
+mod graph_compile;
 pub mod graph_order;
+mod graph_render;
 pub mod host;
 pub mod instrument;
 pub mod instrument_actions;
@@ -31,15 +36,28 @@ pub mod instrument_notes;
 #[cfg(test)]
 mod instrument_notes_tests;
 pub mod instrument_spec;
+pub mod instrument_synth;
+#[cfg(test)]
+mod instrument_synth_tests;
 #[cfg(test)]
 mod instrument_tests;
+mod mix_apply;
+pub mod modulation;
+#[cfg(test)]
+mod modulation_tests;
 pub mod module;
+#[cfg(test)]
+mod offline_rig;
 #[cfg(test)]
 mod port_tests;
 pub mod program;
+pub mod record_tap;
+#[cfg(test)]
+mod record_tap_tests;
 pub mod resample;
 pub mod return_ring;
 pub mod round_trip;
+pub mod route_delivery;
 #[cfg(test)]
 mod routing_tests;
 pub mod shared;
@@ -50,25 +68,27 @@ pub mod voice;
 pub mod voice_control;
 #[cfg(test)]
 mod voice_tests;
+pub mod warp_voice;
+#[cfg(test)]
+mod warp_voice_tests;
+pub mod wide;
+#[cfg(test)]
+mod wide_tests;
 
 pub use atome_instrument::{EventKind, FrameSource, SampleData, stream as sample_stream};
-use dsp_module::{AssetStore, DspRuntime, StoredAsset};
-use graph::{Graph, StepModule, StripParts};
+use dsp_module::{AssetStore, StoredAsset};
 use instrument::Instruments;
 pub use instrument_spec::InstrumentSpec;
-use module::{
-    ModuleBox, ModuleControls, ModuleRuntime, Processor, REQUEST_ACTIVE, REQUEST_BYPASS,
-    REQUEST_CUT,
-};
+use module::{ModuleBox, ModuleControls, REQUEST_ACTIVE, REQUEST_BYPASS, REQUEST_CUT};
 pub use program::{
-    InputSpec, KeySource, MixSource, ModuleSpec, PortRoute, Program, StripSpec, Target,
+    InputSpec, KeySource, MixSource, ModulationRoute, ModuleSpec, PortRoute, Program, StripSpec,
+    Target,
 };
 pub use shared::{
     AuxOutputs, MixGraphEffect, MixGraphEffectBuilder, StripCapture, StripCaptureBuilder,
 };
 use shared::{CaptureSlot, GraphShared, LiveInput, StripMeter};
-use source_bus::Feeds;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -79,10 +99,19 @@ use std::sync::atomic::Ordering;
 struct ModuleEntry {
     spec: ModuleSpec,
     controls: Arc<ModuleControls>,
+    // The width of its strip: a module moved to a strip of another width is built anew.
+    channels: usize,
     latency: usize,
     fresh: Option<ModuleBox>,
     active: Option<(usize, usize)>,
     sent: Option<(usize, usize)>,
+}
+
+// A `dsp` module's live measurements, in its kind's `readings` order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModuleReading {
+    pub module_id: String,
+    pub values: Vec<f32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -98,23 +127,28 @@ pub struct MixGraph {
     captures: HashMap<String, Arc<CaptureSlot>>,
     meters: HashMap<String, Arc<StripMeter>>,
     live_inputs: HashMap<String, Arc<LiveInput>>,
+    record_taps: HashMap<String, Arc<record_tap::RecordTap>>,
     // Frames a live input's ring holds; its reader keeps the backlog under half.
     live_capacity: usize,
     assets: AssetStore,
     instruments: Instruments,
     transports: automation::Transports,
+    output_latency: usize,
 }
 
 const LIVE_CAPACITY_FRAMES: usize = 16_384;
 
+type Identity = (String, Option<String>, bool, Option<String>, Option<u8>);
+
 // A module whose identity changes is built again; anything else is retuned live.
-fn module_identity(spec: &ModuleSpec) -> (String, Option<String>, bool, Option<String>) {
+fn module_identity(spec: &ModuleSpec) -> Identity {
     let asset = spec.text(dsp_module::ASSET_PARAM).map(str::to_string);
     (
         spec.kind.clone(),
         spec.effect.clone(),
         spec.key.is_some(),
         asset,
+        spec.oversample.filter(|factor| *factor > 1),
     )
 }
 
@@ -151,10 +185,12 @@ impl MixGraph {
             captures: HashMap::new(),
             meters: HashMap::new(),
             live_inputs: HashMap::new(),
+            record_taps: HashMap::new(),
             live_capacity,
             assets: AssetStore::new(),
             instruments: Instruments::default(),
             transports: automation::Transports::default(),
+            output_latency: 0,
         }
     }
 
@@ -177,7 +213,7 @@ impl MixGraph {
             .clone()
     }
 
-    fn sample_rate(&self) -> u32 {
+    pub fn sample_rate(&self) -> u32 {
         self.shared.sample_rate.load(Ordering::Relaxed).max(1)
     }
 
@@ -192,170 +228,6 @@ impl MixGraph {
             .remove(asset_id)
             .map(|_| ())
             .ok_or_else(|| format!("dsp asset {asset_id} is not loaded"))
-    }
-
-    fn build_module(&self, spec: &ModuleSpec) -> Result<ModuleEntry, String> {
-        let parameters = if spec.kind == dsp_module::MODULE_TYPE {
-            dsp_module::parameter_slots(dsp_module::kind_of(spec)?)
-        } else {
-            Vec::new()
-        };
-        let controls = ModuleControls::new(primary_value(spec), spec.bypass, parameters);
-        write_controls(&controls, spec);
-        let sample_rate = self.sample_rate();
-        let mut latency = 0;
-        let processor = match spec.kind.as_str() {
-            "volume" => Processor::Volume(dsp::SmoothedGain::new(dsp::db_to_amplitude(
-                primary_value(spec),
-            ))),
-            "pan" => Processor::Pan,
-            "mono" => Processor::Mono,
-            "send" => Processor::Send(dsp::SmoothedGain::new(dsp::db_to_amplitude(primary_value(
-                spec,
-            )))),
-            "input" => Processor::Input(dsp::SmoothedGain::new(dsp::db_to_amplitude(
-                primary_value(spec),
-            ))),
-            dsp_module::MODULE_TYPE => {
-                let runtime = DspRuntime::build(
-                    spec,
-                    &controls.parameters,
-                    &self.assets,
-                    sample_rate,
-                    graph::MAX_BLOCK,
-                )?;
-                latency = runtime.latency();
-                Processor::Dsp(Box::new(runtime))
-            }
-            other => return Err(format!("mix module type {other} is not an audio module")),
-        };
-        let fresh = ModuleRuntime::new(controls.clone(), processor, sample_rate);
-        Ok(ModuleEntry {
-            spec: spec.clone(),
-            controls,
-            latency,
-            fresh: Some(fresh),
-            active: None,
-            sent: None,
-        })
-    }
-
-    fn drain_retired(&self) {
-        if let Ok(mut retired) = self.shared.retired.lock() {
-            retired.clear();
-            retired.reserve(4);
-        }
-    }
-
-    // Where every module runs now: a graph the render thread never took comes
-    // back with the modules it carried fresh; one it took is the active graph.
-    fn settle_locations(&mut self) -> Result<(), String> {
-        let returned = self
-            .shared
-            .pending
-            .lock()
-            .map_err(|error| format!("mix graph lock: {error}"))?
-            .take();
-        match returned {
-            Some(mut graph) => {
-                for (id, module) in graph.take_fresh() {
-                    if let Some(entry) = self.modules.get_mut(&id) {
-                        entry.fresh = Some(module);
-                    }
-                }
-                for entry in self.modules.values_mut() {
-                    entry.sent = None;
-                }
-            }
-            None => {
-                for entry in self.modules.values_mut() {
-                    if let Some(location) = entry.sent.take() {
-                        entry.active = Some(location);
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn apply(&mut self, program: Program) -> Result<(), String> {
-        graph::dependency_order(&program)?;
-        self.drain_retired();
-        self.settle_locations()?;
-        let sample_rate = self.sample_rate();
-        let (live_inputs, live_capacity) = (&mut self.live_inputs, self.live_capacity);
-        let feeds = Feeds::plan(
-            &program,
-            &mut |device| {
-                live_inputs
-                    .entry(device.to_string())
-                    .or_insert_with(|| LiveInput::new(live_capacity))
-                    .clone()
-            },
-            &mut self.instruments,
-            sample_rate,
-        )?;
-        let mut next_modules = HashMap::new();
-        let mut parts = Vec::with_capacity(program.strips.len());
-        for strip in &program.strips {
-            let mut modules = Vec::with_capacity(strip.chain.len());
-            for spec in &strip.chain {
-                let mut entry = match self.modules.remove(&spec.id) {
-                    Some(mut entry) if module_identity(&entry.spec) == module_identity(spec) => {
-                        write_controls(&entry.controls, spec);
-                        entry.spec = spec.clone();
-                        entry
-                    }
-                    _ => self.build_module(spec)?,
-                };
-                let module = match (entry.fresh.take(), entry.active) {
-                    (Some(fresh), _) => StepModule::Fresh(fresh),
-                    (None, Some((at, index))) => StepModule::Adopt(at, index),
-                    (None, None) => return Err(format!("mix module {} has no runtime", spec.id)),
-                };
-                modules.push(module);
-                next_modules.insert(spec.id.clone(), entry);
-            }
-            parts.push(StripParts {
-                id: strip.id.clone(),
-                capture: self.capture_slot(&strip.id),
-                source: feeds.strip_source(&strip.input),
-                meter: self.meters.entry(strip.id.clone()).or_default().clone(),
-                modules,
-            });
-        }
-        let devices: HashSet<String> = feeds.devices().map(str::to_string).collect();
-        let routed = feeds.routed();
-        let mut compiled = Graph::compile(&program, parts, feeds, &|spec| {
-            next_modules.get(&spec.id).map_or(0, |entry| entry.latency)
-        })?;
-        self.transports
-            .apply(&program, self.shared.frames.load(Ordering::Relaxed));
-        compiled.automation = automation::Automation::bind(&program, &self.transports, &|id| {
-            next_modules.get(id).map(|entry| entry.controls.clone())
-        })?;
-        for (id, location) in compiled.locations() {
-            if let Some(entry) = next_modules.get_mut(id) {
-                entry.sent = Some(location);
-            }
-        }
-        let live: HashSet<&str> = program
-            .strips
-            .iter()
-            .map(|strip| strip.id.as_str())
-            .collect();
-        self.captures.retain(|id, _| live.contains(id.as_str()));
-        self.instruments.retain(routed);
-        self.live_inputs
-            .retain(|device, _| devices.contains(device));
-        self.meters.retain(|id, _| live.contains(id.as_str()));
-        self.modules = next_modules;
-        *self
-            .shared
-            .pending
-            .lock()
-            .map_err(|error| format!("mix graph lock: {error}"))? = Some(Box::new(compiled));
-        Ok(())
     }
 
     pub fn set_bypass(&mut self, module_id: &str, bypass: bool) -> Result<(), String> {
@@ -392,6 +264,11 @@ impl MixGraph {
             .map(|entry| entry.controls.state.load(Ordering::Relaxed))
     }
 
+    /// Frames the graph's main mix arrives late by (its latency-compensated routes).
+    pub fn output_latency_frames(&self) -> usize {
+        self.output_latency
+    }
+
     pub fn levels(&self) -> Vec<StripLevel> {
         let mut levels: Vec<StripLevel> = self
             .meters
@@ -407,6 +284,27 @@ impl MixGraph {
             .collect();
         levels.sort_by(|left, right| left.strip_id.cmp(&right.strip_id));
         levels
+    }
+
+    // The measurements of every module that publishes some (gain reduction,
+    // loudness, a spectrum), sorted by module id.
+    pub fn readings(&self) -> Vec<ModuleReading> {
+        let mut readings: Vec<ModuleReading> = self
+            .modules
+            .iter()
+            .filter(|(_, entry)| !entry.controls.readings.is_empty())
+            .map(|(module_id, entry)| ModuleReading {
+                module_id: module_id.clone(),
+                values: entry
+                    .controls
+                    .readings
+                    .iter()
+                    .map(|slot| slot.get())
+                    .collect(),
+            })
+            .collect();
+        readings.sort_by(|left, right| left.module_id.cmp(&right.module_id));
+        readings
     }
 
     // The instruments strips may play (instrument.rs): samples, descriptions, notes.

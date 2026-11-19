@@ -52,6 +52,10 @@ export const normalizeCallMode = mode => {
 // A recording addressed to a contact conversation: account-global, owned by no project.
 export const isConversationDestination = destination => destination?.scope === 'global'
     && !!String(destination.contactId || '').trim();
+// A take for a bottle of the CB sociale (R-173 L2): account-global, owned by no project and no conversation; it leaves
+// only as the server's clean copy once the bottle is launched.
+export const isBottleDestination = destination => destination?.scope === 'global' && destination.bottle === true
+    && !String(destination.contactId || '').trim();
 
 const contactId = { type: 'string', minLength: 1, maxLength: 200 };
 export const CONTACT_COMMUNICATION_COMMANDS = Object.freeze([
@@ -72,7 +76,10 @@ export const CONTACT_COMMUNICATION_COMMANDS = Object.freeze([
         persistent: true, required: ['contactId', 'favorite'], properties: { contactId, favorite: { type: 'boolean' }, phone: { type: 'string' } } },
     { name: 'contact.invite.send', description: 'Invite a person by mail to create an atome.one account (sign-up is by invitation for now): the server mails, from noreply@atome.one, a link valid 21 days for one account. Without a connection the invitation waits on the device and leaves at the next one. Reuse inviteId when retrying.',
         persistent: true, required: ['email', 'inviteId'], properties: { email: { type: 'string', minLength: 3, maxLength: 254 },
-            message: { type: 'string', maxLength: 1000 }, inviteId: { type: 'string', pattern: '^[A-Za-z0-9_-]{8,64}$' } } },
+            message: { type: 'string', maxLength: 1000 }, inviteId: { type: 'string', pattern: '^[A-Za-z0-9_-]{8,64}$' },
+            activation: { type: 'object', description: 'An administrator\'s terms for the account the invitation opens: offered, to pay (12 €), or with a discount (1–99 %).',
+                additionalProperties: false, required: ['mode'], properties: { mode: { type: 'string', enum: ['free', 'pay', 'discount'] },
+                    discountPct: { type: 'integer', minimum: 0, maximum: 99 } } } } },
     { name: 'communication.conversation.read', description: 'Read an authorized page of sent and received eVe messages.',
         required: ['contactId'], properties: { contactId, messageId: contactId, cursor: { type: 'object' }, limit: { type: 'number', minimum: 1, maximum: 100 } } },
     { name: 'communication.conversation.send', description: 'Send a text, an existing conversation recording or owned Atomes (a project, a media) to this contact. Reuse messageId when retrying.',

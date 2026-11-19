@@ -33,12 +33,16 @@ export const sanitizeVoiceDiagnostic = (value, depth = 0, seen = new WeakSet()) 
 // meant the console was full of `[voice-trace]` lines before the user had done
 // anything. Set `window.__EVE_VOICE_DIAGNOSTICS__ = true` to get them back.
 export const writeVoiceDiagnostic = (env = globalThis, stage = 'voice.unknown', payload = {}) => {
-    if (env?.__EVE_VOICE_DIAGNOSTICS__ !== true) return null;
+    // The car's black box (assistant_native_link.js, CarPlay only) receives every record, opt-in or not.
+    const journal = env?.__eveVoiceJournal;
+    if (env?.__EVE_VOICE_DIAGNOSTICS__ !== true && typeof journal !== 'function') return null;
     const record = {
         at: new Date().toISOString(),
         stage: String(stage || 'voice.unknown'),
         ...sanitizeVoiceDiagnostic(payload)
     };
+    if (typeof journal === 'function') { try { journal(record); } catch (_) { } }
+    if (env?.__EVE_VOICE_DIAGNOSTICS__ !== true) return null;
     const line = `[voice-trace] ${JSON.stringify(record)}`;
     env?.console?.info?.(line);
     env?.webkit?.messageHandlers?.console?.postMessage?.(line);

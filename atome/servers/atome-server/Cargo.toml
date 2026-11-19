@@ -58,6 +58,38 @@ name = "directory"
 path = "../../../tests/atome_server/directory.rs"
 
 [[test]]
+name = "cb_social"
+path = "../../../tests/atome_server/cb_social.rs"
+
+[[test]]
+name = "cb_bottles"
+path = "../../../tests/atome_server/cb_bottles.rs"
+
+[[test]]
+name = "cb_bottle_sea"
+path = "../../../tests/atome_server/cb_bottle_sea.rs"
+
+[[test]]
+name = "cb_bottle_place"
+path = "../../../tests/atome_server/cb_bottle_place.rs"
+
+[[test]]
+name = "cb_live_translate"
+path = "../../../tests/atome_server/cb_live_translate.rs"
+
+[[test]]
+name = "cb_channels"
+path = "../../../tests/atome_server/cb_channels.rs"
+
+[[test]]
+name = "cb_recordings"
+path = "../../../tests/atome_server/cb_recordings.rs"
+
+[[test]]
+name = "cb_random_call"
+path = "../../../tests/atome_server/cb_random_call.rs"
+
+[[test]]
 name = "downloads"
 path = "../../../tests/atome_server/downloads.rs"
 
@@ -122,7 +154,6 @@ icu_normalizer = "2"
 subtle = "2"
 base64 = "0.22"
 bcrypt = "0.15"
-chrono = "0.4"
 indexmap = "2"
 jsonwebtoken = "9"
 percent-encoding = "2"
@@ -144,6 +175,9 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { workspace = true, features = ["fs", "limit", "compression-br", "compression-gzip"] }
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+# The CB's takes written as Ogg Opus without transcoding (social/cb/recordings, R-173 lot L4): pure Rust, BSD-3-Clause,
+# validated by the user on 15 Nov. 2026.
+ogg = "0.9.2"
 # The calls' SFU (visio feature): 0.21.0, whose worker answers the router capabilities of Node's mediasoup 3.19.
 mediasoup = { version = "=0.21.0", optional = true }
 

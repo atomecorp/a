@@ -194,15 +194,6 @@ extension WebViewManager {
         }
     }
     
-    // MARK: - Transport Data Communication
-    
-    public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
-        let playheadSeconds = sampleRate > 0 ? playheadPosition / sampleRate : playheadPosition
-        updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadSeconds)
-        let jsCode = "if (typeof updateTransportFromSwift === 'function') { updateTransportFromSwift({\"isPlaying\": \(isPlaying ? "true" : "false"), \"playheadPosition\": \(Int(playheadPosition)), \"sampleRate\": \(Int(sampleRate))}); }"
-        evaluateJS(jsCode, label: "transport", priority: .critical)
-    }
-
     public static func sendToJS(_ message: Any, _ function: String) {
         dispatchToJS(message, function: function, priority: .normal)
     }
@@ -233,18 +224,15 @@ extension WebViewManager {
         stopHostTimeStream()
         hostTimeStreamActiveFlag = true
         hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            let isPlaying = lastIsPlaying
-            let playhead = lastPlayheadSeconds
-            let tempo = cachedTempo
+            let transport = readTransportCache()
             let payload: [String: Any] = [
                 "action": "hostTimeUpdate",
-                "positionSeconds": playhead,
-                "positionSamples": Int(playhead * 44100.0),
-                "tempo": tempo,
-                "ppq": playhead * (tempo / 60.0),
-                "playing": isPlaying
+                "positionSeconds": transport.positionSeconds,
+                "anchorHostNs": transport.anchorHostNs,
+                "tempo": cachedTempo,
+                "playing": transport.playing
             ]
-            sendBridgeJSON(payload)
+            sendBridgeJSON(payload, label: "host.time")
         }
     }
     static func stopHostTimeStream() {
@@ -254,37 +242,31 @@ extension WebViewManager {
     static func startHostStateStream() {
         stopHostStateStream()
         hostStateStreamActiveFlag = true
-        // Immediately emit current cached state once (real host state)
-        let initialPayload: [String: Any] = [
-            "action": "hostTransport",
-            "playing": lastIsPlaying,
-            "positionSeconds": lastPlayheadSeconds
-        ]
-        sendBridgeJSON(initialPayload)
-        lastSentTransportPlaying = lastIsPlaying
-        lastSentTransportPosition = lastPlayheadSeconds
-        // Poll cached values (updated by auv3 utils) and emit only on changes
+        // Emits the host's state at once, then on every change: play state, a jump while
+        // stopped (a scrub), and while playing every move the host makes (a loop, a locate).
+        let initial = readTransportCache()
+        sendBridgeJSON(hostTransportPayload(initial))
+        lastSentTransportPlaying = initial.playing
+        lastSentTransportPosition = initial.positionSeconds
         hostStateTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            let playing = lastIsPlaying
-            let pos = lastPlayheadSeconds
-            var shouldSend = false
-            if lastSentTransportPlaying == nil || playing != lastSentTransportPlaying { shouldSend = true }
-            // Optionally also send if position jumps significantly while stopped (e.g. user scrub) (> 0.05s)
-            if !playing && abs(pos - lastSentTransportPosition) > 0.05 { shouldSend = true }
-            // While playing, AUv3 hosts can jump or loop without changing play state.
-            // Emit continuous positions so JS can resync against real host timecode.
-            if playing && abs(pos - lastSentTransportPosition) > 0.015 { shouldSend = true }
-            if shouldSend {
-                let payload: [String: Any] = [
-                    "action": "hostTransport",
-                    "playing": playing,
-                    "positionSeconds": pos
-                ]
-                sendBridgeJSON(payload)
-                lastSentTransportPlaying = playing
-                lastSentTransportPosition = pos
-            }
+            let transport = readTransportCache()
+            let moved = abs(transport.positionSeconds - lastSentTransportPosition)
+            let changed = lastSentTransportPlaying != transport.playing
+                || (!transport.playing && moved > 0.05)
+                || (transport.playing && moved > 0.015)
+            guard changed else { return }
+            sendBridgeJSON(hostTransportPayload(transport))
+            lastSentTransportPlaying = transport.playing
+            lastSentTransportPosition = transport.positionSeconds
         }
+    }
+    private static func hostTransportPayload(_ transport: HostTransportSnapshot) -> [String: Any] {
+        [
+            "action": "hostTransport",
+            "playing": transport.playing,
+            "positionSeconds": transport.positionSeconds,
+            "anchorHostNs": transport.anchorHostNs
+        ]
     }
     static func stopHostStateStream() {
         hostStateTimer?.invalidate(); hostStateTimer = nil

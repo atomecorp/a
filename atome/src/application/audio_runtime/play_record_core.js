@@ -5,6 +5,8 @@ import {
 } from './runtime_audio_backend.js';
 import {
     buildFacadeKiraAudioPayload,
+    buildNativeClipBytesPayload,
+    buildNativeProbeDurationPayload,
     buildTauriKiraAudioPayload,
     KIRA_AUDIO_COMMANDS,
     normalizeKiraPlayInstancePayload,
@@ -267,10 +269,7 @@ export class PlayRecordCore {
         await this.init();
         const runtime = this.runtime();
         if (runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira') {
-            const result = await this.invoke()('audio_load_clip_from_bytes', {
-                id: assetId,
-                bytes: Array.from(bytes)
-            });
+            const result = await this.invoke()('audio_load_clip_from_bytes', buildNativeClipBytesPayload(assetId, bytes));
             if (result?.success === false) {
                 throw new Error(safeString(result?.error) || 'play_record_native_transient_load_failed');
             }
@@ -288,6 +287,19 @@ export class PlayRecordCore {
         if (result === false) throw new Error('play_record_facade_transient_load_failed');
         this.assetCache.set(assetId, `transient:${bytes.byteLength}`);
         return { ok: true, assetId, result };
+    }
+
+    // A sound's length in seconds, read from its container: never decoded nor loaded as a clip (an upload's duration).
+    async probeAudioDuration(bytes) {
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) throw new Error('play_record_probe_bytes_required');
+        await this.init();
+        const runtime = this.runtime();
+        const result = runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira'
+            ? await this.invoke()('audio_probe_duration_from_bytes', buildNativeProbeDurationPayload(bytes))
+            : await this.facade().__call_backend_method('probe_duration', { bytes });
+        if (result === false) throw new Error('play_record_facade_probe_duration_unavailable');
+        if (result?.success === false) throw new Error(safeString(result?.error) || 'play_record_probe_duration_failed');
+        return Number(result?.duration_seconds);
     }
 
     async playAsset(input = {}) {

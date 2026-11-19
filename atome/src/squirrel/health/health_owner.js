@@ -63,6 +63,7 @@ export function createHealthOwner({
     const observed = new Set();
     let pendingReads = new Set();
     let readTimer = null;
+    let observerSyncTimer = null;
     let pollTimer = null;
     let backoffMs = 0;
     let accessQueue = Promise.resolve();
@@ -314,6 +315,16 @@ export function createHealthOwner({
         }
     };
 
+    // A Dashboard teardown releases every monitor in one pass: their observers stop in one host call, and a
+    // monitor released then taken again in that pass (a rebuilt tile) never leaves the observed set.
+    const scheduleObserverSync = () => {
+        if (observerSyncTimer !== null) return;
+        observerSyncTimer = setTimer(() => {
+            observerSyncTimer = null;
+            syncObservers(context());
+        }, 0);
+    };
+
     const schedulePoll = () => {
         if (pollTimer !== null) clearTimer(pollTimer);
         pollTimer = null;
@@ -336,7 +347,11 @@ export function createHealthOwner({
         // La derniere lecture survit au depart de son dernier abonne (fermeture du
         // Dashboard) : la reouverture l'affiche aussitot et ne relit que si elle date.
         const fresh = Number.isFinite(known?.fetchedAt) && now() - known.fetchedAt < RETAINED_READING_FRESH_MS;
-        if (family && !sealed && !fresh) scheduleRead(monitorId);
+        // A fresh reading needs no read, but its monitor is observed again all the same (a read starts it otherwise).
+        if (family && !sealed) {
+            if (fresh) scheduleObserverSync();
+            else scheduleRead(monitorId);
+        }
         if (pollTimer === null) schedulePoll();
         let active = true;
         return () => {
@@ -346,7 +361,7 @@ export function createHealthOwner({
             if (!set.size) {
                 consumers.delete(monitorId);
                 pendingReads.delete(monitorId);
-                syncObservers(context());
+                scheduleObserverSync();
                 if (!consumers.size) schedulePoll();
             }
             return true;
@@ -394,6 +409,8 @@ export function createHealthOwner({
         pendingReads = new Set();
         if (pollTimer !== null) clearTimer(pollTimer);
         pollTimer = null;
+        if (observerSyncTimer !== null) clearTimer(observerSyncTimer);
+        observerSyncTimer = null;
         consumers.forEach((set, id) => {
             const reading = readingOf(id, 'unsupported', 'health_access_sealed');
             set.forEach((listener) => { try { listener(reading); } catch (_) { /* isolated */ } });

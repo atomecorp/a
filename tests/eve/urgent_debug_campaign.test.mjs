@@ -119,7 +119,8 @@ describe('urgent campaign contracts', () => {
         expect(state.recordingVisualByToolId.has('ui.detail.record.toggle')).toBe(false);
         expect(iconFor(false).tint).toEqual(BEVY_MENU_TOKENS.surface.icon);
         const whiteNodes = menuNodes();
-        expect(whiteNodes.find((node) => node.id.endsWith('record_action_icon')).image.tint).toEqual(BEVY_MENU_TOKENS.surface.icon);
+        // The ribbon's record glyph keeps the recording red at rest too (R-165: a disc taking something is red).
+        expect(whiteNodes.find((node) => node.id.endsWith('record_action_icon')).image.tint).toEqual(BEVY_MENU_TOKENS.surface.recordingIcon);
         expect(whiteNodes.find((node) => node.id.endsWith('record_action_background')).style.background)
             .toEqual(redNodes.find((node) => node.id.endsWith('record_action_background')).style.background);
     });

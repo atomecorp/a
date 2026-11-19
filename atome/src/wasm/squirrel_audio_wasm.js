@@ -247,13 +247,14 @@ export function audio_mix_levels() {
 /**
  * @param {string} device_id
  * @param {Float32Array} pcm
+ * @param {number} start_frame
  */
-export function audio_mix_live_push(device_id, pcm) {
+export function audio_mix_live_push(device_id, pcm, start_frame) {
     const ptr0 = passStringToWasm0(device_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passArrayF32ToWasm0(pcm, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_mix_live_push(ptr0, len0, ptr1, len1);
+    const ret = wasm.audio_mix_live_push(ptr0, len0, ptr1, len1, start_frame);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -271,6 +272,72 @@ export function audio_mix_module_state(module_id) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return ret[0] === 0xFFFFFF ? undefined : ret[0];
+}
+
+/**
+ * @returns {Array<any>}
+ */
+export function audio_mix_readings() {
+    const ret = wasm.audio_mix_readings();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {string} strip_id
+ * @returns {object}
+ */
+export function audio_mix_record_drain(strip_id) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_mix_record_drain(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {string} strip_id
+ */
+export function audio_mix_record_release(strip_id) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_mix_record_release(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @param {string} strip_id
+ * @param {string | null} [device_id]
+ * @returns {number}
+ */
+export function audio_mix_record_start(strip_id, device_id) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(device_id) ? 0 : passStringToWasm0(device_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_mix_record_start(ptr0, len0, ptr1, len1);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0];
+}
+
+/**
+ * @param {string} strip_id
+ */
+export function audio_mix_record_stop(strip_id) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_mix_record_stop(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
 }
 
 /**
@@ -308,6 +375,21 @@ export function audio_play_instance(asset_id, voice_id, start_seconds, duration_
     var ptr2 = isLikeNone(strip_id) ? 0 : passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len2 = WASM_VECTOR_LEN;
     const ret = wasm.audio_play_instance(ptr0, len0, ptr1, len1, start_seconds, !isLikeNone(duration_seconds), isLikeNone(duration_seconds) ? 0 : duration_seconds, gain, pan, rate, !isLikeNone(loop_start_seconds), isLikeNone(loop_start_seconds) ? 0 : loop_start_seconds, !isLikeNone(loop_end_seconds), isLikeNone(loop_end_seconds) ? 0 : loop_end_seconds, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0];
+}
+
+/**
+ * A sound's length in seconds, read from its container without decoding nor loading a clip (an upload's duration).
+ * @param {Uint8Array} data
+ * @returns {number}
+ */
+export function audio_probe_duration(data) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_probe_duration(ptr0, len0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -514,13 +596,34 @@ export function calendarRangeOccurrences(events, from, until, future_only, exclu
  * @param {number} click_seconds
  * @param {number} accent_hz
  * @param {number} beat_hz
+ * @param {number} voice
+ * @param {boolean} accent
  * @returns {Float32Array}
  */
-export function clickBar(rate, bpm, beats, click_seconds, accent_hz, beat_hz) {
-    const ret = wasm.clickBar(rate, bpm, beats, click_seconds, accent_hz, beat_hz);
+export function clickBar(rate, bpm, beats, click_seconds, accent_hz, beat_hz, voice, accent) {
+    const ret = wasm.clickBar(rate, bpm, beats, click_seconds, accent_hz, beat_hz, voice, accent);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
     var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v1;
+}
+
+/**
+ * @param {any} motif
+ * @param {any} slices
+ * @param {number} source_frames
+ * @param {number} step_frames
+ * @param {number} fade_frames
+ * @returns {any}
+ */
+export function compileSliceMotif(motif, slices, source_frames, step_frames, fade_frames) {
+    const ret = wasm.compileSliceMotif(motif, slices, source_frames, step_frames, fade_frames);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -674,6 +777,92 @@ export function findLoop(channels, start, end, radius, window, candidates) {
 }
 
 /**
+ * `interchangeReadDawproject(projectXml, metadataXml, entriesJson)`: `entriesJson`
+ * is the archive's entry names as a JSON array of strings.
+ * @param {string} project_xml
+ * @param {string} metadata_xml
+ * @param {string} entries_json
+ * @returns {string}
+ */
+export function interchangeReadDawproject(project_xml, metadata_xml, entries_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(project_xml, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(metadata_xml, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(entries_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.interchangeReadDawproject(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * `interchangeReadFcpxml(text)`: a Final Cut Pro XML document (a `.fcpxmld`
+ * bundle's `Info.fcpxml`).
+ * @param {string} text
+ * @returns {string}
+ */
+export function interchangeReadFcpxml(text) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.interchangeReadFcpxml(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * `interchangeReadOtio(text)`: an OpenTimelineIO `Timeline.1` document.
+ * @param {string} text
+ * @returns {string}
+ */
+export function interchangeReadOtio(text) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.interchangeReadOtio(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} bytes
  * @returns {boolean}
  */
@@ -698,6 +887,40 @@ export function layEditPiece(channels, length, gain, ramps) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * `lpprojRead(storeBytes, resourcesJson, name)`: `resourcesJson` is an array of
+ * `{ resource_id, file_name, sha256, byte_length }`; the answer is the Molecule
+ * import (`{ document, report, media, midi }`, atome-interchange) as JSON.
+ * @param {Uint8Array} store
+ * @param {string} resources
+ * @param {string} name
+ * @returns {string}
+ */
+export function lpprojRead(store, resources, name) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passArray8ToWasm0(store, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(resources, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.lpprojRead(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
 }
 
 /**
@@ -950,10 +1173,6 @@ function __wbg_get_imports() {
         },
         __wbg_getTime_00b3f7db575e4ef5: function(arg0) {
             const ret = arg0.getTime();
-            return ret;
-        },
-        __wbg_getTimezoneOffset_08e2892156231088: function(arg0) {
-            const ret = arg0.getTimezoneOffset();
             return ret;
         },
         __wbg_get_1f8f054ddbaa7db2: function() { return handleError(function (arg0, arg1) {
@@ -1247,8 +1466,8 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 90, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 263, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0) {
@@ -1288,8 +1507,8 @@ function __wbg_get_imports() {
 }
 
 const lAudioContext = (typeof AudioContext !== 'undefined' ? AudioContext : (typeof webkitAudioContext !== 'undefined' ? webkitAudioContext : undefined));
-function wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d(arg0, arg1);
+function wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166(arg0, arg1);
 }
 
 

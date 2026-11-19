@@ -2,7 +2,10 @@
 // kernel and transport, scheduled voices carrying their envelope and loop, and
 // the metronome as native looping runs.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { loadAudioKernels } from '../../atome/src/application/audio_runtime/audio_kernels.js';
+import { observeSystemClock } from '../../eVe/domains/media/shared/media_system_clock.js';
 import { buildTransportTimeline } from '../../eVe/intuition/tools/molecule/runtime_transport.js';
 import { scheduleSessionVoices } from '../../eVe/core/media_engine/molecule_render_schedule.js';
 import { normalizeTimeline } from '../../eVe/core/media_engine/molecule_support.js';
@@ -10,6 +13,12 @@ import {
     addClip, createTimeline, resizeClip, setClipBlockLoop, setClipFades, splitClip, updateSection, validateTimeline
 } from '../../eVe/intuition/tools/molecule/kernel/index.js';
 import { createMoleculeSession } from '../../eVe/intuition/tools/molecule/session/index.js';
+
+// The metronome's bar is drawn by the Rust audio kernels: loaded once from their files, as the page loads them from /wasm/.
+await loadAudioKernels({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+});
 
 const fixture = () => {
     let timeline = createTimeline({ timeline_id: 'tl', project_id: 'p', owner_atome_id: 'm', initial_section_id: 's', initial_track_id: 't' });
@@ -66,7 +75,11 @@ test('render schedule: each voice carries its envelope, a looped clip its loop',
         _stopRuntimeVoice: async () => {}, _ensureVideoAudioAsset: async () => true,
         audio: { scheduleVoices: async (voices) => { calls.push(...voices); return voices.map((voice) => voice.startRenderFrame); } }
     };
-    await scheduleSessionVoices(session, 1.5, { sample_rate: 48000, frames_rendered: 1000, block_frames: 512 });
+    // Voices are placed on the window's one system clock (R-128, media_system_clock.js).
+    const now = globalThis.performance.now();
+    const clock = observeSystemClock({ performance: globalThis.performance },
+        { sample_rate: 48000, frames_rendered: 1000, block_frames: 512, played_frame_now: 1000 }, now, now);
+    await scheduleSessionVoices(session, 1.5, clock);
     const clip = calls.find((voice) => voice.assetId === 'c');
     assert.deepEqual(clip.envelope, { offsetSeconds: 0.5, durationSeconds: 2, fadeInSeconds: 0.1, fadeOutSeconds: 0.2 });
     assert.equal(clip.gain, 1, 'the fade is not baked into the voice gain any more');

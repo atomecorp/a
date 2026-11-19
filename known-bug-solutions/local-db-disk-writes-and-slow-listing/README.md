@@ -56,8 +56,8 @@ Fastify (Web/server).
 - `npx vitest run tests/eve/tauri_state_current_recovery.test.mjs`
 - `npx vitest run tests/eve/user_profile_events.test.mjs`
 - `npx vitest run tests/eve/tool_runtime_native_bootstrap_fast_path.test.mjs`
-- `cargo test --features bevy_renderer_core --lib server::local_atome`
-  (platforms/desktop-tauri)
+- `cargo test -p atome-server --lib local::local_atome`
+  (the local server moved from Tauri into atome-server)
 - Device: Debug build, `xcrun devicectl device copy from … --domain-type
   appGroupDataContainer --domain-identifier group.atome.one`; compare the
   write rate with a new `diskwrites_resource` report or a statement probe.

@@ -430,7 +430,8 @@ mod rounded_clip_tests {
             areas: vec![ScrollAreaSpec {
                 id: "window".into(),
                 motion: ScrollMotionSpec {
-                    velocity_blend: 0.5,
+                    velocity_window_ms: 100.0,
+                    min_span_ms: 16.0,
                     min_velocity_px_per_ms: 0.02,
                     max_velocity_px_per_ms: 6.0,
                     friction_per16_ms: 0.968_475_3,

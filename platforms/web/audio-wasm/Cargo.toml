@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "The page's main-thread WASM module: the audio engine (Kira on a scheduled AudioContext), its offline kernels, the voice turns and the calendar engine"
+description = "The page's main-thread WASM module: the audio engine (Kira on a scheduled AudioContext), its offline kernels, the voice turns, the calendar engine and the Loopy Pro project reader"
 
 [lib]
 crate-type = ["cdylib"]
@@ -36,6 +36,10 @@ atome-voice-turns = { path = "../../../atome/engines/voice-turns" }
 atome-audio-kernels = { path = "../../../atome/engines/audio-kernels" }
 # The one calendar engine, for the page's agenda (src/calendar.rs).
 atome-calendar = { path = "../../../atome/engines/atome-calendar" }
+# The Loopy Pro project reader, for its import (src/lpproj.rs).
+atome-lpproj-import = { path = "../../../atome/engines/lpproj-import" }
+# The DAWproject, OpenTimelineIO and FCPXML readers, for their import (src/interchange.rs).
+atome-interchange = { path = "../../../atome/engines/interchange" }
 serde_json.workspace = true
 hound.workspace = true
 serde.workspace = true

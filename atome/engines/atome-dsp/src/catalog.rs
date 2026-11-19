@@ -3,19 +3,37 @@
 // A key never changes once shipped; saved chains refer to it.
 
 use crate::biquad::{Biquad, Shape};
+use crate::control::{Constant, Follower, LfoSource};
 use crate::convolution::{Convolution, Impulse};
 use crate::crossover::Bands;
+use crate::deesser::Deesser;
 use crate::delay::Echo;
+use crate::denoise::Denoise;
+use crate::doubler::Doubler;
 use crate::drive::{Clip, Drive};
 use crate::dynamics::{Compressor, Limiter};
 use crate::envelope::Envelope;
+use crate::eq::Equalizer;
+use crate::expander::Expander;
 use crate::gain::{Pan, Volume};
 use crate::gate::{Ducker, Gate};
+use crate::harmonizer::Harmonizer;
+use crate::imager::Imager;
+use crate::lofi::Lofi;
+use crate::maximizer::Maximizer;
+use crate::modulation::{Chorus, Flanger, Phaser, Tremolo};
+use crate::multiband::Multiband;
 use crate::nam::{AmpModel, AmpModelError};
 use crate::oscillator::{Oscillator, Waveform};
+use crate::pitch::PitchShift;
 use crate::reverb::Reverb;
+use crate::saturator::Saturator;
 use crate::split::{Split, Splitter};
-use crate::{ParamSpec, Processor};
+use crate::svf::Svf;
+use crate::transient::TransientShaper;
+use crate::tuner::Tuner;
+use crate::vocoder::Vocoder;
+use crate::{ControlRange, ParamSpec, Processor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModuleKind {
@@ -36,9 +54,34 @@ pub enum ModuleKind {
     Amp,
     Oscillator,
     Envelope,
+    // R-184 (15 Nov. 2026): the pro effects.
+    Equalizer,
+    Maximizer,
+    Multiband,
+    Deesser,
+    Transient,
+    Expander,
+    Imager,
+    Vocoder,
+    PitchShift,
+    Harmonizer,
+    Tuner,
+    Doubler,
+    Denoise,
+    Chorus,
+    Flanger,
+    Phaser,
+    Tremolo,
+    Saturator,
+    Lofi,
+    // R-191 (16 Nov. 2026): modulators (audio through, a control out) and the SVF.
+    Lfo,
+    Follower,
+    Constant,
+    Svf,
 }
 
-pub const KINDS: [ModuleKind; 26] = [
+pub const KINDS: [ModuleKind; 49] = [
     ModuleKind::Volume,
     ModuleKind::Pan,
     ModuleKind::Filter(Shape::LowPass),
@@ -65,6 +108,29 @@ pub const KINDS: [ModuleKind; 26] = [
     ModuleKind::Amp,
     ModuleKind::Oscillator,
     ModuleKind::Envelope,
+    ModuleKind::Equalizer,
+    ModuleKind::Maximizer,
+    ModuleKind::Multiband,
+    ModuleKind::Deesser,
+    ModuleKind::Transient,
+    ModuleKind::Expander,
+    ModuleKind::Imager,
+    ModuleKind::Vocoder,
+    ModuleKind::PitchShift,
+    ModuleKind::Harmonizer,
+    ModuleKind::Tuner,
+    ModuleKind::Doubler,
+    ModuleKind::Denoise,
+    ModuleKind::Chorus,
+    ModuleKind::Flanger,
+    ModuleKind::Phaser,
+    ModuleKind::Tremolo,
+    ModuleKind::Saturator,
+    ModuleKind::Lofi,
+    ModuleKind::Lfo,
+    ModuleKind::Follower,
+    ModuleKind::Constant,
+    ModuleKind::Svf,
 ];
 
 // What a kind needs beyond its parameters to exist.
@@ -125,6 +191,29 @@ impl ModuleKind {
             Self::Amp => "amp",
             Self::Oscillator => "oscillator",
             Self::Envelope => "envelope",
+            Self::Equalizer => "eq",
+            Self::Maximizer => "maximizer",
+            Self::Multiband => "multiband",
+            Self::Deesser => "deesser",
+            Self::Transient => "transient",
+            Self::Expander => "expander",
+            Self::Imager => "imager",
+            Self::Vocoder => "vocoder",
+            Self::PitchShift => "pitch_shift",
+            Self::Harmonizer => "harmonizer",
+            Self::Tuner => "tuner",
+            Self::Doubler => "doubler",
+            Self::Denoise => "denoise",
+            Self::Chorus => "chorus",
+            Self::Flanger => "flanger",
+            Self::Phaser => "phaser",
+            Self::Tremolo => "tremolo",
+            Self::Saturator => "saturator",
+            Self::Lofi => "lofi",
+            Self::Lfo => "lfo",
+            Self::Follower => "follower",
+            Self::Constant => "constant",
+            Self::Svf => "svf",
         }
     }
 
@@ -150,9 +239,41 @@ impl ModuleKind {
         }
     }
 
+    // Control signals it writes beside its audio (a modulator), and their range.
+    pub fn control_outputs(self) -> usize {
+        usize::from(self.control_range().is_some())
+    }
+
+    pub fn control_range(self) -> Option<ControlRange> {
+        match self {
+            Self::Lfo | Self::Constant => Some(ControlRange::Bipolar),
+            Self::Follower => Some(ControlRange::Unipolar),
+            _ => None,
+        }
+    }
+
+    // The live measurements its processor publishes (`Processor::readings`).
+    pub fn readings(self) -> &'static [&'static str] {
+        match self {
+            Self::Compressor => &crate::dynamics::COMPRESSOR_READINGS,
+            Self::Equalizer => &crate::eq::READINGS,
+            Self::Maximizer => &crate::maximizer::READINGS,
+            Self::Multiband => &crate::multiband::READINGS,
+            Self::Deesser => &crate::deesser::READINGS,
+            Self::Expander => &crate::expander::READINGS,
+            Self::Imager => &crate::imager::READINGS,
+            Self::Tuner => &crate::tuner::READINGS,
+            Self::Denoise => &crate::denoise::READINGS,
+            _ => &[],
+        }
+    }
+
     // Whether a sidechain key may drive it.
     pub fn takes_key(self) -> bool {
-        matches!(self, Self::Compressor | Self::Gate | Self::Ducker)
+        matches!(
+            self,
+            Self::Compressor | Self::Gate | Self::Ducker | Self::Expander | Self::Vocoder
+        )
     }
 
     // The full parameter table; an amp lists `size` even though only an A2
@@ -175,6 +296,29 @@ impl ModuleKind {
             Self::Amp => &crate::nam::PARAMS,
             Self::Oscillator => &crate::oscillator::PARAMS,
             Self::Envelope => &crate::envelope::PARAMS,
+            Self::Equalizer => &crate::eq::PARAMS,
+            Self::Maximizer => &crate::maximizer::PARAMS,
+            Self::Multiband => &crate::multiband::PARAMS,
+            Self::Deesser => &crate::deesser::PARAMS,
+            Self::Transient => &crate::transient::PARAMS,
+            Self::Expander => &crate::expander::PARAMS,
+            Self::Imager => &crate::imager::PARAMS,
+            Self::Vocoder => &crate::vocoder::PARAMS,
+            Self::PitchShift => &crate::pitch::PARAMS,
+            Self::Harmonizer => &crate::harmonizer::PARAMS,
+            Self::Tuner => &crate::tuner::PARAMS,
+            Self::Doubler => &crate::doubler::PARAMS,
+            Self::Denoise => &crate::denoise::PARAMS,
+            Self::Chorus => &crate::modulation::chorus::PARAMS,
+            Self::Flanger => &crate::modulation::flanger::PARAMS,
+            Self::Phaser => &crate::modulation::phaser::PARAMS,
+            Self::Tremolo => &crate::modulation::tremolo::PARAMS,
+            Self::Saturator => &crate::saturator::PARAMS,
+            Self::Lofi => &crate::lofi::PARAMS,
+            Self::Lfo => &crate::control::LFO_PARAMS,
+            Self::Follower => &crate::control::FOLLOWER_PARAMS,
+            Self::Constant => &crate::control::CONSTANT_PARAMS,
+            Self::Svf => &crate::svf::PARAMS,
         }
     }
 
@@ -213,6 +357,29 @@ impl ModuleKind {
                 Box::new(Oscillator::new(Waveform::Saw, defaults(0)))
             }
             (Self::Envelope, ModuleAsset::None) => Box::new(Envelope::new()),
+            (Self::Equalizer, ModuleAsset::None) => Box::new(Equalizer::new()),
+            (Self::Maximizer, ModuleAsset::None) => Box::new(Maximizer::new()),
+            (Self::Multiband, ModuleAsset::None) => Box::new(Multiband::new()),
+            (Self::Deesser, ModuleAsset::None) => Box::new(Deesser::new()),
+            (Self::Transient, ModuleAsset::None) => Box::new(TransientShaper::new()),
+            (Self::Expander, ModuleAsset::None) => Box::new(Expander::new()),
+            (Self::Imager, ModuleAsset::None) => Box::new(Imager::new()),
+            (Self::Vocoder, ModuleAsset::None) => Box::new(Vocoder::new()),
+            (Self::PitchShift, ModuleAsset::None) => Box::new(PitchShift::new()),
+            (Self::Harmonizer, ModuleAsset::None) => Box::new(Harmonizer::new()),
+            (Self::Tuner, ModuleAsset::None) => Box::new(Tuner::new()),
+            (Self::Doubler, ModuleAsset::None) => Box::new(Doubler::new()),
+            (Self::Denoise, ModuleAsset::None) => Box::new(Denoise::new()),
+            (Self::Chorus, ModuleAsset::None) => Box::new(Chorus::new()),
+            (Self::Flanger, ModuleAsset::None) => Box::new(Flanger::new()),
+            (Self::Phaser, ModuleAsset::None) => Box::new(Phaser::new()),
+            (Self::Tremolo, ModuleAsset::None) => Box::new(Tremolo::new()),
+            (Self::Saturator, ModuleAsset::None) => Box::new(Saturator::new()),
+            (Self::Lofi, ModuleAsset::None) => Box::new(Lofi::new()),
+            (Self::Lfo, ModuleAsset::None) => Box::new(LfoSource::new()),
+            (Self::Follower, ModuleAsset::None) => Box::new(Follower::new()),
+            (Self::Constant, ModuleAsset::None) => Box::new(Constant::new()),
+            (Self::Svf, ModuleAsset::None) => Box::new(Svf::new()),
         };
         Ok(processor)
     }

@@ -1,12 +1,14 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
 
 // One contract for runtime V2, AI discovery and direct MCP calls: the scripts of a text document (destructured
-// spreadsheet, eVe/domains/script/) — JavaScript or Ruby kept on the text Atome, run apart in a locked worker that
-// sees only that document, proposing values for its input cells. A script never runs on its own: it runs once
-// enabled by the person, and both enabling and running are confirmed (eVe/domains/script/script_commands.js).
+// spreadsheet, eVe/domains/script/) — JavaScript or Ruby kept on the text Atome, run apart by the script engine (a
+// WASM context with capped memory, platforms/web/script-wasm) that sees only that document, proposing values for its
+// input cells. A script never runs on its own: it runs once enabled by the person. Writing, removing, enabling and
+// running are confirmed for a program behind the relay; asked of the assistant, spoken or typed, they run at once,
+// the person's words being their yes (AGENTS.md rule 22, mcp_confirmation_gate.js#confirmByRequest): none is outward.
 export const SCRIPT_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'ATOME_NOT_FOUND', 'NOT_A_TEXT_DOCUMENT', 'script_not_found', 'script_limit_reached',
-    'SCRIPT_NOT_ENABLED', 'SCRIPT_PERMISSION_UNKNOWN', 'SCRIPT_LANG_UNKNOWN', 'SCRIPT_TIMEOUT', 'SCRIPT_SYNTAX', 'SCRIPT_ERROR', 'SCRIPT_FORBIDDEN',
-    'SCRIPT_TOO_LARGE', 'SCRIPT_CRASHED', 'SCRIPT_ENGINE_UNAVAILABLE', 'SCRIPT_LOCKDOWN_FAILED', 'SCRIPT_FAILED']);
+    'SCRIPT_NOT_ENABLED', 'SCRIPT_PERMISSION_UNKNOWN', 'SCRIPT_LANG_UNKNOWN', 'SCRIPT_TIMEOUT', 'SCRIPT_SYNTAX', 'SCRIPT_ERROR', 'SCRIPT_MEMORY',
+    'SCRIPT_TOO_DEEP', 'SCRIPT_TOO_LARGE', 'SCRIPT_CRASHED', 'SCRIPT_ENGINE_UNAVAILABLE', 'SCRIPT_REQUEST_INVALID', 'SCRIPT_NOT_PREPARED', 'SCRIPT_FAILED']);
 const atome_id = { type: 'string', minLength: 1, maxLength: 200 };
 const script_id = { type: 'string', pattern: '^script_[a-z0-9]{8,32}$' };
 const definitions = {
@@ -28,7 +30,9 @@ export const SCRIPT_COMMANDS = Object.freeze(Object.entries(definitions).map(([a
         detail: { type: 'string' }, scripts: { type: 'array' }, script: { type: 'object' }, writes: { type: 'array' }, rejected: { type: 'array' },
         log: { type: 'array' } } }
 })));
-export const SCRIPT_CONFIRMED_COMMANDS = Object.freeze(['script.enable', 'script.run']);
+// Writing, taking off, enabling and running a script are the person's (AGENTS.md rule 22): asked of the assistant, their own words
+// confirm it and it is done at once; a program behind the relay or an automation waits for the person (mcp_confirmation_gate.js).
+export const SCRIPT_CONFIRMED_COMMANDS = Object.freeze(['script.save', 'script.remove', 'script.enable', 'script.run']);
 export const validateScriptInput = (action, input) => {
     const contract = SCRIPT_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';

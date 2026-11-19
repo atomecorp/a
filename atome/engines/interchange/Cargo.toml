@@ -1,0 +1,33 @@
+[package]
+name = "atome-interchange"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Interchange readers (one way, into atome): DAWproject, OpenTimelineIO and Final Cut Pro XML laid as the native Molecule timeline, through the one Molecule document writer shared with every importer"
+
+[dependencies]
+serde = { workspace = true }
+serde_json.workspace = true
+quick-xml = "0.41"
+# The mix modules' parameter table (ranges, defaults, choices) is the DSP crate's own.
+atome-dsp = { path = "../atome-dsp" }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "interchange_dawproject"
+path = "../../../tests/interchange/dawproject.rs"
+
+[[test]]
+name = "interchange_otio"
+path = "../../../tests/interchange/otio.rs"
+
+[[test]]
+name = "interchange_fcpxml"
+path = "../../../tests/interchange/fcpxml.rs"
+
+[[test]]
+name = "interchange_writer"
+path = "../../../tests/interchange/writer.rs"
