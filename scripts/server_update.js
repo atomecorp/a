@@ -5,8 +5,6 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyDeployedSource, verifyRuntimeDependencies } from './verify_deployed_source.js';
-import { checkVaultConfinement } from './check_vault_confinement.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -465,6 +463,11 @@ async function main() {
         skipPhase('git-update', '--no-git');
         skipPhase('eve-source', '--no-git');
     }
+
+    // The verifiers are loaded only now, from the source just pulled: imported at start-up they were the
+    // previous release's, which checked for files the new one no longer has (server/server.js, 22 Nov. 2026).
+    const { verifyDeployedSource, verifyRuntimeDependencies } = await import('./verify_deployed_source.js');
+    const { checkVaultConfinement } = await import('./check_vault_confinement.mjs');
 
     phase('verify-source', () => verifyDeployedSource(projectRoot));
 
