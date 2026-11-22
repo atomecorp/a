@@ -58,20 +58,27 @@ test('eVe Pro reads like the decision grid and eVe Basic lays its four tiles as 
     // eVe Basic: the chosen monitor above the V logo, Contacts left, the Agenda right, Objectives under it.
     expect(dashboardHomeMatrixNeighbours(matrix(true), shown(true, { monitors: 1 })))
         .toEqual({ above: 'monitor_0', below: 'objectives', left: 'contacts', right: 'next_event' });
-    expect(dashboardHomeMatrixNeighbours(matrix(false), shown(false)))
+    // 640 high holds no spare row: the weather takes the last project's cell, so it is not laid and the V's « above »
+    // stays the time (user, 21 Nov. 2026); a taller screen lays the last project right above the V.
+    expect(dashboardEveHomeCellVisible('last_project', { basic: false, matrix: matrix(false) })).toBe(false);
+    expect(dashboardHomeMatrixNeighbours(matrix(false), shown(false, { matrix: matrix(false) })))
         .toEqual({ above: 'clock', below: 'monitor_0', left: 'activity', right: 'objectives' });
+    const tall = dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760 });
+    expect(dashboardEveHomeCellVisible('last_project', { basic: false, matrix: tall })).toBe(true);
 });
 
 // The home's first screen leaves the top strip empty: the time, the weather and the Agenda rise into it, one cell nearer
 // the top, on the same cell, the tiles unmoved; elsewhere they step back under it (choice A1, user 13 Nov. 2026).
 test('the pinned time, weather and Agenda rise into the empty top strip on the first screen only', () => {
-    const pinned = options => ['clock', 'weather', 'next_event', 'activity', 'last_project']
+    const pinned = options => ['clock', 'weather', 'next_event', 'activity', 'projects']
         .map(ref => dashboardHomeMatrixPlace(dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760, ...options }), ref));
     // 760 / 60 = 12 whole cells: the strip, two spare rows, the block of eight, the band.
     // The first screen holds no V tool: the next appointment takes its cell, 4 × 1 (R-172).
     expect(pinned({})).toEqual([[0, -3, 2, 1], [0, -2, 6, 1], [3, -3, 3, 1], [0, 2, 2, 2], [0, -4, 2, 2]]);
     expect(pinned({ stripFree: true })).toEqual([[0, -3, 2, 1], [0, -2, 6, 1], [2, -3, 4, 1], [0, 2, 2, 2], [0, -5, 2, 2]]);
     const free = dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760, stripFree: true });
+    // The last project lies right above the V logo (the session), never risen (user, 21 Nov. 2026).
+    expect([free.places.last_project, free.places.session]).toEqual([[2, 0, 2, 2], [2, 2, 2, 2]]);
     expect([free.cell, free.spare, free.rise]).toEqual([60, 2, 3]);
     // eVe Basic pins nothing; a phone lying has no strip: neither moves.
     expect(dashboardHomeMatrix({ domain: 'eve', width: 360, height: 760, basic: true, stripFree: true }).rise).toBe(0);

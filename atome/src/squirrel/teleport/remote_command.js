@@ -62,7 +62,10 @@ const FILLER_WORDS = new Set(['sur', 'le', 'la', 'les', 'l', 'du', 'de', 'des', 
 const PLATFORM_WORDS = Object.freeze({
     ios: ['iphone', 'ipad', 'telephone', 'portable', 'mobile', 'tablette', 'phone'],
     tauri: ['mac', 'macbook', 'ordinateur', 'ordi', 'desktop', 'pc', 'bureau', 'computer'],
-    browser: ['navigateur', 'browser', 'web']
+    browser: ['navigateur', 'browser', 'web'],
+    // The screens of the network (R-248): a television said as such names whichever there is, several are asked.
+    chromecast: ['chromecast', 'cast', 'google', 'tele', 'tv', 'television', 'ecran'],
+    airplay: ['airplay', 'apple', 'tele', 'tv', 'television', 'ecran']
 });
 
 export const normalizeSurfaceName = (value) => String(value ?? '')
@@ -149,7 +152,7 @@ const wireResult = (value) => {
     try {
         const copy = JSON.parse(JSON.stringify(value ?? null));
         return isPlainObject(copy) ? copy : { ok: true, value: copy };
-    } catch (error) {
+    } catch {
         return { ok: false, error: 'remote_command_result_unserializable' };
     }
 };

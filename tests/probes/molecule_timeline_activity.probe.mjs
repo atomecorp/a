@@ -124,12 +124,12 @@ test('a view chosen before the Timeline opens is the one it opens on', async () 
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
-        assert.deepEqual(content.chooseView({ layout: 'scene' }), { ok: true, pending: true });
+        assert.deepEqual(content.chooseView({ layout: 'cells' }), { ok: true, pending: true });
         await content.load({ projectId: 'project_tl', readList: async () => ({ records: projectRecords, totalCount: 2 }) });
-        assert.deepEqual(content.viewChoice(), { layout: 'scene' }, 'shown at once');
+        assert.deepEqual(content.viewChoice(), { layout: 'cells' }, 'shown at once');
         await new Promise((resolve) => setTimeout(resolve, 0));
         const view = api.readGroupTimeline({ group_id: 'project_tl' }).timeline.view;
-        assert.equal(view.layout, 'scene');
+        assert.equal(view.layout, 'cells');
     });
 });
 
@@ -145,13 +145,15 @@ test('Mute and Solo answer the touch and are stored in the order of the touches'
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
         await content.load({ projectId: 'project_tl', readList: async () => ({ records: projectRecords, totalCount: 2 }) });
         const trackId = api.readGroupTimeline({ group_id: 'project_tl' }).timeline.tracks.find((track) => !track.empty_slot).track_id;
+        // On, S takes the Solo colour; off, it keeps the keys' dark ground, the one M shows here (never touched).
         const soloShown = () => {
-            let key = null;
-            const walk = (node) => { if (!node) return; if (node.id.endsWith(`${trackId}_solo`)) key = node; (node.children || []).forEach(walk); };
+            const keys = {};
+            const walk = (node) => { if (!node) return; const kind = /_(solo|mute)$/.exec(node.id)?.[1]; if (kind && node.id.includes(trackId)) keys[kind] = node; (node.children || []).forEach(walk); };
             content.build({ width: 900, height: 420, emit: () => {} }).forEach(walk);
-            return key?.style?.background?.[3] === 1; // on: the opaque Solo colour; off: a translucent dark square
+            assert.ok(keys.solo && keys.mute, 'the open header shows M and S');
+            return JSON.stringify(keys.solo.style.background) !== JSON.stringify(keys.mute.style.background);
         };
-        await content.handleEvent({ type: 'project_view.timeline.header.tap', trackId });
+        await content.handleEvent({ type: 'project_view.timeline.header.open', trackId });
         const tap = () => content.handleEvent({ type: 'project_view.timeline.track.mix', trackId, mode: 'solo' });
         const first = tap();
         assert.equal(soloShown(), true, 'shown at the touch');
@@ -171,9 +173,9 @@ test('Mute and Solo answer the touch and are stored in the order of the touches'
     });
 });
 
-// A tap on a header opens that header's keys and selects its track; a tap again folds it and releases the track; a hold
-// opens it too (R-199, mockup g1). Only that header opens.
-test('a header tap opens its own keys and selects the track', async () => {
+// A touch on a header selects its track without opening it; a double touch opens its keys; a touch then folds them,
+// the track staying chosen; a hold shows its name's bubble (user, 21 Nov. 2026). Only that header opens.
+test('a header touch selects its track, a double touch opens its keys', async () => {
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
@@ -184,22 +186,26 @@ test('a header tap opens its own keys and selects the track', async () => {
         const walk = (node) => { if (!node) return; if (node.id === `project_view_timeline_header_${trackId.replace(/[^a-zA-Z0-9_-]/g, '_')}`) header = node; (node.children || []).forEach(walk); };
         content.build({ width: 900, height: 420, emit: (intent) => emitted.push(intent) }).forEach(walk);
         header.on.activate();
+        header.on.double_click();
         header.on.long_press();
-        assert.deepEqual(emitted.map((intent) => intent.type), ['project_view.timeline.header.tap', 'project_view.timeline.header.tap']);
-        assert.equal(emitted[1].held, true);
+        assert.deepEqual(emitted.map((intent) => intent.type),
+            ['project_view.timeline.header.tap', 'project_view.timeline.header.open', 'project_view.timeline.header.bubble']);
         const keysShown = () => {
             let found = false;
             const look = (node) => { if (!node) return; if (node.id.endsWith(`${trackId}_mute`)) found = true; (node.children || []).forEach(look); };
             content.build({ width: 900, height: 420, emit: () => {} }).forEach(look);
             return found;
         };
-        assert.equal(keysShown(), false);
         await content.handleEvent(emitted[0]);
-        assert.equal(content.readState().selectedTrackId, trackId);
-        assert.equal(keysShown(), true, 'its keys show');
+        assert.equal(content.readState().selectedTrackId, trackId, 'a touch selects the track');
+        assert.equal(keysShown(), false, 'a touch does not open its keys');
         await content.handleEvent(emitted[0]);
-        assert.equal(content.readState().selectedTrackId, '', 'a second tap releases it');
-        assert.equal(keysShown(), false, 'and folds its keys');
+        assert.equal(content.readState().selectedTrackId, trackId, 'a touch again keeps it selected');
+        await content.handleEvent(emitted[1]);
+        assert.equal(keysShown(), true, 'a double touch opens its keys');
+        await content.handleEvent(emitted[0]);
+        assert.equal(keysShown(), false, 'a touch folds them');
+        assert.equal(content.readState().selectedTrackId, trackId, 'the track stays chosen');
     });
 });
 
@@ -225,10 +231,8 @@ test('the playhead is grabbed and dragged', async () => {
     });
 });
 
-// Clips are selected by a held lasso on the tracks area, by Cumul taps, and a
-// rail Delete removes every selected clip.
-test('lasso and Cumul select several clips; Delete removes them all', async () => {
-    const { setCumulativeSelection } = await import('../../eVe/intuition/runtime/selection.js');
+// Clips are selected by a held lasso on the tracks area, and a rail Delete removes every selected clip.
+test('the lasso selects several clips; Delete removes them all', async () => {
     const { visibleClipBoxes } = await import('../../eVe/domains/rendering/project_view_timeline_lasso.js');
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
@@ -269,18 +273,6 @@ test('lasso and Cumul select several clips; Delete removes them all', async () =
         await gesture('drag', to);
         await gesture('release', to);
         assert.equal(selectedCount(), 2, 'the lasso selects both clips');
-        setCumulativeSelection(true);
-        try {
-            const first = boxes[0].id;
-            await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'press', event: { client_x: 1, client_y: 1 } });
-            await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'release', event: { client_x: 1, client_y: 1 } });
-            assert.equal(selectedCount(), 1, 'a Cumul tap takes a clip out');
-            await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'press', event: { client_x: 1, client_y: 1 } });
-            await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'release', event: { client_x: 1, client_y: 1 } });
-            assert.equal(selectedCount(), 2, 'and back in');
-        } finally {
-            setCumulativeSelection(false);
-        }
         await content.invokeRailTool({ key: 'timeline_clip_delete' }, {});
         assert.equal(api.readGroupTimeline({ group_id: 'project_tl' }).timeline.clips.length, 0, 'Delete removes every selected clip');
     });

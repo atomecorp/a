@@ -6,7 +6,7 @@ import { createVoiceInputMeterRuntime, normalizeNativeInputRms } from '../../ato
 import { normalizeAiProviderError } from '../../atome/src/squirrel/ai/provider_client.js';
 import { buildPlannerPrompt, createVoiceAiPlanner } from '../../atome/src/squirrel/voice/ai_planner.js';
 import { resolveVoiceExecutionBridge } from '../../atome/src/squirrel/voice/orchestrator_bridge.js';
-import { localizeExecutionError } from '../../atome/src/squirrel/voice/home_surface_i18n.js';
+import { localizeAiFailure } from '../../atome/src/squirrel/voice/ai_planner_runtime_context.js';
 import {
     applyHintedSpeechCorrections,
     collectSpeechHints,
@@ -409,5 +409,5 @@ test('provider and MCP failures keep specific actionable codes and messages', ()
     assert.match(authentication.user_message, /clé IA/);
     assert.equal(invalid.code, 'provider_invalid_response');
     assert.match(invalid.user_message, /réponse invalide/);
-    assert.match(localizeExecutionError('voice_mcp_bridge_unavailable', 'fr-FR'), /pont sécurisé/);
+    assert.match(localizeAiFailure('voice_mcp_bridge_unavailable', 'fr-FR'), /pont sécurisé/);
 });

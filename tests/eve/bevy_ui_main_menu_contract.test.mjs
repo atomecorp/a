@@ -106,7 +106,7 @@ test('the capture palette keeps only its capture sources and Actions while the r
     assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'midi'\];/);
 });
 
-test('the permanent bar is the five intents plus view/help/contact; mode and activity stay declared', async () => {
+test('the permanent bar is the five intents; mode, activity, view, help and contact stay declared', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
@@ -130,11 +130,10 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
         },
         translate: (_key, fallback) => fallback
     });
-    // 2026-09-29 : `mode` et `activity` quittent la barre permanente ; `help`
-    // (l'outil existant) et `contact` les remplacent a la meme place.
-    assert.deepEqual(content.toolbox.children,
-        ['capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact']);
-    for (const key of ['mode', 'activity']) {
+    // 2026-09-29 : `mode` et `activity` quittent la barre permanente ; 2026-11-21 :
+    // `view` (rangee dans Utilitaires du Mystic), `help` et `contact` la quittent aussi.
+    assert.deepEqual(content.toolbox.children, ['capture', 'create', 'find', 'communicate', 'calendar']);
+    for (const key of ['mode', 'activity', 'view', 'help', 'contact']) {
         assert.ok(content[key], `${key} reste un outil declare, hors barre permanente`);
         assert.equal(content.toolbox.children.includes(key), false, `${key} ne reside plus dans la barre`);
     }
@@ -145,16 +144,12 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     // la commande de la capture, `matrix` la porte des projets en vignettes.
     assert.equal(content.utilities.type, 'palette');
     assert.equal(content.utilities.tool_type, 'palette');
-    assert.deepEqual(content.utilities.children, ['mode', 'validation', 'matrix', 'level']);
-    // « Niveau d'expertise » (2026-10-06) : un niveau de plus dans la navigation
-    // hierarchique de Mystic, trois feuilles qui ecrivent LA preference existante
-    // (`preferences.visual.masteryLevel`) par le proprietaire de profil.
-    assert.equal(content.level.type, 'palette');
-    assert.deepEqual(content.level.children, ['level_beginner', 'level_intermediate', 'level_advanced']);
-    assert.deepEqual(content.level.children.map((key) => content[key].tool_id),
-        ['ui.level.beginner', 'ui.level.intermediate', 'ui.level.advanced']);
-    assert.deepEqual(content.level.children.map((key) => content[key].extra_input.mastery_level),
-        ['beginner', 'intermediate', 'advanced']);
+    assert.deepEqual(content.utilities.children, ['mode', 'validation', 'matrix', 'view']);
+    // 2026-11-21 : la Vue prend la place du « Niveau d'expertise », dont la palette
+    // disparait (le niveau reste dans les Reglages et les commandes `ui.level.*`).
+    assert.equal(content.level, undefined);
+    assert.equal(content.view.type, 'palette');
+    assert.deepEqual(content.view.children, ['view_list', 'view_table', 'view_natural']);
     assert.deepEqual(content.mode.children, ['perform', 'mode_edit', 'mode_consume']);
     assert.equal(content.validation.tool_id, 'ui.capture.validation');
     assert.equal(content.matrix.tool_id, 'tool.main.matrix');
@@ -552,17 +547,17 @@ test('a leaf palette choice closes the palette, a cursor keeps it open and a nes
     const node = (id) => findNode(latest().root, id);
     try {
         await harness.runtime.showFully();
-        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        await node('eve_bevy_ui_main_menu_tool_capture').on.activate({});
         await waitMs(350);
-        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+        assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
         // R1 — un clic direct sur un enfant referme la palette.
-        await node('eve_bevy_ui_main_menu_tool_view__view_list').on.activate({});
+        await node('eve_bevy_ui_main_menu_tool_capture__view_list').on.activate({});
         assert.deepEqual(invocations, ['view_list']);
         assert.equal(harness.runtime.measure().activePaletteKey, '');
         // R1 — l'appui-glisse choisit le meme enfant et referme pareil.
-        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        await node('eve_bevy_ui_main_menu_tool_capture').on.activate({});
         await waitMs(350);
-        await node('eve_bevy_ui_main_menu_tool_view__view_table').on.palette_choose({});
+        await node('eve_bevy_ui_main_menu_tool_capture__view_table').on.palette_choose({});
         assert.deepEqual(invocations, ['view_list', 'view_table']);
         assert.equal(harness.runtime.measure().activePaletteKey, '');
         // R1 — une palette imbriquee n'est pas un choix : elle ouvre son niveau.
@@ -598,17 +593,17 @@ test('a slide on an already open ribbon palette keeps it and the release applies
         await harness.runtime.showFully();
         // R1 (2026-09-27) — l'outil porte le glissement partage : le premier
         // deplacement d'un geste revele ses options sans lever le doigt.
-        assert.equal(typeof node('eve_bevy_ui_main_menu_tool_view').on.palette_slide_open, 'function');
-        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        assert.equal(typeof node('eve_bevy_ui_main_menu_tool_capture').on.palette_slide_open, 'function');
+        await node('eve_bevy_ui_main_menu_tool_capture').on.activate({});
         await waitMs(350);
-        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+        assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
         // Le glissement sur une palette DEJA ouverte revele, il ne bascule pas :
         // le doigt ne reste jamais au-dessus d'une palette refermee.
-        await node('eve_bevy_ui_main_menu_tool_view').on.palette_slide_open({});
-        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+        await node('eve_bevy_ui_main_menu_tool_capture').on.palette_slide_open({});
+        assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
         assert.deepEqual(invocations, []);
         // Le relachement sur l'option applique le choix et referme.
-        await node('eve_bevy_ui_main_menu_tool_view__view_list').on.palette_choose({});
+        await node('eve_bevy_ui_main_menu_tool_capture__view_list').on.palette_choose({});
         assert.deepEqual(invocations, ['view_list']);
         assert.equal(harness.runtime.measure().activePaletteKey, '');
     } finally { harness.runtime.destroy(); harness.restore(); }
@@ -685,29 +680,8 @@ test('a latched tool that owns options replaces its palette other choices in the
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
 
-test('View keeps its own icon and label when the canonical view mode changes', async () => {
-    const content = choicePaletteContent();
-    const harness = createRuntimeHarness({ content, onInvoke: () => ({ ok: true }) });
-    const latest = () => harness.calls.at(-1).payload.tree;
-    const node = (id) => findNode(latest().root, id);
-    try {
-        await harness.runtime.showFully();
-        // La palette Vue garde SON icone et SON libelle, ici comme ailleurs
-        // (2026-09-24) : elle ne porte plus le mode de vue courant.
-        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /visible_true\.svg$/);
-        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'View');
-        await harness.runtime.refresh();
-        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /visible_true\.svg$/);
-        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'View');
-        // R5 — un choix momentane n'a rien a eteindre : l'appui rouvre la palette.
-        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
-        await waitMs(350);
-        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
-    } finally { harness.runtime.destroy(); harness.restore(); }
-});
-
 test('the main menu keeps assistant input and options owned by the dock', async () => {
- const h=createRuntimeHarness(); const dashboard=0;
+ const h=createRuntimeHarness();
  h.window.eveAssistantApi={getState:()=>({active:true}),listen:()=>{throw Error('unexpected voice activation');}};
  try { await h.runtime.showFully();
   assert.equal(h.runtime.assistantFieldOpen,undefined);
@@ -719,7 +693,7 @@ test('the main menu keeps assistant input and options owned by the dock', async 
 });
 
 const choicePaletteContent = () => ({
-    toolbox: { children: ['create', 'view', 'draw'] },
+    toolbox: { children: ['create', 'capture', 'draw'] },
     create: { atome_tool: true, label: 'Create', icon: 'add', tool_id: 'tool.main.create',
         type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
         children: ['text_create', 'create_draw'] },
@@ -731,7 +705,7 @@ const choicePaletteContent = () => ({
         slider_min: 1, slider_max: 100, slider_value: 10 },
     draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
         type: 'palette', tool_type: 'palette', action: 'momentary', children: ['draw_size'] },
-    view: { atome_tool: true, label: 'View', icon: 'visible_true', tool_id: 'tool.main.view',
+    capture: { atome_tool: true, label: 'Capture', icon: 'record', tool_id: 'tool.main.capture',
         type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
         children: ['view_list', 'view_table'] },
     view_list: { atome_tool: true, label: 'List', icon: 'hamburger', tool_id: 'ui.view.mode.list',

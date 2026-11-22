@@ -105,7 +105,7 @@ describe('User tool canonical command', () => {
         h.window.__eveProfilePreferences = { visual: { masteryLevel: 'advanced' } };
         try {
             await h.runtime.showFully();
-            const expected = ['capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact'];
+            const expected = ['capture', 'create', 'find', 'communicate', 'calendar'];
             // In a project the band keeps Organize beside the Atom (its way back to the Dashboard, rule 13).
             expect(h.runtime.measure().itemCount).toBe(expected.length + 2);
             expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(expect.arrayContaining(expected));
@@ -344,13 +344,15 @@ describe('User ribbon countdown gesture lifetime', () => {
         vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'performance'] });
         const complete = vi.fn(async () => ({ ok: true }));
         let h;
-        const content = { toolbox: { children: ['contact'] }, contact: { atome_tool: true,
+        // The User command left the ribbon's roots (21 Nov. 2026); a person lays it back from Trouver › Outils.
+        // Its slot here is a root's, carrying the same command, so the countdown runs on the real ribbon.
+        const content = { toolbox: { children: ['find'] }, find: { atome_tool: true,
             label: 'User', icon: 'contact', tool_id: 'ui.contact.panel', long_press_action: 'pointer.long' } };
         h = createRuntimeHarness({ content, onInvoke: () => h.runtime.startToolCountdown({ toolId: 'ui.contact.panel', complete }) });
         h.window.eveBevyUiRuntime.updateTreeMotion = vi.fn();
         try {
             await h.runtime.showFully();
-            const tool = () => findNode(h.calls.filter(call => call.payload?.tree).at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_contact');
+            const tool = () => findNode(h.calls.filter(call => call.payload?.tree).at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_find');
             tool().on.press({ x: 20, y: 20 });
             const pending = tool().on.long_press();
             await vi.advanceTimersByTimeAsync(elapsed);

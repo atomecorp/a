@@ -1,7 +1,7 @@
 // Sample-accurate starts on the native engine, on this machine's real output
 // device: voices scheduled on rendered frames must start exactly there.
-// Run with: cargo test --lib scheduled_backend_tests -- --test-threads=1
-// (needs an output device; the impulses play at -40 dB: Kira mutes -60 dB and below).
+// Each test holds the engine's test lock (tests.rs `ENGINE_TEST_LOCK`): the engine is global.
+// (Needs an output device; the impulses play at -40 dB: Kira mutes -60 dB and below).
 
 use super::playback;
 use super::playback_schedule::{render_clock, schedule_instance};
@@ -62,6 +62,9 @@ fn voice(gain: f64) -> VoiceRequest {
 
 #[test]
 fn scheduled_voices_start_on_their_exact_rendered_frame() {
+    let _engine = super::tests::ENGINE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     playback::init().expect("audio engine init");
     let clock = started_clock();
     playback::load_clip_from_bytes("sched_test_impulse", impulse_wav(clock.sample_rate))
@@ -121,6 +124,9 @@ fn scheduled_voices_start_on_their_exact_rendered_frame() {
 // frame (todo/audio_to_finalize §2.2): the steady level is a 0.25 DC source.
 #[test]
 fn scheduled_voice_fades_are_sample_exact() {
+    let _engine = super::tests::ENGINE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     playback::init().expect("audio engine init");
     let clock = started_clock();
     let rate = clock.sample_rate as f64;
@@ -169,6 +175,9 @@ fn scheduled_voice_fades_are_sample_exact() {
 // clock: the host instant of its first sample and the output anchor of then.
 #[test]
 fn native_capture_notes_its_start_on_the_playback_clock() {
+    let _engine = super::tests::ENGINE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     playback::init().expect("audio engine init");
     std::thread::sleep(Duration::from_millis(300));
     let path = std::env::temp_dir().join("squirrel_sched_capture_clock.wav");
@@ -197,6 +206,9 @@ fn native_capture_notes_its_start_on_the_playback_clock() {
 // and an unknown device name is an explicit error, never another device.
 #[test]
 fn live_input_follows_the_output_rate_and_refuses_unknown_devices() {
+    let _engine = super::tests::ENGINE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     use cpal::traits::HostTrait;
     playback::init().expect("audio engine init");
     let clock = started_clock();
@@ -230,6 +242,9 @@ fn live_input_follows_the_output_rate_and_refuses_unknown_devices() {
 // (speaker → microphone) with a consistent residual, or none is, explicitly.
 #[test]
 fn input_calibration_measures_a_consistent_residual_or_says_nothing_was_heard() {
+    let _engine = super::tests::ENGINE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     playback::init().expect("audio engine init");
     started_clock();
     match super::calibration::measure_input_latency(None) {
@@ -256,6 +271,9 @@ fn input_calibration_measures_a_consistent_residual_or_says_nothing_was_heard() 
 // and a voice scheduled right after still starts on its exact frame.
 #[test]
 fn a_resting_output_wakes_and_keeps_exact_starts() {
+    let _engine = super::tests::ENGINE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     playback::init().expect("audio engine init");
     let clock = started_clock();
     let deadline = Instant::now() + Duration::from_secs(12);

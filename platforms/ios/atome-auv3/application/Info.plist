@@ -102,6 +102,11 @@
 	<string>Read selected calendars into your private Atome workspace, and keep your eVe appointments in an eVe calendar.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Read selected calendars into your private Atome workspace, and keep your eVe appointments in an eVe calendar.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_googlecast._tcp</string>
+		<string>_airplay._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>
 	<key>NSContactsUsageDescription</key>
@@ -112,6 +117,8 @@
 	<string>Atome utilise le système de fichiers iOS pour gérer vos projets</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Atome utilise Face ID pour confirmer que c'est bien vous qui approuvez un nouvel appareil ou une action sur votre compte.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Atome cherche sur votre réseau les écrans (Apple TV, Chromecast) auxquels vous lui demandez d'envoyer une vidéo, une photo ou un son.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
 	<key>NSHealthUpdateUsageDescription</key>
@@ -135,7 +142,7 @@
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
+		<true/>
 		<key>UISceneConfigurations</key>
 		<dict>
 			<key>CPTemplateApplicationSceneSessionRoleApplication</key>

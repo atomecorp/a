@@ -43,12 +43,32 @@ struct atomeApp: App {
 struct ContentView: View {
     // Restoration state of this window scene: see AppWorkspaceResume.
     @SceneStorage("atome.workspace.resume") private var workspaceResume = ""
+    // The app's own window or a Follow window (ExternalDisplayFollowWindow.swift, an iPad with Stage Manager).
+    @SceneStorage("atome.window.role") private var storedRole = ""
+    @State private var role: AppWindowRole?
     @ObservedObject private var resume = AppWorkspaceResume.shared
 
     var body: some View {
-        WebViewContainer()
-            .ignoresSafeArea(.container, edges: .all)
-            .onAppear { resume.restore(workspaceResume) }
-            .onChange(of: resume.stored) { _, value in workspaceResume = value }
+        Group {
+            switch role {
+            case .app:
+                WebViewContainer()
+                    .onAppear { resume.restore(workspaceResume) }
+                    .onChange(of: resume.stored) { _, value in workspaceResume = value }
+            case .follow:
+                ExternalDisplayFollowWindow()
+            case nil:
+                // The launch's own ground for the instant the role takes: no flash before the boot overlay.
+                Color("LaunchBackground")
+            }
+        }
+        .ignoresSafeArea(.container, edges: .all)
+        .task {
+            guard role == nil else { return }
+            let claimed = await AppWindowRoles.shared.claim(stored: storedRole)
+            storedRole = claimed.rawValue
+            role = claimed
+        }
+        .onDisappear { AppWindowRoles.shared.release(role) }
     }
 }

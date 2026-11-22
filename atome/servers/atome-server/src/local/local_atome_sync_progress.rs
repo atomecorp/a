@@ -62,10 +62,14 @@ pub(super) fn read(state: &LocalAtomeState, user: &str) -> Value {
     }
 }
 
-pub(super) fn projection(user: &str, streams: Vec<String>) {
+// `types`: the Atome types those streams wrote, when known (none at a connection's start, where
+// every stream is announced); a reader of one type re-reads only when it is named.
+pub(super) fn projection(user: &str, streams: Vec<String>, types: Option<Vec<String>>) {
     if !streams.is_empty() {
-        super::broadcast_sync_event(
-            json!({"type":"sync:projection-ready", "local_user_id":user,"streams":streams,"replay":true}),
-        );
+        let mut payload = json!({"type":"sync:projection-ready", "local_user_id":user,"streams":streams,"replay":true});
+        if let Some(types) = types {
+            payload["types"] = json!(types);
+        }
+        super::broadcast_sync_event(payload);
     }
 }

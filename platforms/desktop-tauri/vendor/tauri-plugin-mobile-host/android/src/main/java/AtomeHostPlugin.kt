@@ -26,6 +26,8 @@ class AtomeHostPlugin(private val activity: Activity) : Plugin(activity) {
         ExternalDisplay.attach(activity, webView)
         AtomeAlarms.noteIntent(activity, activity.intent, webView)
     }
+    // Tauri's newer onResume(AppCompatActivity) needs androidx.appcompat, which this plugin does not depend on.
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onResume() { NativeCommunication.signal() }
     override fun onNewIntent(intent: android.content.Intent) {
         AtomeAlarms.noteIntent(activity, intent)

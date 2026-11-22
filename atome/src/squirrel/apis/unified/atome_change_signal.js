@@ -9,6 +9,17 @@ export const ATOME_CHANGE_EVENTS = Object.freeze({
     deleted: 'squirrel:atome-deleted',
     restored: 'squirrel:atome-restored'
 });
+// A frame of a gesture in progress (a drag, a resize): where the gesture draws the Atome now, before it commits. It is
+// not durable and changes no view: only what draws the same scene elsewhere follows it live (a connected screen's
+// page, R-212, external_display_changes.js). Detail: `{ atome_id, project_id, gesture_id, props }`.
+export const ATOME_FRAME_EVENT = 'squirrel:atome-frame';
+export const dispatchAtomeFrame = (env, detail) => dispatchAtomeChange(env, ATOME_FRAME_EVENT, detail);
+// The events this page has just committed, each by its id (a gesture's frames included, which no view is told of): the
+// account hands them back to every page of the device a moment later, and a page that never saw them would draw them
+// again, late. A connected screen's page tells the device's page of its own (R-212, external_display_changes.js).
+// Detail: `{ event_ids }`.
+export const ATOME_COMMITTED_EVENT = 'squirrel:atome-committed';
+
 // A view also hears the creations announced by the owners that write outside the commit pipeline
 // (adole_api/projects.js, tool_genesis_create_runtime.js); the pipeline itself announces a creation as `updated`.
 const NAMES = Object.freeze(['squirrel:atome-created', ...Object.values(ATOME_CHANGE_EVENTS)]);

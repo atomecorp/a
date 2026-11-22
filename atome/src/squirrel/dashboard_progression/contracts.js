@@ -14,7 +14,7 @@ export const DASHBOARD_PROGRESSION_ERRORS = Object.freeze(['progression_actor_re
     'progression_commit_failed', 'progression_unlock_invalid', 'progression_read_incomplete', 'progression_unknown_command',
     'progression_invalid_argument', 'progression_settings_invalid', 'progression_settings_unavailable', 'progression_schedule_unavailable',
     'progression_time_budget_required', 'progression_aim_invalid', 'progression_deadline_invalid', 'progression_challenge_invalid',
-    'progression_done_invalid', 'progression_session_required', 'progression_session_choice_invalid', 'progression_ongoing_unavailable', 'progression_ongoing_none', 'progression_ongoing_unknown', 'progression_recent_none', 'progression_recent_unknown', 'progression_recent_unavailable', 'progression_stage_layout_unavailable', 'progression_search_unavailable', 'progression_duo_unavailable', 'progression_duo_nothing_held', 'progression_duo_tile_unknown',
+    'progression_done_invalid', 'progression_session_required', 'progression_session_choice_invalid', 'progression_ongoing_unavailable', 'progression_ongoing_none', 'progression_ongoing_unknown', 'progression_recent_none', 'progression_recent_unknown', 'progression_recent_unavailable', 'progression_stage_layout_unavailable', 'progression_search_unavailable',
     'progression_results_unavailable', 'progression_results_closed', 'progression_results_day_invalid', 'progression_results_week_future',
     'progression_preparation_unavailable', 'progression_close_failed', 'progression_delete_failed']);
 
@@ -27,8 +27,6 @@ const settings = read => ({ type: 'object', additionalProperties: false, propert
     effort: read ? nullable(OBJECTIVE_EFFORT_SCHEMA) : OBJECTIVE_EFFORT_SCHEMA, money_budget: nullable(OBJECTIVE_MONEY_BUDGET_SCHEMA) } });
 const schedule = { type: 'object', properties: { start_minutes: count, minutes: count, days: { type: 'array', items: { type: 'integer' } },
     calendar: { type: 'boolean' } } };
-// The Duo shown (dashboard_duo.js#inspect): its phase, the tile chosen, the tiles offered.
-const duo = { open: { type: 'boolean' }, phase: { type: 'string' }, rubric: { type: 'string' }, tiles: { type: 'array', items: { type: 'string' } } };
 // An objective named by its id, or by its goal (one per official goal: muscle, movement, weight, aging…).
 const named = { objective_id: { type: 'string', minLength: 1, maxLength: 200 }, goal: { type: 'string', minLength: 1, maxLength: 64 } };
 const day = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' };
@@ -120,13 +118,10 @@ const definitions = {
     'monitors.select': [{ ids: { type: 'array', maxItems: 64, uniqueItems: true, items: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' } } }, ['ids'], true,
         'Choose the health monitors the user\'s home shows, in order (ids from the health catalog). Replaces the selection.',
         { ids: { type: 'array', items: { type: 'string' } } }],
-    'monitors.favorite': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, favorite: { type: 'boolean' } }, ['id', 'favorite'], true,
-        'Make one selected health monitor the favourite the eVe Pro home\'s Moniteur tile shows (favorite true; another favourite is '
-        + 'replaced, there is only one), or no longer the favourite (false: the tile then shows no monitor).',
-        { ids: { type: 'array', items: { type: 'string' } }, favorite: { type: 'string' } }],
     'monitors.cycle': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, cycle: { type: 'boolean' } }, ['id', 'cycle'], true,
-        'Make one selected health monitor take part (cycle true) or no longer take part (false) in the turn of the eVe Pro home\'s '
-        + 'Moniteur tile, which shows the monitors one after another (« ne fais plus défiler le pouls »). It stays in the Moniteur.',
+        'Show one selected health monitor on the eVe Pro home\'s Moniteur tile (cycle true: its « Accueil » switch lit; the tile shows '
+        + 'those monitors one after another) or keep it off the home (false: « ne mets plus le pouls sur l\'accueil », « ne fais plus '
+        + 'défiler le pouls »). It stays in the Moniteur. None shown: the tile shows its own name only.',
         { ids: { type: 'array', items: { type: 'string' } }, still: { type: 'array', items: { type: 'string' } } }],
     'ongoing.open': [{ key: { type: 'string', minLength: 1, maxLength: 200 } }, [], false,
         'Show on the home the activities under way (a Sport exercise, a nap, a meditation, a breathing, a relaxation, running or '
@@ -146,16 +141,6 @@ const definitions = {
     'stage.layout': [{ layout: { type: 'string', enum: ['tiles', 'list'] } }, ['layout'], false,
         'Lay the long collection shown on the home\'s stage (a shopping aisle, the basket…) as tiles a page at a time or as a '
         + 'list of rows, as its band\'s Liste / Tuiles tool does. Writes nothing.', { layout: { type: 'string' } }],
-    // Duo (R-006 Q67): two tools on the home at once, as the « Duo » row of a hold does. Only when the user asks.
-    'duo.open': [{ tile: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' } }, [], false,
-        'Open the Duo around the tool shown on the home\'s stage (« deux outils à la fois », « mets une vidéo pendant ma séance »): '
-        + 'that tool stays below (beside it on a wide screen) with its own band, the home\'s tiles offered above it; tile (a home tile: media, '
-        + 'projects, capture, calendar, contacts, activity…) chooses the second zone at once. Never offered unasked. Writes nothing.', duo],
-    'duo.choose': [{ tile: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' } }, ['tile'], false,
-        'In the Duo shown, choose the second zone\'s tile (media, projects, capture…), as a touch on it does: its level shows in that '
-        + 'zone, what is touched there opening in it. Writes nothing.', duo],
-    'duo.close': [{}, [], false, 'Close the Duo\'s second zone, as the lit « Duo » of a hold does: the tool held takes the stage again. Writes nothing.',
-        { open: { type: 'boolean' } }],
     'search.end': [{}, [], false,
         'End the search or the filter under way on the home, as the Close in its Back\'s place does: the field emptied, the list, '
         + 'the rubric or the home given back as it was before the words (ended false when none was under way). Writes nothing.',
@@ -209,8 +194,7 @@ export const DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS = 'Home progression: t
     + 'answers about them); « règle mon objectif Muscles », « montre-moi ses réglages » call dashboard.objective.prepare; « j\'ai atteint mon objectif, clos-le » calls dashboard.objective.close. « supprime mon objectif Poids » calls dashboard.objective.delete (confirmed first). A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
     + 'shopping, food, GPS or any other request because of the tier, call its tool directly. « qu\'est-ce qui est en cours », « montre ma '
     + 'séance en cours » call dashboard.ongoing.open; « mes dernières activités » calls dashboard.activity.recent, « reprends où j\'en étais », '
-    + '« reprends mes pompes » dashboard.activity.resume (key of that activity, the newest without it). « deux outils à la fois », « mets une vidéo pendant ma séance » call dashboard.duo.open '
-    + '(tile media), « ferme le duo » dashboard.duo.close; never propose the Duo unasked. « affiche en liste », « en tuiles » on a long collection call dashboard.stage.layout. « ferme la recherche », « efface la recherche » call dashboard.search.end. '
+    + '« reprends mes pompes » dashboard.activity.resume (key of that activity, the newest without it). « affiche en liste », « en tuiles » on a long collection call dashboard.stage.layout. « ferme la recherche », « efface la recherche » call dashboard.search.end. '
     + '« montre mes résultats », « mes résultats d\'hier » call dashboard.results.open (day); on the Résultats shown « la semaine dernière » '
     + 'dashboard.results.week offset -1, « mardi » dashboard.results.day, « seulement le sport » dashboard.results.filter [sport], « tout » [all], '
     + '« à 10 h » dashboard.results.hour 10, « toute la journée » hour null, « mon ressenti » dashboard.results.feeling, « ferme » dashboard.results.close. '

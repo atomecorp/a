@@ -6,9 +6,8 @@ final class AppURLOpener: NSObject {
     @discardableResult
     static func open(_ urlString: String) -> Bool {
         guard let url = URL(string: urlString), !urlString.isEmpty else { return false }
-        // If we have a foregroundActive scene, open immediately via scene API
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        if let activeScene = scenes.first(where: { $0.activationState == .foregroundActive }) {
+        // The app's own window active (never a Follow window, ExternalDisplayFollowWindow.swift): open from it at once.
+        if let activeScene = AppWindowRoles.appScene, activeScene.activationState == .foregroundActive {
             // If the scheme likely needs trust, delay slightly after activation and open silently
             if TrustedTapOpener.requiresTrustedTap(url) {
                 TrustedTapOpener.silentDelayAndOpen(url)
@@ -24,7 +23,8 @@ final class AppURLOpener: NSObject {
             print("📣 AppURLOpener: queued with key=\(key); requesting activation…")
         }
         let activity = NSUserActivity(activityType: SharedBus.userActivityType)
-        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: activity, options: nil) { error in
+        // The app's own window brought back, never a new one (the app has several windows on an iPad).
+        UIApplication.shared.requestSceneSessionActivation(AppWindowRoles.appScene?.session, userActivity: activity, options: nil) { error in
             NSLog("requestSceneSessionActivation error: \(error)")
         }
         return true

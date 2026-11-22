@@ -14,6 +14,10 @@ use std::time::Duration;
 const EXTRACTION_TIMEOUT: Duration = Duration::from_secs(60);
 const VIDEO_EXTENSIONS: [&str; 6] = [".mov", ".m4v", ".mp4", ".avi", ".mkv", ".webm"];
 
+// A video that holds no audio stream: ffmpeg's `-map 0:a:0` then matches nothing. It is a fact
+// about the video, not a failure, and is answered as such so its clips play silent.
+const NO_AUDIO_TRACK: &str = "no_audio_track";
+
 // `ffmpeg_extract_failed`: the first 200 units of what ffmpeg said, else of its failure.
 async fn extracted(source: &Path, output: &Path) -> Result<(), String> {
     let arguments = [
@@ -60,6 +64,9 @@ async fn extracted(source: &Path, output: &Path) -> Result<(), String> {
     };
     // A failed run leaves no partial track that would pass for the extracted one.
     let _ = tokio::fs::remove_file(output).await;
+    if said.contains("matches no streams") {
+        return Err(NO_AUDIO_TRACK.into());
+    }
     Err(format!("ffmpeg_extract_failed: {}", js::slice(&said, 200)))
 }
 
@@ -80,7 +87,10 @@ pub(super) async fn answer(found: Download) -> Result<Result<Response, Response>
     let name = basename(source.to_str().unwrap_or(""));
     let stem = name.strip_suffix(extension.as_str()).unwrap_or(name);
     let cached: PathBuf = directory.join(format!("{stem}.aac.m4a"));
-    playback::once(&cached, || extracted(&source, &cached)).await?;
+    match playback::once(&cached, || extracted(&source, &cached)).await {
+        Err(error) if error == NO_AUDIO_TRACK => return Ok(Err(failed(422, NO_AUDIO_TRACK))),
+        done => done?,
+    }
     let size = tokio::fs::metadata(&cached)
         .await
         .map_err(|e| e.to_string())?

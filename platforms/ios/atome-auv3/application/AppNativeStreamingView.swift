@@ -24,9 +24,12 @@ final class AppNativeStreamingView {
         init(_ completion: @escaping ([String: Any], String?) -> Void) { self.completion = completion }
     }
 
-    func handle(command: String, payload: [String: Any], completion: @escaping ([String: Any], String?) -> Void) {
+    /// `host`: the page the view is laid with; the app's page when not given. The connected screen's page passes its
+    /// own (ExternalDisplaySceneDelegate.swift), so that what it opens shows in its window.
+    func handle(command: String, payload: [String: Any], host requested: WKWebView? = nil,
+                completion: @escaping ([String: Any], String?) -> Void) {
         DispatchQueue.main.async {
-            guard let host = self.host else { completion(["ok": false, "error": "streaming_view_host_missing"], nil); return }
+            guard let host = requested ?? self.host else { completion(["ok": false, "error": "streaming_view_host_missing"], nil); return }
             guard let data = try? JSONSerialization.data(withJSONObject: payload),
                   let json = String(data: data, encoding: .utf8) else {
                 completion(["ok": false, "error": "streaming_view_request_invalid"], nil); return

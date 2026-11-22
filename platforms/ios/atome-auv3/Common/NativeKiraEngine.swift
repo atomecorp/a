@@ -15,6 +15,8 @@ enum NativeKiraEngine {
         "audio_direct_apply", "audio_direct_levels", "audio_direct_readings", "audio_direct_cut_tail", "audio_direct_module_state", "audio_direct_measure_latency",
         // A take of a strip's REC point (R-183): the engine records it on its own (recorder_strip.rs).
         "audio_record_strip_start", "audio_record_strip_stop",
+        // Its live scope, read by the page while the take runs (record_audio_api.js: the Timeline's waveform).
+        "audio_get_scope",
         "audio_stop", "audio_stop_instance", "audio_set_voice_end", "audio_destroy_clip", "audio_set_volume", "audio_set_pan", "audio_set_playback_rate",
         // The voice session (start and stop also own the microphone: AppNativeVoiceEngine.swift).
         "audio_voice_set_phrases", "audio_voice_set_speaking", "audio_voice_set_listening", "audio_voice_set_wake_verifier", "audio_voice_read"

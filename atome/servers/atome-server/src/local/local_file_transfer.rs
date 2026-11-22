@@ -6,13 +6,7 @@ pub(super) async fn upload_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    if body.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "success": false, "error": "Empty upload body" })),
-        );
-    }
-
+    // A file is kept as it came (R-202), an empty one too.
     let Some(file_name_header) = headers.get("x-filename") else {
         return (
             StatusCode::BAD_REQUEST,

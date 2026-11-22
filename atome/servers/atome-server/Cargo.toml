@@ -135,6 +135,7 @@ path = "../../../tests/atome_server/offline_manifest.rs"
 
 [dependencies]
 atome-store = { path = "../../engines/atome-store" }
+atome-screen-cast = { path = "../../engines/screen-cast" }
 atome-vault = { path = "../atome-vault" }
 # The one calendar engine (content lines, the personal import's calendar reader, the occurrences).
 atome-calendar = { path = "../../engines/atome-calendar" }

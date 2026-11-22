@@ -49,38 +49,39 @@ test('outside taps close after activation, while held travel and cancellation ke
 
 test('real ribbon and rail handlers hand off one palette while retaining slide and long-press entry', async () => {
     const h = createRuntimeHarness({ content: {
-        toolbox: { children: ['view', 'time'] },
-        view: { atome_tool: true, type: 'palette', label: 'View', tool_id: 'view', children: ['view_list'] },
+        toolbox: { children: ['create', 'time'] },
+        create: { atome_tool: true, type: 'palette', label: 'Create', tool_id: 'create', children: ['view_list'] },
         view_list: { label: 'List', tool_id: 'view.list' },
         time: { atome_tool: true, label: 'Time', tool_id: 'time' }
     } });
     const state = { activePaletteKey: '', activePalettePath: [], railScrollOffset: 0, sliderStateByKey: new Map(),
         activeAtomeId: 'photo', suspended: false };
-    const definitions = [{ key: 'view', toolType: 'palette', children: [{ key: 'view_list', toolType: 'tool' }] }];
+    const definitions = [{ key: 'create', toolType: 'palette', children: [{ key: 'view_list', toolType: 'tool' }] }];
     const rail = createAtomeContextualRailGestures({ state, scheduleRender() {}, render() {}, activeToolIds: () => null,
         displayDefinitions: () => definitions, runActiveDefinition() {}, announceChange() {},
         bevyRuntimeResolver: () => h.window.eveBevyUiRuntime });
     const tree = () => h.calls.at(-1).payload.tree;
     try {
         await h.runtime.open();
-        await findNode(tree().root, 'eve_bevy_ui_main_menu_tool_view').on.activate({});
-        expect(h.runtime.measure().activePaletteKey).toBe('view');
-        rail.handlers().atome_contextual_tool_view.palette_slide_open({});
-        expect(state.activePaletteKey).toBe('view');
+        await findNode(tree().root, 'eve_bevy_ui_main_menu_tool_create').on.activate({});
+        expect(h.runtime.measure().activePaletteKey).toBe('create');
+        rail.handlers().atome_contextual_tool_create.palette_slide_open({});
+        expect(state.activePaletteKey).toBe('create');
         expect(h.runtime.measure().activePaletteKey).toBe('');
         await h.runtime.refresh();
-        findNode(tree().root, 'eve_bevy_ui_main_menu_tool_view').on.palette_slide_open({});
+        // A ribbon palette opens once its list route has answered (R-236): the hand-off is awaited.
+        await findNode(tree().root, 'eve_bevy_ui_main_menu_tool_create').on.palette_slide_open({});
         expect(state.activePaletteKey).toBe('');
-        expect(h.runtime.measure().activePaletteKey).toBe('view');
+        expect(h.runtime.measure().activePaletteKey).toBe('create');
         await waitMs(260);
         await h.runtime.refresh();
-        const target = findNode(tree().root, 'eve_bevy_ui_main_menu_tool_view');
-        target.on.palette_slide_open({}); // Revealing an open palette still does not toggle it.
-        expect(h.runtime.measure().activePaletteKey).toBe('view');
-        h.window.eveBevyUiRuntime.hitTestAtClientPoint = () => ({treeId:'eve_bevy_ui_main_menu', nodeId:'eve_bevy_ui_main_menu_tool_view_background'});
+        const target = findNode(tree().root, 'eve_bevy_ui_main_menu_tool_create');
+        await target.on.palette_slide_open({}); // Revealing an open palette still does not toggle it.
+        expect(h.runtime.measure().activePaletteKey).toBe('create');
+        h.window.eveBevyUiRuntime.hitTestAtClientPoint = () => ({treeId:'eve_bevy_ui_main_menu', nodeId:'eve_bevy_ui_main_menu_tool_create_background'});
         pointer(h.window, 'pointerdown', 30, 30); pointer(h.window, 'pointerup', 30, 30);
         await waitMs(0);
-        expect(h.runtime.measure().activePaletteKey).toBe('view');
+        expect(h.runtime.measure().activePaletteKey).toBe('create');
         const longDefinition = { key: 'play', toolType: 'palette', active: true,
             longPressChildren: [{ key: 'play_mode', toolType: 'tool' }] };
         definitions.push(longDefinition);

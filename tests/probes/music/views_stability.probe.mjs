@@ -32,7 +32,6 @@ const RAIL = 'eve_bevy_panel_atome_contextual_edit';
 // leaves the multitrack views. The round therefore starts from the Timeline shown and never touches the view on screen.
 const VIEWS = [
     { key: 'cells', layout: 'cells', mode: 'timeline' },
-    { key: 'scene', layout: 'scene', mode: 'timeline' },
     { key: 'mix', layout: null, mode: 'mix' },
     { key: 'timeline', layout: 'timeline', mode: 'timeline' }
 ];
@@ -61,18 +60,14 @@ const reached = (pid, view) => app(page, `const m = await import('/eVe/domains/r
     const since = () => Math.round(performance.now() - (window.__viewsProbeInput || started));
     return new Promise((resolve) => { const step = () => (ok() ? resolve({ ok: true, ms: since() }) : performance.now() - started > 8000 ? resolve({ ok: false, ms: since() }) : requestAnimationFrame(step)); step(); });`,
 { pid, mode: view.mode, layout: view.layout });
-// On a phone (fewer than ten cells) the views lie in « Vue », unfolded in the row above (cells_record_ui.probe.mjs):
-// that path only where the row has no tool of its own for the view.
+// The views lie in the rail's Multitrack palette (R-253; Timeline, Cells, Mix since R-258): opened, then its choice.
 const switchTo = async (pid, view) => {
     const since = Date.now();
-    const own = await awaitBevyUiNodeTarget(page, { nodeId: `${ROW}_multitrack_${view.key}` }, { timeoutMs: 1500 });
-    if (!own) {
-        const opener = await awaitBevyUiNodeTarget(page, { nodeId: `${ROW}_views_vue` }, { timeoutMs: 4000 });
-        if (!opener) return { ok: false, error: `row_tool_missing:${view.key}` };
-        await clickCanvasTarget(page, opener);
-    }
-    const target = own || await awaitBevyUiNodeTarget(page, { nodeId: `${ROW}_above_multitrack_${view.key}` }, { timeoutMs: 4000 });
-    if (!target) return { ok: false, error: `row_tool_missing:${view.key}` };
+    const opener = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack' }, { timeoutMs: 4000 });
+    if (!opener) return { ok: false, error: 'rail_multitrack_missing' };
+    await clickCanvasTarget(page, opener);
+    const target = await awaitBevyUiNodeTarget(page, { nodeId: `atome_contextual_tool_container_multitrack_multitrack_${view.key}` }, { timeoutMs: 4000 });
+    if (!target) return { ok: false, error: `rail_view_missing:${view.key}` };
     await clickCanvasTarget(page, target);
     const { ok, ms } = await reached(pid, view);
     if (ok) ROW = rowOf(view.mode);

@@ -184,11 +184,12 @@ test('the pinned case is the same slot: same id, same handler, same active paint
 });
 
 test('a lit rail tool is pinned on every rail that publishes one, and a ribbon tool never is', () => {
-    ['play', 'record_action', 'container_play', 'container_record', 'natural_actions_play',
-        'news_play', 'news_record_audio', 'news_record_video'].forEach((key) => {
+    ['play', 'record_action', 'container_record', 'natural_actions_play',
+        'news_record_audio', 'news_record_video'].forEach((key) => {
         assert.equal(isActiveRailToolKey(key), true, `${key} keeps its rail residence`);
     });
-    ['news_text', 'news_draw', 'view', 'mode', 'activity'].forEach((key) => {
+    // The project's Lecture lies in the bottom band (R-273): no rail residence.
+    ['news_text', 'news_draw', 'view', 'mode', 'activity', 'container_play', 'news_play'].forEach((key) => {
         assert.equal(isActiveRailToolKey(key), false, `${key} is not a rail-resident lit tool`);
     });
     assert.equal(isActiveToolId('ui.text.create'), true);
@@ -204,12 +205,12 @@ test('a ribbon-resident lit tool takes no rail case', () => {
 
 test('only the engaged ribbon tool itself glows, never a palette — not even the one its locked child stands in', async () => {
     const content = {
-        toolbox: { children: ['create', 'contact', 'view'] },
+        toolbox: { children: ['create', 'communicate', 'capture'] },
         create: { atome_tool: true, label: 'Creer', icon: 'create', type: 'palette', children: ['text'] },
         text: { atome_tool: true, label: 'Texte', icon: 'edit', tool_id: 'ui.text.create', action: 'toggle' },
-        contact: { atome_tool: true, label: 'Contacts', icon: 'contact', tool_id: 'ui.contact.panel', action: 'toggle' },
+        communicate: { atome_tool: true, label: 'Contacts', icon: 'contact', tool_id: 'ui.contact.panel', action: 'toggle' },
         // View only shows its current mode: its choices are momentary.
-        view: { atome_tool: true, label: 'Vue', icon: 'view', type: 'palette', children: ['view_list'] },
+        capture: { atome_tool: true, label: 'Vue', icon: 'view', type: 'palette', children: ['view_list'] },
         view_list: { atome_tool: true, label: 'Liste', icon: 'list', tool_id: 'ui.view.mode.list', action: 'momentary' }
     };
     const harness = createRuntimeHarness({ content });
@@ -220,14 +221,14 @@ test('only the engaged ribbon tool itself glows, never a palette — not even th
         harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: true });
         harness.runtime.setToolLatchedState({ tool_id: 'ui.contact.panel', latched: true });
         await waitFrame();
-        assert.deepEqual(glowingIds(lastTree()), ['eve_bevy_ui_main_menu_tool_contact'],
+        assert.deepEqual(glowingIds(lastTree()), ['eve_bevy_ui_main_menu_tool_communicate'],
             'the open Contacts panel glows; neither Create (Text is locked inside it) nor View does');
-        const contact = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact');
-        assert.ok(findNode(contact, 'eve_bevy_ui_main_menu_tool_contact_icon_glow'), 'the icon carries its own light');
-        assert.equal(findNode(contact, 'eve_bevy_ui_main_menu_tool_contact_glow'), null, 'no halo around the tile');
+        const contact = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_communicate');
+        assert.ok(findNode(contact, 'eve_bevy_ui_main_menu_tool_communicate_icon_glow'), 'the icon carries its own light');
+        assert.equal(findNode(contact, 'eve_bevy_ui_main_menu_tool_communicate_glow'), null, 'no halo around the tile');
         harness.runtime.setToolLatchedState({ tool_id: 'ui.contact.panel', latched: false });
         await waitFrame();
-        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact_icon_glow');
+        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_communicate_icon_glow');
         assert.ok(fading && fading.style.opacity < 1, 'a stopped tool keeps its light only while it fades out');
     } finally {
         harness.runtime.destroy();
@@ -295,7 +296,8 @@ test('the rail never moves a tool: Play holds the base, a lit tool stays in plac
     await runtime.render();
     let tree = rendered.at(-1);
     const idle = positions(tree);
-    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_play'], 'Play holds the base, idle');
+    // R-273: the fold case is the base's first case, Play (an object's own, Natural) right above it.
+    assert.deepEqual([...pinnedIds(tree)].sort(), ['atome_contextual_tool_play', 'atome_contextual_tool_rail_fold'], 'Play holds the base with the fold case, idle');
     assert.ok(Object.entries(idle).every(([key, y]) => key === 'play' || y < idle.play), 'Play is the case closest to Atome');
     assert.deepEqual(glowingIds(tree), [], 'an idle base does not glow');
 
@@ -567,11 +569,14 @@ test('an armed creation tool keeps its pinned case glued to the rail bottom, and
         const nodes = keys.map((key) => findNode(tree.root, `atome_contextual_tool_${key}`));
         assert.ok(nodes.every(Boolean), 'Code, Page, Placeholder and Generator are all pinned');
         nodes.forEach((node, index) => {
-            assert.deepEqual(node.style.position, [tree.layout.x, tree.layout.bottom - (index + 1) * tree.layout.itemSize - index * tree.layout.gap],
+            // The fold case (R-273) holds the base's first case; the armed tools stack right above it.
+            assert.deepEqual(node.style.position, [tree.layout.x, tree.layout.bottom - (index + 2) * tree.layout.itemSize - (index + 1) * tree.layout.gap],
                 `${keys[index]} stacks in the pinned zone`);
         });
-        assert.equal(nodes[0].style.position[1] + tree.layout.itemSize, tree.layout.bottom,
-            'the first tool activated is the closest to the Atome handle');
+        assert.deepEqual(findNode(tree.root, 'atome_contextual_tool_rail_fold').style.position,
+            [tree.layout.x, tree.layout.bottom - tree.layout.itemSize], 'the fold case is the closest to the Atome handle');
+        assert.equal(nodes[0].style.position[1] + 2 * tree.layout.itemSize + tree.layout.gap, tree.layout.bottom,
+            'the first tool activated is right above the fold case');
         findNode(tree.root, 'atome_contextual_tool_page_create').on.activate();
         await new Promise((resolve) => setTimeout(resolve, 0));
         findNode(tree.root, 'atome_contextual_tool_generator').on.activate();
@@ -610,7 +615,7 @@ test('an armed Page shows its formats in the rail level, the current one lit, an
             invoker: (definition, options) => invokeArmedToolOption('page', definition, options, view) });
         const nodes = definitions.map((definition) => findNode(tree.root, `atome_contextual_tool_${definition.key}`));
         assert.ok(nodes.every(Boolean), 'the nine formats are cases of the rail level');
-        assert.deepEqual(pinnedIds(tree), [], 'the options are not pinned: the tool is');
+        assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_rail_fold'], 'the options are not pinned: the tool is (the fold case holds the base, R-273)');
         const lit = nodes.filter((node) => node.style.translation !== undefined);
         assert.deepEqual(lit.map((node) => node.id), ['atome_contextual_tool_page_format_a4'],
             'the format read from its owner is the only lit case');

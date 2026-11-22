@@ -13,10 +13,12 @@ const PUSH_EVENTS = {
     'sync:status': message => ({ principal_id: message.data?.principal_id || null }),
     'visio-event': message => ({ roomId: message.room_id, event: message.data }),
     // Native SQLite has committed the cloud projection; consumers re-read the canonical API.
-    // A replay announces every stream it changed at once (`streams`), a live event its own `stream`.
+    // A replay announces every stream it changed at once (`streams`), a live event its own `stream`;
+    // `types`, when the host knows them, the Atome types written (null: unknown, any may have changed).
     'sync:projection-ready': message => ({
         stream: message.stream || null,
         streams: Array.isArray(message.streams) ? message.streams : [],
+        types: Array.isArray(message.types) ? message.types : null,
         replay: message.replay === true
     }),
     'phone-link-ready': message => ({ attemptId: message.attemptId }),
@@ -372,7 +374,7 @@ export const messageHandlerMixin = {
         let message;
         try {
             message = JSON.parse(data);
-        } catch (error) {
+        } catch {
             // A malformed frame used to vanish without a trace in a transport layer.
             reportRuntimeError(new Error('websocket_frame_invalid'), 'adole:ws:parse', { length: String(data).length });
             return;

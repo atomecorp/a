@@ -26,18 +26,18 @@ import {
     INTUITION_MYSTIC_MODE, MYSTIC_CENTER_PLATE, MYSTIC_CENTER_TINT,
     MYSTIC_CENTER_SHADOW,
     MYSTIC_EDGE_SOFTNESS_PX, MYSTIC_HOLE_DOSE, MYSTIC_PERSPECTIVE_TILES, 
-    MYSTIC_GLASS_TINT, MYSTIC_SKIN, MYSTIC_SURFACE_TINT, resolveMysticEdgeSoftness,
+    MYSTIC_GLASS_TINT, MYSTIC_SKIN, resolveMysticEdgeSoftness,
     resolveMysticFamilyColor, resolveMysticSkin
 } from '../../eVe/intuition/mystic/mystic_tokens.js';
 import { EVE_MYSTIC_SKIN_TOKENS } from '../../eVe/elements/skin/mystic_skin.js';
-import { EVE_COMMON_SKIN_TOKENS, EVE_SEMANTIC_COLOR_FAMILIES } from '../../eVe/elements/skin/tokens.js';
+import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { EVE_SKIN_TOKENS } from '../../eVe/elements/skin/index.js';
 import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
 import { MYSTIC_GLYPH_START, mysticInteractionReady, mysticMotionTargets, sampleMysticMotion } from '../../eVe/intuition/mystic/mystic_motion.js';
 import { MYSTIC_PHASE, createMysticShadowFade } from '../../eVe/intuition/ribbon/bevy_ui_mystic_motion.js';
 import { buildMysticSurfaceUniforms } from '../../eVe/intuition/mystic/intuition_mystic_menu_renderer.js';
 import {
-    BEVY_MYSTIC_CENTER_ID, buildBevyUiMysticTree, resolveBevyMysticMargin,
+    BEVY_MYSTIC_CENTER_ID, buildBevyUiMysticTree,
     resolveBevyMysticTreeGeometry
 } from '../../eVe/intuition/ribbon/bevy_ui_mystic_model.js';
 import { mapVirtualSceneStyleToBevyPatch } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
@@ -636,7 +636,8 @@ test('the material packs the tiles once, in one order, and flips y for the botto
     const index = layout.tiles.findIndex((tile) => tile.slot === 'east');
     const tile = layout.tiles[index];
     assert.deepEqual(uniforms.mystic_tiles[index], [
-        tile.point[0], RECT.height - tile.point[1], TILE / 2, tile.radius
+        // The shader draws the person's radius for the declared one (AGENTS.md rule 14).
+        tile.point[0], RECT.height - tile.point[1], TILE / 2, SYSTEM_UI_METRICS.cornerRadius(tile.radius, TILE, TILE)
     ]);
     assert.deepEqual(uniforms.mystic_tile_motion[index], [0, 1, -1, 0]);
     // The colour belongs to the TOOL's family (shared/tool_family.js), never to
@@ -926,7 +927,7 @@ test('the masked-video Flower enables Play and routes it only to the hidden vide
     }
 });
 
-test('the Utilities palette gathers Mode, Validation, the projects Matrix and the expertise level', async () => {
+test('the Utilities palette gathers Mode, Validation, the projects Matrix and the View', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
@@ -942,7 +943,7 @@ test('the Utilities palette gathers Mode, Validation, the projects Matrix and th
     ];
     // Le contenu REEL du menu principal : la palette du Mystic n'est pas une
     // seconde table, elle rend les memes enfants que la barre, plus le niveau
-    // d'expertise ajoute le 2026-10-06.
+    // d'expertise ajoute le 2026-10-06, remplace par la Vue le 2026-11-21.
     const content = createMainMenuContentRuntime({
         ...Object.fromEntries(inertDependencies.map((name) => [name, () => null])),
         directionValues: [],
@@ -956,55 +957,14 @@ test('the Utilities palette gathers Mode, Validation, the projects Matrix and th
         const utilities = runtime.resolveMysticContextItems({ type: 'project', projectId: 'p' })
             .find(item => item.key === 'utilities');
         assert.equal(utilities.type, 'palette');
-        assert.deepEqual(utilities.children.map(child => child.key), ['mode', 'validation', 'matrix', 'level']);
+        assert.deepEqual(utilities.children.map(child => child.key), ['mode', 'validation', 'matrix', 'view']);
         const mode = utilities.children.find(child => child.key === 'mode');
         assert.equal(mode.type, 'palette');
         assert.deepEqual(mode.children.map(child => child.key), ['perform', 'mode_edit', 'mode_consume']);
-        // « Niveau d'expertise » : une palette d'un niveau de plus, trois choix
-        // qui ecrivent la MEME preference que le panneau Home.
-        const level = utilities.children.find(child => child.key === 'level');
-        assert.equal(level.type, 'palette');
-        assert.deepEqual(level.children.map(child => child.key), ['level_beginner', 'level_intermediate', 'level_advanced']);
-        assert.deepEqual(
-            level.children.map(child => child.extraInput.mastery_level),
-            ['beginner', 'intermediate', 'advanced']
-        );
-    }, { getDefaultContent: () => content });
-});
-
-test('the in-force expertise level is the only choice that carries the check icon', async () => {
-    const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
-    const inertDependencies = [
-        'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
-        'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
-        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closePastePanel',
-        'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
-        'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
-        'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
-        'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
-        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 
-        'openMediaPanel', 'closeMediaPanel',
-        'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
-    ];
-    const content = createMainMenuContentRuntime({
-        ...Object.fromEntries(inertDependencies.map((name) => [name, () => null])),
-        directionValues: [],
-        mainToolIdByKey: {
-            mode: 'tool.main.mode', matrix: 'tool.main.matrix', perform: 'tool.main.perform',
-            create: 'tool.main.create', draw: 'tool.main.draw', capture: 'tool.main.capture', view: 'tool.main.view'
-        },
-        translate: (_key, fallback) => fallback
-    });
-    await withMenuWindow(async ({ runtime }) => {
-        // The published preferences are the same source the context menus read.
-        globalThis.window.__eveProfilePreferences = { visual: { masteryLevel: 'intermediate' } };
-        const level = runtime.resolveMysticContextItems({ type: 'project', projectId: 'p' })
-            .find(item => item.key === 'utilities').children.find(child => child.key === 'level');
-        const iconOf = (key) => level.children.find(child => child.key === key).icon;
-        assert.equal(iconOf('level_intermediate').endsWith('check.svg'), true);
-        assert.equal(iconOf('level_beginner').endsWith('check.svg'), false);
-        assert.equal(iconOf('level_advanced').endsWith('check.svg'), false);
-        assert.equal(iconOf('level_beginner').endsWith('user.svg'), true);
+        // View (21 Nov. 2026): the project's display modes, in place of the expertise level.
+        const view = utilities.children.find(child => child.key === 'view');
+        assert.equal(view.type, 'palette');
+        assert.deepEqual(view.children.map(child => child.key), ['view_list', 'view_table', 'view_natural']);
     }, { getDefaultContent: () => content });
 });
 

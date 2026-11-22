@@ -346,7 +346,8 @@ pub fn record_stop(session_id: &str) -> Result<Value, String> {
     Ok(json!({
         "success": true, "session_id": result.session_id, "absolute_file_path": result.file_path, "size_bytes": result.size_bytes,
         "duration_sec": result.duration_sec, "frame_count": result.frame_count, "overrun_frames": result.overrun_frames,
-        "sample_rate": result.sample_rate, "channels": result.channels, "capture_clock": result.capture_clock, "output_format": result.output_format
+        "sample_rate": result.sample_rate, "channels": result.channels, "capture_clock": result.capture_clock, "output_format": result.output_format,
+        "waveform_peaks": result.waveform_peaks
     }))
 }
 

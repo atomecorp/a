@@ -50,11 +50,12 @@ export const runMoleculeEnduranceAcceptance = async ({ page, project, fixture, r
                     return { ok: actual === expected, actual, expected, surfaceMode: surface.mode, projectId: surface.projectId };
                 }, mode);
             };
+            // The level plays from the band's Lecture in a Timeline or a Mix, from a touch on its row in the List (R-273).
             const togglePlayback = async playing => {
-                const play = await awaitBevyUiNodeTarget(page, {
-                    nodeId: 'atome_contextual_tool_container_play',
-                    treeId: 'eve_bevy_panel_atome_contextual_edit'
-                });
+                const listed = ['list', 'table'].includes(await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode()));
+                const play = await awaitBevyUiNodeTarget(page, listed
+                    ? { nodeId: 'project_view_footer', treeId: 'eve_bevy_ui_project_view' }
+                    : { nodeId: 'eve_bevy_ui_main_menu_tool_transport', treeId: 'eve_bevy_ui_main_menu' });
                 assert(play, 'molecule_play_not_actionable');
                 await clickCanvasTarget(page, play);
                 return waitFor(page, async ({ owner, playing }) => {

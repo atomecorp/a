@@ -152,8 +152,15 @@ import { loadAudioKernels } from './audio_kernels.js';
         .then(function (auth) { return auth.fetchAuthorizedMedia(url); });
     })
       .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + url);
-        return r.arrayBuffer();
+        if (r.ok) return r.arrayBuffer();
+        // The server's own word on the failure (`no_audio_track`: a video with no sound) rides
+        // on the error, so a caller can tell a fact about the media from a failed read.
+        return r.json().catch(function () { return null; }).then(function (body) {
+          const error = new Error('HTTP ' + r.status + ' fetching ' + url);
+          error.status = r.status;
+          error.code = typeof body?.error === 'string' ? body.error : '';
+          throw error;
+        });
       })
       .then(function (buf) {
         var bytes = new Uint8Array(buf);
@@ -544,8 +551,12 @@ import { loadAudioKernels } from './audio_kernels.js';
         emitError('wasm_prewarm', error);
       });
     }
-    backend.init().then(function () {
-      audio.set_backend('kira');
-    }).catch(function () { });
+    // A native engine is routed to at once, as the Web's: each of its calls waits for `audio_init` itself
+    // (ensureRuntimeMode). Routed only once `audio_init` answered, a call made meanwhile (a project's Timeline
+    // cued at its opening) was refused as « no backend » and its picture never came (R-212, 20 Nov. 2026).
+    audio.set_backend('kira');
+    backend.init().catch(function (error) {
+      emitError('native_init', error);
+    });
   });
 })();

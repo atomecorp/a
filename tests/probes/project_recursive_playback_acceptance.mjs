@@ -20,11 +20,12 @@ export const runProjectRecursivePlaybackAcceptance = async ({ page, report, chec
         const result = await awaitBevyUiNodeTarget(page, { nodeId, treeId });
         assert(result, `recursive_target_missing:${nodeId}`); return result;
     };
-    const clickTool = async (key) => clickCanvasTarget(page, await target('atome_contextual_tool_' + key));
+    // A touch on the level's row plays the level, a second one stops it (R-273, user 22 Nov. 2026).
     const container = async () => clickCanvasTarget(page, await target('project_view_footer', 'eve_bevy_ui_project_view'));
     const read = () => page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read());
-    const mode = async (value) => {
-        await container();
+    // A play mode is chosen in the List view alone (R-250, user 21 Nov. 2026), on the level's rail, nothing selected.
+    const mode = async (view, value) => {
+        await switchView(page, project.id, 'list');
         await chooseMoleculePlaybackMode(page, project.id, value);
         await waitFor(page, async ({ id, value }) => ({ ok: (await window.Atome.getStateCurrent(id)).properties.playback_mode === value }), { id: project.id, value });
         const icon = await page.evaluate(() => {
@@ -34,11 +35,11 @@ export const runProjectRecursivePlaybackAcceptance = async ({ page, report, chec
             return null;
         });
         report.measurements['mode_' + value] = icon;
+        await switchView(page, project.id, view);
     };
     for (const view of ['list', 'table']) {
-        await switchView(page, project.id, view);
         await check(`${view}: 2/3/5 seconds sum to 10 in sequential playback`, async () => {
-            await mode('sequential'); await clickTool('container_play');
+            await mode(view, 'sequential'); await container();
             await waitFor(page, async ({ pid, ids }) => {
                 const state = (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
                 return { ok: state.playing && state.rootId === pid && state.durationSeconds === 10 && state.activeLeafIds.join() === ids[0], state };
@@ -46,10 +47,10 @@ export const runProjectRecursivePlaybackAcceptance = async ({ page, report, chec
             await wait(2150);
             assert((await read()).activeLeafIds.join() === ids[1], 'sequential_second_leaf_required');
             await screenshot({ page, report, outDir, name: view + '_sequential_second' });
-            await clickTool('container_play');
+            await container();
         });
         await check(`${view}: simultaneous duration is 5 and every child starts together`, async () => {
-            await mode('simultaneous'); await clickTool('container_play');
+            await mode(view, 'simultaneous'); await container();
             const state = await waitFor(page, async (ids) => {
                 const state = (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
                 return { ok: state.playing && state.durationSeconds === 5 && ids.every((id) => state.activeLeafIds.includes(id)), state };
@@ -57,7 +58,7 @@ export const runProjectRecursivePlaybackAcceptance = async ({ page, report, chec
             const positions = ids.map((id) => state.state.localPositionsById[id]);
             assert(Math.max(...positions) - Math.min(...positions) < 0.01, 'simultaneous_child_start_drift');
             await screenshot({ page, report, outDir, name: view + '_simultaneous_all' });
-            await clickTool('container_play');
+            await container();
         });
     }
     await check('nested Molecules preserve internal modes and durations after canonical reload', async () => {
@@ -70,7 +71,7 @@ export const runProjectRecursivePlaybackAcceptance = async ({ page, report, chec
             return { inner: inner.molecule_id, outer: outer.molecule_id };
         }, { projectId: project.id, ids });
         await reloadProjection(page, project.id); await switchView(page, project.id, 'list');
-        await container(); await clickTool('container_play');
+        await container();
         const initial = await waitFor(page, async ({ nested, ids }) => {
             const state = (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
             return { ok: state.playing && state.durationSeconds === 5 && state.localDurationsById[nested.inner] === 5
@@ -82,6 +83,6 @@ export const runProjectRecursivePlaybackAcceptance = async ({ page, report, chec
         assert(after.activeLeafIds.includes(ids[1]) && after.activeLeafIds.includes(ids[2]) && !after.activeLeafIds.includes(ids[0]), 'nested_internal_sequence_lost');
         report.measurements.nested = { nested, initial, after };
         await screenshot({ page, report, outDir, name: 'nested_sequential_inside_simultaneous' });
-        await clickTool('container_play');
+        await container();
     });
 };

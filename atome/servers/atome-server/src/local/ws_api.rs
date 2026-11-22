@@ -59,8 +59,8 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     let mut sync_events = super::sync_event_sender().subscribe();
     let mut observed_token: Option<String> = None;
     // A frame relayed to the network (a library thumbnail, atome.one's account frames) takes
-    // seconds: it is answered aside, so the reads behind it never wait (the vault's frames keep
-    // their order). Its answer comes back here.
+    // seconds, a read of the vault may too: each is answered aside, so the frames behind it never
+    // wait (the vault's writes keep their order). Its answer comes back here.
     let (relayed_tx, mut relayed) = tokio::sync::mpsc::unbounded_channel::<JsonValue>();
     loop {
         let msg = tokio::select! {
@@ -168,6 +168,16 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     });
                     continue;
                 }
+                if read_aside(msg_type) {
+                    // The vault is read under its blocking lock: on a blocking thread, so a burst of
+                    // reads never holds the runtime's workers (the sync's socket, the other pages).
+                    let (state, relayed_tx) = (state.clone(), relayed_tx.clone());
+                    let runtime = tokio::runtime::Handle::current();
+                    tokio::task::spawn_blocking(move || {
+                        let _ = relayed_tx.send(runtime.block_on(answer(data, &state)));
+                    });
+                    continue;
+                }
                 if socket
                     .send(Message::Text(answer(data, &state).await.to_string().into()))
                     .await
@@ -185,6 +195,14 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     }
 
     println!("🔌 WebSocket API connection closed");
+}
+
+// A `state-current` frame only reads (`get`, `list`): it is answered aside too, so a long read
+// (a calendar walked page by page, a project's whole content) never holds the frames behind it,
+// a ping first (the page then took its heartbeat for lost). A write is still answered here, in
+// its order: a read sent after it starts once it is committed.
+fn read_aside(msg_type: &str) -> bool {
+    msg_type == "state-current"
 }
 
 fn relayed_aside(msg_type: &str) -> bool {
@@ -241,6 +259,10 @@ pub async fn answer(data: JsonValue, state: &AppState) -> JsonValue {
     }
     if msg_type == "file" {
         return handle_ws_file_message(data, state).await;
+    }
+    // The named screens of the local network (R-248, local_screens.rs).
+    if msg_type == "screens" {
+        return super::handle_ws_screens_message(data, state).await;
     }
     if !matches!(
         msg_type,

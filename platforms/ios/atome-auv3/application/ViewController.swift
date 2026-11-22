@@ -61,6 +61,8 @@ final class FullscreenWebViewController: UIViewController {
     /// scene: without this registration iOS mirrors the device with black bands. The system then connects
     /// ExternalDisplaySceneDelegate itself; before iOS 27 the Info.plist role still does it.
     private func registerExternalDisplay() {
+        ExternalDisplayPointer.shared.start()
+        ExternalDisplayKeyboard.shared.start()
         guard #available(iOS 27.0, *), externalDisplayRegistration == nil else { return }
         let configuration = UISceneConfiguration(
             name: "External Display",

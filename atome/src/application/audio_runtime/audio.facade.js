@@ -16,7 +16,6 @@ import './auv3_host_bridge.js';
 // Notes: Keep JS allocations out of the audio thread; backends talk to native or Kira/WASM.
 
 (function () {
-  const ns = (window.Squirrel = window.Squirrel || {});
   const av = installSharedAVContracts(window);
   const audio = (av.audio = av.audio || {});
   const playbackApi = getAudioPlaybackAPI(window);
@@ -55,11 +54,8 @@ import './auv3_host_bridge.js';
   function flush() {
     flushScheduled = false;
     if (!active || q.length === 0) return;
-    const batch = q.splice(0, q.length);
-    try {
-      backends[active].dispatch_batch(batch);
-    } catch (e) {
-    }
+    // A batch the backend refuses throws here, never swallowed (R-253).
+    backends[active].dispatch_batch(q.splice(0, q.length));
   }
 
   function enqueue(cmd) {
@@ -77,9 +73,9 @@ import './auv3_host_bridge.js';
       return false;
     }
     // low-latency calls go immediately
-    if (immediateNames.has(name)) {
-      try { return backends[active][name](arg); } catch { return false; }
-    }
+    // An error thrown by the backend reaches the caller as it is: a silent `false` read as « no backend » hid the
+    // real cause (a cued Timeline refused with `mix_backend_inactive` after a cell's take, R-253).
+    if (immediateNames.has(name)) return backends[active][name](arg);
     // batch others UI->DSP calls
     enqueue({ name, arg });
     // Return lightweight ack; results delivered via events
@@ -108,7 +104,7 @@ import './auv3_host_bridge.js';
     if (!runtime.preferredFacadeBackendOrder.includes('kira')) {
       return null;
     }
-    if (backends['kira'] && audio.set_backend('kira')) {
+    if (backends.kira && audio.set_backend('kira')) {
       return 'kira';
     }
     return null;

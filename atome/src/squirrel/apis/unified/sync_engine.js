@@ -2,8 +2,9 @@ import { isExternalDisplayFollower } from '../../external_display_role.js';
 import { socketHealthMixin } from './websocket_health.js';
 import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
-import { getSyncScopeStore } from './sync_scope_store.js';
-import { ATOME_CHANGE_EVENTS, atomeChangeEventName, dispatchAtomeChange } from './atome_change_signal.js';
+import { getSyncScopeStore, SEEN_EVENTS_KEPT } from './sync_scope_store.js';
+import { ATOME_CHANGE_EVENTS, ATOME_COMMITTED_EVENT, atomeChangeEventName, dispatchAtomeChange } from './atome_change_signal.js';
+import { syncJournal } from './sync_journal.js';
 
 // A key-bound token (`cnf.pop`) is accepted only after this connection signs a
 // fresh challenge with the session key; the account owner registers the signer.
@@ -87,6 +88,14 @@ export class SyncEngine {
         this.boundOnline = () => this.retry();
         this.boundForeground = () => { if (this.env?.document?.visibilityState !== 'hidden') void this.verifyConnection(); };
         this.boundPageHide = () => this.flushPersist();
+        // What this page already knows comes back from the account with the same event id, late: a local server stamps its
+        // commits with its own source, never the one of this socket, so the server sends each device its own commits back
+        // (R-212, 20 Nov. 2026: a move undone seconds later, a deletion coming back). Any change this page learns other
+        // than from this socket (its commits, a connected screen's) is known by its event id, and its echo is dropped.
+        this.boundKnownChange = (event) => {
+            const detail = event?.detail || {};
+            if (detail.origin !== 'ws/sync') this.rememberEvent(detail.event_id);
+        };
         this.loadScope();
         this.source = this.loadDeviceSource();
     }
@@ -130,6 +139,11 @@ export class SyncEngine {
             for (const [stream, cursor] of Object.entries(stored.cursors)) {
                 if ((Number(cursor) || 0) > (Number(this.cursors[stream]) || 0)) this.cursors[stream] = Number(cursor);
             }
+            // What this device knew before it closed (user, 20 Nov. 2026: after a relaunch, the account handed back moves of
+            // minutes before, drawn again over the newer places): the ids seen this launch stay the newest.
+            const current = [...this.seenEventIds];
+            this.seenEventIds = new Set([...(stored.seen || []), ...current]);
+            while (this.seenEventIds.size > SEEN_EVENTS_KEPT) this.seenEventIds.delete(this.seenEventIds.values().next().value);
             this.scopeLoadedKey = key;
             return true;
         }, (error) => this.reportScopeError('load', error));
@@ -148,7 +162,7 @@ export class SyncEngine {
     // scope has arrived (the write would replace it with the few streams seen meanwhile).
     persistScope() {
         const key = this.loadedScopeKey;
-        const write = () => this.scopeStore.save(key, { streams: Array.from(this.streams), cursors: { ...this.cursors } })
+        const write = () => this.scopeStore.save(key, { streams: Array.from(this.streams), cursors: { ...this.cursors }, seen: [...this.seenEventIds] })
             .then(() => true, (error) => this.reportScopeError('save', error));
         if (this.scopeLoadedKey === key) return write();
         return this.scopeLoad.then(() => (this.scopeLoadedKey === key && this.loadedScopeKey === key ? write() : false));
@@ -176,6 +190,8 @@ export class SyncEngine {
         this.env?.addEventListener?.('online', this.boundOnline);
         this.env?.addEventListener?.('pagehide', this.boundPageHide);
         this.env?.document?.addEventListener?.('visibilitychange', this.boundForeground);
+        Object.values(ATOME_CHANGE_EVENTS).forEach((name) => this.env?.addEventListener?.(name, this.boundKnownChange));
+        syncJournal(this.env);
         if (principalId(this.env) && this.token()) void this.connect();
         return this;
     }
@@ -327,12 +343,16 @@ export class SyncEngine {
             this.restoreStatusAt = Date.now();
             this.publishStatus();
         }
+        // Known already (delivered before, or this page's own change coming back): nothing to apply, but the stream has
+        // passed it, so the cursor moves on: kept behind, the next launch would replay it to a page that remembers
+        // nothing, and every old place of an Atome would come back in a burst.
         if (this.seenEventIds.has(eventId)) {
+            syncJournal(this.env).note('known-dropped', { atome: message.atome_id, kind: message.kind, event: eventId, replay: message.replay === true || null });
+            this.persistCursor(stream, sequence);
             this.ack(stream, sequence);
             return;
         }
-        this.seenEventIds.add(eventId);
-        while (this.seenEventIds.size > 2000) this.seenEventIds.delete(this.seenEventIds.values().next().value);
+        this.rememberEvent(eventId);
         const { props, deleteKeys } = winningPatch(message);
         const kind = String(message.kind || '').toLowerCase();
         if (this.env?.__SQUIRREL_SYNC_DEBUG__ === true) {
@@ -379,6 +399,14 @@ export class SyncEngine {
             ? { ...common, properties: { ...projectionProperties, ...props } } : common);
         this.persistCursor(stream, sequence);
         this.ack(stream, sequence);
+    }
+
+    rememberEvent(value) {
+        const eventId = String(value || '').trim();
+        if (!eventId || this.seenEventIds.has(eventId)) return;
+        this.seenEventIds.add(eventId);
+        while (this.seenEventIds.size > SEEN_EVENTS_KEPT) this.seenEventIds.delete(this.seenEventIds.values().next().value);
+        if (this.loadedScopeKey) this.schedulePersist();
     }
 
     dispatch(name, detail) {
@@ -455,13 +483,19 @@ export class SyncEngine {
             this.loadScope();
         }
         let added = false;
+        const committed = [];
         for (const event of events || []) {
+            // Every commit of this page passes here, a gesture's frames too, which no view is told of.
+            const eventId = String(event?.event_id || event?.id || '').trim();
+            this.rememberEvent(eventId);
+            if (eventId) committed.push(eventId);
             const stream = String(event?.stream_id || event?.stream || '').trim();
             if (!stream) continue;
             if (!this.streams.has(stream)) { this.streams.add(stream); added = true; }
             if (this.registered) this.subscribe(stream);
         }
         if (added) this.schedulePersist();
+        if (committed.length) dispatchAtomeChange(this.env, ATOME_COMMITTED_EVENT, { event_ids: committed });
     }
 
     async requestSync() {

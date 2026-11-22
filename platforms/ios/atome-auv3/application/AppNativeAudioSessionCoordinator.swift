@@ -44,6 +44,11 @@ extension AppNativeAudioController {
         resumeMusicAfterCapture(transition: transition)
     }
 
+    /// Re-asserts the plan required by the current consumers, its failure thrown.
+    func reapplyAudioSessionPlan(transition: String) throws {
+        try applyAudioSessionPlan(audioSessionConsumers.plan, transition: transition)
+    }
+
     /// Re-asserts the plan required by the current consumers.
     func applyCurrentAudioSessionPlan(transition: String) {
         do {
@@ -55,8 +60,21 @@ extension AppNativeAudioController {
         }
     }
 
+    /// A session just given back by the system (an interruption ending, a route coming back) can refuse to be
+    /// configured for a moment (`insufficientPriority`): it is asked once more, a quarter of a second later.
     private func applyAudioSessionPlan(_ plan: AppNativeAudioSessionPlan,
                                        transition: String) throws {
+        do {
+            try applyAudioSessionPlanOnce(plan, transition: transition)
+        } catch let error as NSError where error.code == AVAudioSession.ErrorCode.insufficientPriority.rawValue {
+            AppNativeAudioDiagnostics.log("session \(transition) insufficient_priority retry")
+            Thread.sleep(forTimeInterval: 0.25)
+            try applyAudioSessionPlanOnce(plan, transition: "\(transition):retry")
+        }
+    }
+
+    private func applyAudioSessionPlanOnce(_ plan: AppNativeAudioSessionPlan,
+                                           transition: String) throws {
         let session = AVAudioSession.sharedInstance()
         let before = audioSessionDiagnosticSnapshot(session: session)
         // Someone else records (WebKit opened the microphone for the assistant, R-108): playing a sound

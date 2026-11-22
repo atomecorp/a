@@ -100,6 +100,32 @@ pub(super) async fn list_uploads_handler(
     )
 }
 
+/// Where a person's stored media `file` lies: their downloads, else, for a native capture (an iPhone photo, a
+/// video take) that stays where it was written, the home's `recordings` or `captures`, looked for in that order as
+/// media/downloads.rs#target does (user, 8 Nov. 2026: « les photos sont prises… une liste qui n'est pas lisible »).
+/// The path may not exist; the caller says so. Also the source of a media sent to a screen (local_screens.rs).
+pub(super) async fn locate_user_upload(
+    state: &AppState,
+    user_id: &str,
+    file: &str,
+) -> Result<(PathBuf, String), std::io::Error> {
+    let downloads_dir = resolve_user_downloads_dir(state, user_id).await?;
+    let safe_name = sanitize_file_name(file);
+    let mut file_path = downloads_dir.join(&safe_name);
+    if fs::metadata(&file_path).await.is_err()
+        && let Some(home) = downloads_dir.parent()
+    {
+        for root in ["recordings", "captures"] {
+            let placed = home.join(root).join(&safe_name);
+            if fs::metadata(&placed).await.is_ok() {
+                file_path = placed;
+                break;
+            }
+        }
+    }
+    Ok((file_path, safe_name))
+}
+
 pub(super) async fn download_upload_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -128,8 +154,8 @@ pub(super) async fn download_upload_handler(
                 .into_response();
         };
 
-    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
-        Ok(dir) => dir,
+    let (file_path, safe_name) = match locate_user_upload(&state, &user_id, &file).await {
+        Ok(found) => found,
         Err(err) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -138,31 +164,13 @@ pub(super) async fn download_upload_handler(
                 .into_response();
         }
     };
-
-    let safe_name = sanitize_file_name(&file);
-    let mut file_path = downloads_dir.join(&safe_name);
-    // A native capture (an iPhone photo, a video take) stays where it was written, in the home's
-    // `recordings` or `captures`, looked for in that order as media/downloads.rs#target does
-    // (user, 8 Nov. 2026: « les photos sont prises… une liste qui n'est pas lisible »).
-    if fs::metadata(&file_path).await.is_err()
-        && let Some(home) = downloads_dir.parent()
-    {
-        for root in ["recordings", "captures"] {
-            let placed = home.join(root).join(&safe_name);
-            if fs::metadata(&placed).await.is_ok() {
-                file_path = placed;
-                break;
-            }
-        }
-    }
     let verbose_logs = download_verbose_logs_enabled();
     if verbose_logs {
         println!(
-            "[download_upload_handler] user_id={}, file={}, safe_name={}, downloads_dir={:?}, file_path={:?}, exists={}",
+            "[download_upload_handler] user_id={}, file={}, safe_name={}, file_path={:?}, exists={}",
             user_id,
             file,
             safe_name,
-            downloads_dir,
             file_path,
             file_path.exists()
         );

@@ -25,8 +25,8 @@ export const runProjectMuteAcceptance = async ({ page, report, check, ensureProj
         return target;
     };
     await check('muting a playing simultaneous layer removes it from the viewer immediately', async () => {
+        // A touch on the level's row plays the level (R-273, user 22 Nov. 2026).
         await clickCanvasTarget(page, await node('project_view_footer'));
-        await clickCanvasTarget(page, await node('atome_contextual_tool_container_play', 'eve_bevy_panel_atome_contextual_edit'));
         await waitFor(page, async () => {
             const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
             const state = projectViewTransport.read();
@@ -209,8 +209,8 @@ const runAudioMixAcceptance = async ({ page, report, check, ensureProject, outDi
         await page.mouse.move(point.x - 90, point.y, { steps: 8 }); await page.mouse.up();
     };
     await check('Web audio Mute and Solo compose with original gains and restore them', async () => {
+        // A touch on the level's row plays the level (R-273, user 22 Nov. 2026).
         await clickCanvasTarget(page, await target('project_view_footer'));
-        await clickCanvasTarget(page, await target('atome_contextual_tool_container_play', 'eve_bevy_panel_atome_contextual_edit'));
         report.audioMix = { original: await expectGains([0.8, 0.6]) };
         const button = await muteTarget(ids[0]);
         await clickCanvasTarget(page, button);

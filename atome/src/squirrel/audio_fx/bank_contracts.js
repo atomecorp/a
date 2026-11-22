@@ -2,6 +2,9 @@
 // import an SFZ, DecentSampler or SF2 bank, arrange loose sounds, export an instrument as SFZ, auto-sample an
 // external instrument. Same family and shape as instrument_contracts.js; run by
 // eVe/domains/audio_fx/instrument_bank_commands.js (INSTRUMENT_BANK_ACTIONS).
+// The sampler banks eVe reads (bank_sources.js). A bank is a file kept as it is among the person's media, even under
+// an audio MIME (a SoundFont's audio/x-sf2): no sound decoder reads it (asset_box_media.js#inferUploadAtomeType).
+export const BANK_FORMATS = Object.freeze(['sfz', 'dspreset', 'sf2']);
 export const INSTRUMENT_BANK_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'NOT_FOUND', 'INVALID_INSTRUMENT', 'WRITE_FAILED',
     'PLAY_FAILED', 'BANK_UNREADABLE', 'BANK_UNSUPPORTED', 'SAMPLE_MISSING', 'ROOT_UNKNOWN', 'CAPTURE_UNAVAILABLE', 'SILENT_CAPTURE', 'INVALID_PLAN']);
 

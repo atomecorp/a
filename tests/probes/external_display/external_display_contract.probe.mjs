@@ -32,6 +32,24 @@ check('lecture : ce qui joue, avec le temps d’une vidéo', JSON.stringify(play
 check('lecture lancée : seule la lecture change', externalDisplayPlaceChanges(playing, project).playing && !externalDisplayPlaceChanges(playing, project).view);
 check('le temps qui avance ne relance rien', !externalDisplayPlaceChanges(normalizeExternalDisplayPlace({ ...playing, playing: [{ id: 'v1', at: 13 }, { id: 'a1', at: null }] }), playing).playing);
 check('à l’accueil : rien ne joue', normalizeExternalDisplayPlace({ surface: 'dashboard', playing: [{ id: 'v1' }] }).playing.length === 0);
+// The Timeline's transport: the playhead follows during a playback and a take (user, 19 Nov. 2026).
+const rolling = normalizeExternalDisplayPlace({ ...project, transport: { groupId: 'g1', seconds: 3.2, playing: true, recordingTrackIds: ['t1', ''] } });
+check('transport : groupe, position, lecture, prises', JSON.stringify(rolling.transport) === JSON.stringify({ groupId: 'g1', seconds: 3.2, playing: true, recordingTrackIds: ['t1'] }), rolling.transport);
+check('transport sans groupe : aucun', normalizeExternalDisplayPlace({ ...project, transport: { seconds: 2 } }).transport === null);
+check('à l’accueil : aucun transport', normalizeExternalDisplayPlace({ surface: 'dashboard', transport: { groupId: 'g1' } }).transport === null);
+const moved = normalizeExternalDisplayPlace({ ...rolling, transport: { ...rolling.transport, seconds: 3.3 } });
+const c3 = externalDisplayPlaceChanges(moved, rolling);
+check('la tête avance : seul le transport change', c3.transport && !c3.view && !c3.playing && !c3.surface, c3);
+check('rien ne bouge : transport inchangé', !externalDisplayPlaceChanges(rolling, rolling).transport);
+// The timelines the device saved (a take, an edit): carried as they are, for the screen's open sessions.
+const saved = normalizeExternalDisplayPlace({ ...project, timelines: [{ groupId: 'g1', timeline: { timeline_id: 'tl_g1' } }, { groupId: '', timeline: {} }, { groupId: 'g2' }] });
+check('timelines enregistrées : seules les valides', saved.timelines.length === 1 && saved.timelines[0].groupId === 'g1' && saved.timelines[0].timeline.timeline_id === 'tl_g1', saved.timelines);
+// The device's work mode: the screen shows the same tools (user, 19 Nov. 2026: « des deux côtés »).
+const editing = normalizeExternalDisplayPlace({ ...project, workMode: 'edit' });
+check('mode de travail : porté, inconnu ignoré', editing.workMode === 'edit' && normalizeExternalDisplayPlace({ ...project, workMode: 'x' }).workMode === '');
+const c4 = externalDisplayPlaceChanges(normalizeExternalDisplayPlace({ ...project, workMode: 'consultation' }), editing);
+check('Consultation ↔ Édition : seul le mode change', c4.workMode && !c4.view && !c4.surface, c4);
+check('à l’accueil : aucune timeline', normalizeExternalDisplayPlace({ surface: 'dashboard', timelines: [{ groupId: 'g1', timeline: {} }] }).timelines.length === 0);
 
 // 3. The link between two same-origin pages (BroadcastChannel); a relayed page (iOS) only receives.
 const fakeWin = () => ({ BroadcastChannel, location: { origin: 'http://localhost:1' } });

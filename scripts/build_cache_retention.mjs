@@ -23,7 +23,9 @@ function workspaceOf(cache) {
 export function activeCompilers() {
     const processes = execFileSync('/bin/ps', ['-axo', 'comm='], { encoding: 'utf8' });
     return processes.split('\n').map(line => path.basename(line.trim()))
-        .filter(name => /^(cargo|rustc|xcodebuild|XCBuild|swift-frontend|clang|clang\+\+|ld|atome|squirrel)$/.test(name));
+        // devicectl reads a built .app while it installs it on a device; its DerivedData is not a leftover yet.
+        // CoreDeviceService is not listed: that daemon always runs and would defer every cleanup.
+        .filter(name => /^(cargo|rustc|xcodebuild|XCBuild|swift-frontend|clang|clang\+\+|ld|atome|squirrel|devicectl)$/.test(name));
 }
 
 function assertContained(file, container) {
@@ -146,7 +148,10 @@ export function planBuildCleanup({ root = projectRoot,
     }
     const inspectTemporaryCache = (cache, depth) => {
         if (directory(path.join(cache, 'Build/Intermediates.noindex'))) {
-            if (ownsWorkspace(cache)) add(cache, 'temporary-xcode-cache');
+            // A session marks a DerivedData it still needs (build, then install) with .retain, as testflight and
+            // ios-adhoc jobs do; it removes the folder itself when done.
+            if (info(path.join(cache, '.retain'))?.isFile()) kept.push(cache);
+            else if (ownsWorkspace(cache)) add(cache, 'temporary-xcode-cache');
             return;
         }
         if (depth === 0) return;

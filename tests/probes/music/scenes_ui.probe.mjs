@@ -2,7 +2,7 @@
 // the kernel timeline AND on what is painted: draw a Scene by holding then dragging on the Scenes band, a second one
 // beside it, a third that stops at its neighbour, a quick drag that only scrolls, resize by the right and the left
 // handle, move, rename by a double click (Enter keeps, a blank name is not written), the name seen in the Cells view
-// and the Scene view, rename from those views, delete from the rail, reopen the project (everything identical).
+// and the Scene filter of the Cells, rename from those views, delete from the rail, reopen the project (everything identical).
 // Each gesture's response time is measured IN the page, from the pointer's release (or the key) to the frame that
 // shows the result; the band's geometry is compared across the steps and a window change (rule 12).
 // Tests SC-10 … SC-30 of tests/parcours_musique/04_cellules_scenes.md.
@@ -88,15 +88,12 @@ const RULER = 'project_view_timeline_ruler';
 const RAIL = 'eve_bevy_panel_atome_contextual_edit';
 const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance;
 const fast = (name, result) => check(`SC-26 ${name} answers in ≤ ${RESPONSE_MS} ms`, result.ok && result.ms <= RESPONSE_MS, result.ms);
-// A view of the row; on a phone (fewer than ten cells) the views lie in « Vue », unfolded in the row above.
+// A view: the rail's Multitrack palette (Timeline, Cells, Mix; R-258), opened, then its choice.
 const viewTool = async (key) => {
-    let t = await node(`project_view_timeline_row_multitrack_${key}`, 1500);
-    if (!t) {
-        const vue = await node('project_view_timeline_row_views_vue', 3000);
-        if (!vue) return false;
-        await clickCanvasTarget(page, vue); await wait(600);
-        t = await node(`project_view_timeline_row_above_multitrack_${key}`, 3000);
-    }
+    const palette = await node('atome_contextual_tool_container_multitrack', 3000);
+    if (!palette) return false;
+    await clickCanvasTarget(page, palette); await wait(800);
+    const t = await node(`atome_contextual_tool_container_multitrack_multitrack_${key}`, 3000);
     if (t) { await clickCanvasTarget(page, t); await wait(1500); }
     return !!t;
 };
@@ -275,23 +272,33 @@ try {
         check('SC-20 a name longer than its cell ends with « … »', got.ok && got.value.text.endsWith('…') && got.value.text.length < 'Pont instrumental'.length, got.value?.text);
         await shot('05b_cells_renamed');
     }
-    // SC-23 / SC-24 the Scene view: the names in its row of Scenes, and a rename there.
-    const sceneOpened = await viewTool('scene');
+    // SC-23 / SC-24 the Scene filter of the Cells (Vue › Scène, Édition lit; R-258 replaced the Scene view): the names in its
+    // row of Scenes, and a rename there.
+    const sceneFilter = async () => {
+        const vue = await node('atome_contextual_tool_timeline_view', 3000);
+        if (!vue) return false;
+        await clickCanvasTarget(page, vue); await wait(800);
+        const toggle = await node('atome_contextual_tool_timeline_view_timeline_scene_filter', 3000);
+        if (toggle) { await clickCanvasTarget(page, toggle); await wait(1500); }
+        return !!toggle;
+    };
+    const sceneOpened = await sceneFilter();
     const strip = await rects({ prefix: 'project_view_timeline_cell_' });
     const names = Object.entries(strip).filter(([id]) => id.endsWith('_scene_name')).map(([, r]) => r.text);
-    check('SC-23 the Scene view shows the renamed Scenes', sceneOpened && names.includes('Couplet'), { sceneOpened, names });
-    await shot('06_scene_view');
-    const sceneField = await renameFieldAfterDoubleClick(sceneCellId(others[1].id), 'rename_field_scene_view');
-    check('SC-24 in Edit, a double touch renames a Scene in the Scene view', sceneField.ok, sceneField.value || sceneField.error || null);
+    check('SC-23 the Scene filter shows the renamed Scenes', sceneOpened && names.includes('Couplet'), { sceneOpened, names });
+    await shot('06_scene_filter');
+    const sceneField = await renameFieldAfterDoubleClick(sceneCellId(others[1].id), 'rename_field_scene_filter');
+    check('SC-24 in Edit, a double touch renames a Scene in the Scene filter', sceneField.ok, sceneField.value || sceneField.error || null);
     if (sceneField.ok) {
         await page.keyboard.insertText('Refrain'); await wait(300);
-        await shot('06b_scene_view_field');
+        await shot('06b_scene_filter_field');
         await page.keyboard.press('Enter');
-        got = await answered('rename_commit_scene_view', `const s = p.scenes(a.pid).find((e) => e.id === a.id); return s?.name === 'Refrain' && p.rect(a.node + '_name')?.text === 'Refrain';`,
+        got = await answered('rename_commit_scene_filter', `const s = p.scenes(a.pid).find((e) => e.id === a.id); return s?.name === 'Refrain' && p.rect(a.node + '_name')?.text === 'Refrain';`,
             { pid, id: others[1].id, node: sceneCellId(others[1].id) });
-        check('SC-24 typed then Enter, the Scene is renamed from the Scene view', got.ok, (await scenesOf(pid)).find((e) => e.id === others[1].id));
+        check('SC-24 typed then Enter, the Scene is renamed from the Scene filter', got.ok, (await scenesOf(pid)).find((e) => e.id === others[1].id));
     }
-    // Back to Play, as the steps after expect.
+    // Back to Play, as the steps after expect (the filter off first).
+    if (sceneOpened) await sceneFilter();
     await editTool();
     await viewTool('timeline');
     await wait(1200);

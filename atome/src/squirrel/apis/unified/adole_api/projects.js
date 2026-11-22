@@ -164,7 +164,19 @@ async function held_projects(projectId) {
     const side = listed?.meta?.source === 'tauri' ? 'tauri' : 'fastify';
     if (listed?.[side]?.error) return { ok: false, error: listed[side].error };
     const parentOf = new Map((listed[side].atomes || []).map(record => [String(resolveAtomeId(record) || ''), String(resolveAtomeParentId(record) || '')]));
-    const depthOf = (id) => { let depth = 0; for (let at = parentOf.get(id); at; at = parentOf.get(at)) { if (at === projectId) return depth + 1; depth += 1; } return 0; };
+    // A chain that comes back on itself never reaches the project: records written before the server refused a
+    // parent cycle (a project its own parent, 1 Oct. 2026) froze the page in this walk on every deletion (R-212, 21 Nov. 2026).
+    const depthOf = (id) => {
+        const seen = new Set([id]);
+        let depth = 0;
+        for (let at = parentOf.get(id); at; at = parentOf.get(at)) {
+            if (at === projectId) return depth + 1;
+            if (seen.has(at)) return 0;
+            seen.add(at);
+            depth += 1;
+        }
+        return 0;
+    };
     const held = [...parentOf.keys()].map(id => ({ id, depth: id && id !== projectId ? depthOf(id) : 0 })).filter(entry => entry.depth > 0);
     return { ok: true, ids: held.sort((a, b) => b.depth - a.depth).map(entry => entry.id) };
 }

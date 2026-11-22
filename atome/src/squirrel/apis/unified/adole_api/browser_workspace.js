@@ -4,7 +4,8 @@ import { getSessionState } from './session.js';
 import { isTauriRuntime } from './runtime.js';
 import { getFastifyHttpBaseUrl } from '../adole_backend.js';
 import { commitWorkspaceEvents, createWorkspaceSnapshot, getGuestAtome, listGuestAtomes, listWorkspaceEvents,
-    oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile } from './guest_workspace_store.js';
+    oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile,
+    parkRefusedWorkspaceFile, requeueRefusedWorkspaceFiles } from './guest_workspace_store.js';
 
 const owns = message => ['events', 'state-current', 'atome'].includes(message?.type)
     || (message?.type === 'snapshot' && message.action === 'create');
@@ -84,12 +85,12 @@ const isRowRefusal = (response) => !!response && response.ok !== true && respons
     && Number(response.status) !== 0 && Number(response.status) !== 401
     && !AUTHENTICATION_REFUSAL.test(String(response.error || ''));
 
-// Refused rows go back in the outbox once a session is (re)established: a right
+// Refused rows (and refused files) go back in the outbox once a session is (re)established: a right
 // granted meanwhile, or a server-side repair, lets them through in order.
 export async function requeueRefusedBrowserWorkspaceEvents() {
     const owner = getSessionState().user?.id;
     if (isTauriRuntime() || !owner || getSessionState().mode !== 'authenticated') return 0;
-    return requeueRefusedWorkspaceEvents(String(owner));
+    return (await requeueRefusedWorkspaceEvents(String(owner))) + (await requeueRefusedWorkspaceFiles(String(owner)));
 }
 
 let synchronization;
@@ -149,18 +150,24 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
         if (getSessionState().mode !== 'authenticated' || getSessionState().user?.id !== owner) throw new Error('workspace_identity_changed');
     };
     await ensureSession(); stillAuthorized();
+    // A file the server refuses is parked as a row is (below); any other failure stops the pass in place.
+    const refused = [];
     for (const file of await listGuestFiles(owner)) {
-        if (file.uploaded) continue;
+        if (file.uploaded || file.refused) continue;
         stillAuthorized();
         if (typeof uploadFile !== 'function') throw new Error('workspace_media_transport_unavailable');
         const result = await uploadFile(file);
-        if (!result?.success || result.file_name !== file.file_name || result.owner_id !== owner) throw new Error('workspace_media_sync_failed');
+        if (result?.success !== true && isRowRefusal(result)) {
+            await parkRefusedWorkspaceFile(owner, file.file_id, result.error);
+            refused.push({ file_id: file.file_id, atome_id: file.atome_id, error: String(result.error || 'workspace_media_refused') });
+            continue;
+        }
+        if (!result?.success || result.file_name !== file.file_name || result.owner_id !== owner) throw new Error(result?.error || 'workspace_media_sync_failed');
         await acknowledgeWorkspaceFile(owner, file.file_id);
     }
     // Oldest first, one row at a time, rows committed during the pass included.
     // A row the server refuses is parked (kept, reported) so it cannot hold
     // back every later change; any other failure stops the pass in place.
-    const refused = [];
     for (let entry = await oldestPendingWorkspaceEvent(owner), previousKey = null; entry;
         previousKey = entry.key, entry = await oldestPendingWorkspaceEvent(owner)) {
         if (entry.key === previousKey) throw new Error('workspace_sync_acknowledgement_failed');

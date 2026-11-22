@@ -20,6 +20,8 @@ pub(super) struct Subscriptions {
     // The batches not sent yet: their id, their message and their streams.
     queued: VecDeque<(String, Value, Vec<String>)>,
     pub(super) applied: HashSet<String>,
+    // The types of the Atomes those streams wrote since the last announcement.
+    pub(super) applied_types: HashSet<String>,
     // Streams subscribed at cursor 0 not received yet: a restore's remaining work.
     pub(super) waiting: HashSet<String>,
     pub(super) batch: bool,

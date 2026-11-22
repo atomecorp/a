@@ -49,6 +49,7 @@ async fn persist_received<S>(
     credential: &RemoteSyncCredential,
     sink: &mut S,
     applied: &mut HashSet<String>,
+    types: &mut HashSet<String>,
     events: Vec<Value>,
 ) -> Result<(), String>
 where
@@ -87,6 +88,14 @@ where
                 state.storage_root(),
                 &applied,
             )?;
+            for event in &applied {
+                types.extend(super::local_atome_remote_projection::written_atome_type(
+                    &db,
+                    user,
+                    &credential.remote_user_id,
+                    event,
+                )?);
+            }
             inserted.extend(written);
         }
         tokio::task::yield_now().await;
@@ -182,7 +191,7 @@ async fn connected_session(
                 if subscriptions.settled() && health_probe.is_some_and(|sent| sent.elapsed() >= Duration::from_secs(10)) {
                     return Err("sync_heartbeat_timeout".into());
                 }
-                progress::projection(user, subscriptions.applied.drain().collect());
+                progress::projection(user, subscriptions.applied.drain().collect(), Some(subscriptions.applied_types.drain().collect()));
                 // A restore's progress, told at the projection's pace while its streams arrive.
                 if subscriptions.waiting.len() != published_waiting {
                     published_waiting = subscriptions.waiting.len();
@@ -235,7 +244,7 @@ async fn connected_session(
                         events.push(payload);
                         continue;
                     }
-                    persist_received(state, user, &credential, &mut sink, &mut subscriptions.applied, std::mem::take(&mut events)).await?;
+                    persist_received(state, user, &credential, &mut sink, &mut subscriptions.applied, &mut subscriptions.applied_types, std::mem::take(&mut events)).await?;
                     match payload["type"].as_str().unwrap_or("") {
                         "welcome" => {
                             let capabilities = payload["capabilities"].as_array();
@@ -251,7 +260,7 @@ async fn connected_session(
                             *failures = 0;
                             let announced = payload["streams"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect();
                             subscriptions.subscribe(&mut sink, available_streams(state, user)?, announced).await?;
-                            progress::projection(user, subscriptions.streams.iter().cloned().collect());
+                            progress::projection(user, subscriptions.streams.iter().cloned().collect(), None);
                             published_waiting = subscriptions.waiting.len();
                             progress::publish(state, user, &credential, "connected", "receiving", subscriptions.replay(), None);
                         }
@@ -263,7 +272,7 @@ async fn connected_session(
                         "replay-complete" => {
                             if !subscriptions.settle(&payload) { continue; }
                             subscriptions.send_ready(&mut sink).await?;
-                            progress::projection(user, subscriptions.applied.drain().collect());
+                            progress::projection(user, subscriptions.applied.drain().collect(), Some(subscriptions.applied_types.drain().collect()));
                             let restore = if replay_error.is_some() { "error" } else if subscriptions.settled() { "ready" } else { "receiving" };
                             published_waiting = subscriptions.waiting.len();
                             progress::publish(state, user, &credential, "connected", restore, subscriptions.replay(), replay_error.as_deref());
@@ -284,7 +293,7 @@ async fn connected_session(
                         _ => {}
                     }
                 }
-                persist_received(state, user, &credential, &mut sink, &mut subscriptions.applied, events).await?;
+                persist_received(state, user, &credential, &mut sink, &mut subscriptions.applied, &mut subscriptions.applied_types, events).await?;
                 if closed { return Err("sync_socket_closed".into()); }
             }
         }

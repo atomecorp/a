@@ -1121,7 +1121,9 @@ test('footer_tools reload and commit use the established canonical property owne
     }
 });
 
-test('structured contexts expose applicable Play while beginner taxonomy filters recording', () => {
+// A structured row's Lecture is the touch on the row itself (R-273, user 22 Nov. 2026): the rail drops `play`
+// (atome_contextual_rail_runtime.js); recording keeps its beginner visibility.
+test('structured contexts keep the beginner taxonomy filtering recording', () => {
     const model = createAtomeContextualRailModelRuntime({
         mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play', record_action: 'ui.detail.record.toggle' },
         intuitionContent: {
@@ -1147,13 +1149,7 @@ test('structured contexts expose applicable Play while beginner taxonomy filters
         const keys = model.resolveAtomeContextualRailToolKeysForAtome({
             atomeId: `${kind}_row`, kind, toolKeys: ['detail', 'delete', 'play', 'record_action'], hasProjectAutomation: true, railOnly: true
         });
-        assert.equal(keys.includes('play'), true, `${kind} lacks rail Play`);
         assert.equal(keys.includes('record_action'), false, `${kind} bypasses beginner recording visibility`);
-        const definition = model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true });
-        assert.equal(definition?.toolId, 'ui.play');
-        assert.equal(definition?.label, 'Play');
-        assert.equal(Object.prototype.hasOwnProperty.call(definition, 'tooltip'), false);
-        assert.equal(Object.prototype.hasOwnProperty.call(definition, 'popup'), false);
         const recordDefinition = model.resolveAtomeContextualRailToolDefinition('record_action', { structuredContext: true });
         assert.equal(recordDefinition?.label, 'Record');
         assert.equal(recordDefinition?.icon, 'record');
@@ -1164,28 +1160,14 @@ test('structured contexts expose applicable Play while beginner taxonomy filters
     });
 });
 
-test('structured item and container Play presentation read the project playback facade', async () => {
-    const model = createAtomeContextualRailModelRuntime({
-        mainToolIdByKey: { play: 'ui.play' }, intuitionContent: { play: { tool_id: 'ui.play', label: 'Play', icon: 'play' } },
-        normalizeMainToolKey: (key) => String(key || '').trim().toLowerCase(),
-        normalizeCatalogToolEntry: ({ key, def }) => ({ key, toolId: def.tool_id, label: def.label, toolType: 'standard' }),
-        normalizeRecordActionRecordSource: () => null, resolveCanonicalMainToolId: (id) => id,
-        resolveCurrentTextSizeValue: (value) => value, isSelectionRequiredToolKey: () => false,
-        getAtomeElement: () => null, getAtomeRuntimeState: () => ({}), translate: (_key, fallback) => fallback
-    });
+test('structured item and container playback read the project playback facade', async () => {
     const records = ['video', 'audio', 'image', 'text', 'shape'].map((kind) => ({
         id: `${kind}_row`, type: kind, project_id: 'structured_project', properties: { kind }
     }));
     for (const record of records) {
-        assert.equal(model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true, record }).label, 'Play');
         await projectViewPlayback.triggerChild({ record, projectId: record.project_id });
-        const active = model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true, record });
-        assert.equal(active.label, 'Stop');
-        assert.equal(active.icon, 'stop');
-        assert.equal(active.active, true);
         assert.equal(projectViewPlayback.isPlayingTarget({ record }), true);
         await projectViewPlayback.stop();
-        assert.equal(model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true, record }).label, 'Play');
     }
     const molecule = {
         id: 'molecule_row', type: 'group', project_id: 'structured_project',
@@ -1194,20 +1176,12 @@ test('structured item and container Play presentation read the project playback 
     projectViewPlayback.adoptDelegatedTransport({ level: { entity: 'molecule', id: molecule.id }, playing: true });
     assert.equal(projectViewPlayback.isPlayingTarget({ record: molecule }), true);
     assert.equal(projectViewPlayback.isPlayingTarget({ level: { entity: 'molecule', id: molecule.id } }), true);
-    assert.equal(model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true, record: molecule }).label, 'Stop');
     await projectViewPlayback.stop();
-    assert.equal(model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true, record: molecule }).label, 'Play');
 
     const still = { id: 'armed_still', type: 'image', project_id: 'structured_project', properties: { kind: 'image' } };
     await projectViewPlayback.playChild({ record: still, projectId: 'structured_project' });
     await projectViewPlayback.stop({ disarm: false });
     assert.equal(projectViewPlayback.readState().playing, false);
     assert.equal(projectViewPlayback.readState().armed, true);
-    assert.equal(model.resolveAtomeContextualRailToolDefinition('play', {
-        structuredContext: true, record: still
-    }).label, 'Stop');
     await projectViewPlayback.stop();
-    assert.equal(model.resolveAtomeContextualRailToolDefinition('play', {
-        structuredContext: true, record: still
-    }).label, 'Play');
 });

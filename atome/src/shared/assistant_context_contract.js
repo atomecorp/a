@@ -87,7 +87,9 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
     // The user's other devices (surface registry + remote command relay).
     { name: 'surfaces.list', required: [], properties: {},
         description: 'List the other devices where Atome is open and connected now (spoken name, platform, shared by another '
-            + 'account or not). Call it when the user asks which devices are available or names a device you cannot find.' },
+            + 'account or not), then the screens of the local network (a Chromecast, an Apple TV), those heard now and those '
+            + 'known but absent. Call it when the user asks which devices or screens are available or names one you cannot '
+            + 'find; read the names aloud and ask which one.' },
     { name: 'surface.run', required: ['surface', 'tool'],
         description: 'Run one Atome tool on ANOTHER device of the user, never on this one: « sur la télé du salon, mets France 2 », '
             + '« sur le Mac, ouvre le projet X ». surface = the device name exactly as the user said it; tool = the exact Atome '
@@ -111,11 +113,24 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
             + 'selected media, to ANOTHER device of the user, where it goes on playing at the same position, fullscreen: '
             + '« envoie ça sur la télé du salon », « mets ça sur le Mac », « continue sur l\'iPad ». surface = the device name '
             + 'exactly as the user said it; atome_id only when the user named another media object. It stops here once it '
-            + 'plays there. Always say the result message, including refusals, unknown and offline devices.',
+            + 'plays there. A screen of the local network (a Chromecast, an Apple TV: « envoie la vidéo vers l\'Apple TV du '
+            + 'salon ») is named the same way: it fetches and plays the video, photo or sound itself. Always say the result '
+            + 'message, including refusals, unknown and offline devices, and a pairing to do (surface.pair).',
         properties: {
             surface: line(120), atome_id: line(128),
             fullscreen: { type: 'boolean', description: 'False only when the user asked for a small window.' }
         } },
+    // An AirPlay receiver is paired once (R-248): the television shows a code, the person says it.
+    { name: 'surface.pair', required: ['surface'],
+        description: 'Pair an Apple TV (an AirPlay screen of the network) once, so media can be sent to it: called with its '
+            + 'name alone, its television shows a four-digit code; called again with pin = the digits the user reads there, '
+            + 'it is paired. Use it when surface.send_media says the screen must be paired. Say the result message.',
+        properties: { surface: line(120), pin: { type: 'string', maxLength: 8, description: 'The code the television shows.' } } },
+    { name: 'surface.mirror', required: ['surface'],
+        description: 'Show the whole view of this device on an Apple TV of the network (« mets l\'écran sur la télé du salon »): '
+            + 'the system starts a mirroring itself, so the result says how (Control Center, Screen Mirroring, the screen\'s '
+            + 'name), or that the view is already there. Say the result message.',
+        properties: { surface: line(120) } },
     { name: 'media.resume', required: ['atome_id'],
         description: 'Resume on THIS device a media object that was just teleported here from another device: opens its '
             + 'project, plays it from position_seconds, fullscreen when asked. Sent by the device the media left; the '

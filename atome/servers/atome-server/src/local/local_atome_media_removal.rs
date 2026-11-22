@@ -85,13 +85,16 @@ fn base_name(value: &str) -> Option<String> {
         .map(String::from)
 }
 
-// The file names every live atome but `atome_id` still holds, by `file_name` or `file_path`.
-// Compared by name alone: a same name in another folder keeps its bytes, never the reverse.
-fn names_held_by_others(db: &Connection, atome_id: &str) -> Result<HashSet<String>, String> {
+// The file names every live atome still holds, by `file_name` or `file_path` (a deleted atome
+// is not live, so it never holds its own). Compared by name alone: a same name in another
+// folder keeps its bytes, never the reverse. One scan of the projection for a whole batch,
+// run only when a deleted media has bytes here: a scan per delete held the database for
+// seconds during a sync, and every request of the page timed out behind it (R-212, 21 Nov. 2026).
+fn names_held_by_live_atomes(db: &Connection) -> Result<HashSet<String>, String> {
     let mut statement = db
         .prepare(
             "SELECT properties FROM state_current
-             WHERE atome_id <> ?1 AND COALESCE(json_extract(properties, '$.__deleted'), 0) <> 1
+             WHERE COALESCE(json_extract(properties, '$.__deleted'), 0) <> 1
                AND (json_extract(properties, '$.file_name') IS NOT NULL
                  OR json_extract(properties, '$.fileName') IS NOT NULL
                  OR json_extract(properties, '$.file_path') IS NOT NULL
@@ -99,7 +102,7 @@ fn names_held_by_others(db: &Connection, atome_id: &str) -> Result<HashSet<Strin
         )
         .map_err(|error| error.to_string())?;
     let rows = statement
-        .query_map([atome_id], |row| row.get::<_, String>(0))
+        .query_map([], |row| row.get::<_, String>(0))
         .map_err(|error| error.to_string())?;
     let mut held = HashSet::new();
     for raw in rows {
@@ -127,6 +130,7 @@ pub(super) fn remove_deleted_media<'a>(
     storage_root: &Path,
     atome_ids: impl IntoIterator<Item = &'a str>,
 ) -> Result<(), String> {
+    let mut held: Option<HashSet<String>> = None;
     for atome_id in atome_ids {
         let row: Option<(String, String)> = db
             .query_row(
@@ -144,8 +148,18 @@ pub(super) fn remove_deleted_media<'a>(
         let Some((_, home)) = media_home(storage_root, &owner, &properties) else {
             continue;
         };
-        let held = names_held_by_others(db, atome_id)?;
-        for path in stored_paths(storage_root, &owner, &properties) {
+        let present: Vec<PathBuf> = stored_paths(storage_root, &owner, &properties)
+            .into_iter()
+            .filter(|path| path.exists())
+            .collect();
+        if present.is_empty() {
+            continue;
+        }
+        let held = match &mut held {
+            Some(held) => held,
+            slot => slot.insert(names_held_by_live_atomes(db)?),
+        };
+        for path in present {
             let shared = path
                 .file_name()
                 .and_then(|name| name.to_str())

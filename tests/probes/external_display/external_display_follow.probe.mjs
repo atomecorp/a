@@ -64,7 +64,8 @@ try {
     const fHome = await waitOn(follower, async () => { const r = (await import('/eVe/domains/matrix/matrix_module_runtime.js')).readWorkspaceHomeRuntime(); const i = r?.inspect?.(); return { ok: !i?.shownRubric, shownRubric: i?.shownRubric }; }, null, 20_000);
     check('écran : revenu à l’accueil', fHome.ok, fHome);
 
-    // The device opens a project with objects: the screen opens it, read only, without its ribbon.
+    // The device opens a project with objects: the screen opens it in the device's work mode, its tools included
+    // (user, 19 Nov. 2026: « en mode dual, ils doivent être des deux côtés »).
     const created = await page.evaluate(async () => {
         const project = await window.AdoleAPI.projects.create('Écran externe');
         const projectId = String(project?.id || project?.project_id || project?.atome_id || project?.fastify?.project?.id || '');
@@ -78,10 +79,10 @@ try {
     const fProject = await waitOn(follower, async (projectId) => {
         const ws = window.__eveWorkspaceMode || {};
         const { getProjectWorkMode } = await import('/eVe/domains/rendering/project_work_mode_state.js');
-        return { ok: ws.mode === 'project' && ws.projectId === projectId && getProjectWorkMode(projectId) === 'consultation' && window.__eveDashboardMainMenuSuspended === true,
+        return { ok: ws.mode === 'project' && ws.projectId === projectId && getProjectWorkMode(projectId) === 'edit' && window.__eveDashboardMainMenuSuspended !== true,
             ws, mode: getProjectWorkMode(projectId), suspended: window.__eveDashboardMainMenuSuspended };
     }, created.projectId, 60_000, 400);
-    check('écran : même projet, en Consultation, sans ruban', fProject.ok, fProject);
+    check('écran : même projet, même mode (Édition), ses outils', fProject.ok, fProject);
     const devMode = await page.evaluate(async id => (await import('/eVe/domains/rendering/project_work_mode_state.js')).getProjectWorkMode(id), created.projectId);
     check('téléphone : reste en Édition, ses outils', devMode === 'edit', devMode);
     await sleep(2000);
@@ -124,6 +125,22 @@ try {
         return { ok: records.some(record => String(record?.id ?? record?.atome_id) === id), count: records.length };
     }, { projectId: created.projectId, id: added.id }, 20_000, 300);
     check('écran : un objet ajouté sur le téléphone y apparaît', fLive.ok, fLive);
+    // The screen is a workspace too (user, 19 Nov. 2026: « c'est bidirectionnel »): an object added there is kept and
+    // reaches the device.
+    const fromScreen = await follower.evaluate(async (projectId) => {
+        const id = `ext_screen_${projectId.slice(-6)}`;
+        await window.Atome.commit({ kind: 'set', atome_id: id, project_id: projectId, type: 'shape',
+            props: { type: 'shape', kind: 'shape', project_id: projectId, parent_id: projectId, left: 260, top: 420, width: 120, height: 90, color: 'rgba(40,90,230,1)' } });
+        const stored = await window.Atome.getStateCurrent(id);
+        return { id, stored: !!stored && !stored.deleted };
+    }, created.projectId);
+    check('écran : son écriture passe et est gardée', fromScreen.stored, fromScreen);
+    const dLive = await waitOn(page, async ({ projectId, id }) => {
+        const scene = await import('/eVe/domains/rendering/project_scene_runtime.js');
+        const records = scene.getProjectSceneState(projectId)?.records || [];
+        return { ok: records.some(record => String(record?.id ?? record?.atome_id) === id), count: records.length };
+    }, { projectId: created.projectId, id: fromScreen.id }, 20_000, 300);
+    check('téléphone : un objet ajouté sur l’écran y apparaît', dLive.ok, dLive);
     await sleep(1200); await shoot(follower, '4_ecran_objet_ajoute');
 
     // The device plays a video of the project: the screen plays the same pictures, silent, from the device's time.
@@ -164,12 +181,7 @@ try {
     }, video.id, 15_000, 300);
     check('écran : arrêtée sur le téléphone, arrêtée ici', fStops.ok, { stopped, fStops });
 
-    // The screen never writes.
-    const refused = await follower.evaluate(async () => {
-        try { await window.Atome.commit({ kind: 'set', atome_id: 'ext_forbidden', project_id: window.__eveWorkspaceMode?.projectId, type: 'shape', props: { left: 1 } }); return 'written'; }
-        catch (error) { return String(error?.message || error); }
-    });
-    check('écran : toute écriture refusée', refused === 'external_display_follower_read_only', refused);
+    // The screen's own place (the home's rubric and page) stays the device's to keep.
     check('écran : ne touche pas la place gardée par le téléphone', await page.evaluate(() => localStorage.getItem('eve.dashboard.left.v1')) !== null || deviceBefore === null);
 
     // The device goes back to the Dashboard: the screen too.
@@ -177,6 +189,19 @@ try {
     const fBack = await waitOn(follower, () => ({ ok: (window.__eveWorkspaceMode || {}).mode === 'dashboard', ws: window.__eveWorkspaceMode }), null, 30_000, 400);
     check('écran : revenu au Dashboard avec le téléphone', fBack.ok, fBack);
     await sleep(1500); await shoot(follower, '5_ecran_retour');
+
+    // The device's keyboard: iOS contracts the screen's visual viewport too; the screen keeps its whole size (its band stays down).
+    const keyboardOnScreen = await follower.evaluate(async () => {
+        const surface = document.getElementById('eve_surface_project');
+        const { readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
+        const before = readRenderSurfaceSize(surface);
+        const fake = Object.assign(new EventTarget(), { width: innerWidth, height: innerHeight - 320, scale: 1, offsetTop: 0, offsetLeft: 0 });
+        Object.defineProperty(window, 'visualViewport', { configurable: true, value: fake });
+        window.dispatchEvent(new Event('resize'));
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        return { before: { width: before.width, height: before.height }, after: (({ width, height }) => ({ width, height }))(readRenderSurfaceSize(surface)) };
+    });
+    check('clavier de l’appareil : l’écran garde toute sa hauteur', keyboardOnScreen.after.height === keyboardOnScreen.before.height && keyboardOnScreen.before.height > 900, keyboardOnScreen);
 
     note('places reçues par l’écran', await follower.evaluate(() => window.__probePlaces.map(m => ({ t: m.t, type: m.type, surface: m.place?.surface, rubric: m.place?.dashboard?.rubric?.rubric || null, page: !!m.place?.dashboard?.page }))));
     note('erreurs absorbées de l’écran', await follower.evaluate(() => (window.__squirrelErrors || []).map(e => `${e.context}: ${e.error?.message || e.message || ''}`).slice(-30)));

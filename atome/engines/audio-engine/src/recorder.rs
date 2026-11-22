@@ -69,7 +69,8 @@ struct RecordingSession {
     stop_signal: Arc<StopSignal>,
     /// Lightweight atomic for the audio callback (no mutex in hot path)
     stop_atomic: Arc<AtomicBool>,
-    thread_handle: Option<std::thread::JoinHandle<Result<f64, String>>>,
+    // Joined at the stop, it gives the take's waveform peaks.
+    thread_handle: Option<std::thread::JoinHandle<Result<Vec<f32>, String>>>,
     start_time: std::time::Instant,
     file_path: String,
     sample_rate: u32,
@@ -96,6 +97,8 @@ pub struct RecordResult {
     pub output_format: String,
     // Where the take started on the playback's clock (sample-accurate placement).
     pub capture_clock: Option<CaptureClock>,
+    // Its waveform, drawn by its clip as soon as it lands (recorder_wav.rs `TakeEnvelope`).
+    pub waveform_peaks: Vec<f32>,
 }
 
 pub fn has_active_sessions() -> bool {
@@ -260,7 +263,7 @@ pub(super) fn start_session(
 
     // Spawn a thread that owns the input (a cpal Stream is !Send, so it must
     // be created and dropped on the same thread).
-    let thread_handle = crate::engine_thread::spawn(move || -> Result<f64, String> {
+    let thread_handle = crate::engine_thread::spawn(move || -> Result<Vec<f32>, String> {
         let init_result = (|| {
             metering::configure_scope(sr, ch);
 
@@ -313,12 +316,9 @@ pub(super) fn start_session(
 
         writer_stop.store(true, Ordering::Release);
         match writer_handle.join() {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => return Err(error),
-            Err(_) => return Err("WAV writer thread panicked".to_string()),
+            Ok(result) => result,
+            Err(_) => Err("WAV writer thread panicked".to_string()),
         }
-
-        Ok(0.0) // duration computed from Instant in stop()
     });
 
     match ready_rx.recv_timeout(std::time::Duration::from_secs(8)) {
@@ -375,13 +375,12 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
     session.stop_signal.stop();
 
     // Wait for the thread to finish
-    if let Some(handle) = session.thread_handle.take() {
-        match handle.join() {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => return Err(format!("Recording thread error: {e}")),
-            Err(_) => return Err("Recording thread panicked".to_string()),
-        }
-    }
+    let waveform_peaks = match session.thread_handle.take().map(|handle| handle.join()) {
+        Some(Ok(Ok(peaks))) => peaks,
+        Some(Ok(Err(e))) => return Err(format!("Recording thread error: {e}")),
+        Some(Err(_)) => return Err("Recording thread panicked".to_string()),
+        None => Vec::new(),
+    };
     let frame_count = session.frame_count.load(Ordering::Relaxed);
     let overrun_frames = session.overrun_frames.load(Ordering::Relaxed);
     let duration_sec = if session.sample_rate > 0 {
@@ -417,5 +416,6 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
         channels: written_channels(session.channels),
         output_format: format!("{:?}", session.output_format),
         capture_clock: session.capture_clock.lock().ok().and_then(|clock| *clock),
+        waveform_peaks,
     })
 }

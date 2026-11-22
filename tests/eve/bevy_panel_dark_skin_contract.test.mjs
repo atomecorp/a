@@ -162,8 +162,9 @@ test('panel surfaces share the approved glass, opaque white ink and semantic hie
     }
     assert.deepEqual(T.colors.text,[1,1,1,1]); assert.deepEqual(T.colors.muted,[1,1,1,1]);
     assert.deepEqual(T.hierarchy.colors.map(hex),['#f28c29','#2a80ed']);
-    assert.equal(T.surfaces.control.shadow.color[3],.48);
-    assert.equal(T.surfaces.control.shadows[0].color[3],.30);
+    // The one drop shadow, black at 39 %, 16 px, no offset (SYSTEM_UI_DROP_SHADOW, user 19 Nov. 2026).
+    assert.deepEqual(T.surfaces.control.shadow,{color:[0,0,0,.39],blur:16,spread:0,offset:[0,0]});
+    assert.equal(T.surfaces.control.shadows,undefined);
     assert.equal(T.material.shadow,T.surfaces.shell.shadow);
     assert.equal(T.accordion.collapsedShadow,T.surfaces.control.shadow);
     assert.equal(T.select.menuShadow,T.surfaces.control.shadow);
@@ -244,7 +245,8 @@ test('material survives normalization and the native bridge, while removal is ex
     const records=projectBevyUiTreeRecords({tree,treeId:'material_tree',workspaceLayer:'panel'});
     const shape=records.find(record=>record.id.endsWith('_material'));
     const shadows=records.filter(record=>record.id.includes('_outer_shadow_'));
-    assert.equal(shadows.length,1); assert.ok(shadows.every(record=>record.interactive!==true));
+    // One drop shadow (AGENTS.md rule 15, user 19 Nov. 2026): carried by the material record itself, no shadow stack.
+    assert.equal(shadows.length,0); assert.ok(shape);
     const payload=mapVirtualSceneNodeToBevyPayload({id:'paint',kind:'shape',bounds:{x:0,y:0,width:100,height:40},
         renderLayer:2,material:{fill:T.surfaces.control.background,backdrop:shape.properties.material.backdrop,surfacePaint:shape.properties.material.surfacePaint}});
     assert.equal(payload.surface_paint.gradient,null);

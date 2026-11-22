@@ -142,140 +142,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             webView.scrollView.backgroundColor = .black
         }
 
-        let startupLocalPort = FeatureFlags.startLocalHTTPServer ? (LocalServer.shared.port ?? 0) : 0
-        let localPortBootstrap = startupLocalPort > 0
-            ? """
-                try {
-                    window.__ATOME_LOCAL_HTTP_PORT__ = \(startupLocalPort);
-                    window.ATOME_LOCAL_HTTP_PORT = \(startupLocalPort);
-                    window.__LOCAL_HTTP_PORT = \(startupLocalPort);
-                    window.__SQUIRREL_TAURI_LOCAL_PORT__ = \(startupLocalPort);
-                } catch(e) { }
-                """
-            : ""
-        let panelLabBootstrap = FeatureFlags.panelLabEnabled
-            ? "try { window.__EVE_PANEL_LAB__ = true; } catch(e) { }"
-            : ""
-        let scriptSource = """
-                // Pre-paint background black ASAP to avoid white flash (especially on app launch)
-                (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
-                (function(){
-                    if(window.__ATOME_XCODE_CONSOLE_BRIDGE__) return;
-                    window.__ATOME_XCODE_CONSOLE_BRIDGE__ = true;
-                    var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console;
-                    if(!bridge || !window.console) return;
-                    function stringify(value, depth) {
-                        if(depth > 2) return '[depth-limit]';
-                        if(value === null) return 'null';
-                        if(value === undefined) return 'undefined';
-                        if(value instanceof Error) return value.stack || value.message || String(value);
-                        var type = typeof value;
-                        if(type === 'string') return value;
-                        if(type === 'number' || type === 'boolean' || type === 'bigint') return String(value);
-                        if(type === 'function') return '[function ' + (value.name || 'anonymous') + ']';
-                        try {
-                            return JSON.stringify(value, function(key, item) {
-                                if(item instanceof Error) return item.stack || item.message || String(item);
-                                if(typeof item === 'function') return '[function ' + (item.name || 'anonymous') + ']';
-                                return item;
-                            });
-                        } catch(error) {
-                            try { return String(value); } catch(_) { return '[unserializable]'; }
-                        }
-                    }
-                    function limit(text) {
-                        text = String(text || '');
-                        return text.length > 4000 ? text.slice(0, 4000) + '…[truncated]' : text;
-                    }
-                    ['log','info','warn','error','debug'].forEach(function(level) {
-                        var original = typeof window.console[level] === 'function'
-                            ? window.console[level].bind(window.console)
-                            : function(){};
-                        window.console[level] = function() {
-                            var args = Array.prototype.slice.call(arguments || []);
-                            var rendered = args.slice(0, 8).map(function(item) { return limit(stringify(item, 0)); });
-                            try {
-                                bridge.postMessage({
-                                    source: 'js_console',
-                                    level: level,
-                                    message: rendered.join(' '),
-                                    payload: rendered
-                                });
-                            } catch(_) { }
-                            return original.apply(window.console, args);
-                        };
-                    });
-                })();
-                // Ensure proper mobile viewport for full edge-to-edge content
-                (function(){
-                    try {
-                        if(!document.querySelector('meta[name=viewport]')) {
-                            var m=document.createElement('meta');
-                            m.name='viewport';
-                            m.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
-                            (document.head || document.documentElement).appendChild(m);
-                        } else if(!/viewport-fit=cover/.test(document.querySelector('meta[name=viewport]').content)) {
-                            document.querySelector('meta[name=viewport]').content += ',viewport-fit=cover';
-                        }
-                        var de=document.documentElement, b=document.body; if(de){de.style.margin='0';de.style.padding='0';de.style.height='100%';de.style.width='100%';}
-                        if(b){b.style.margin='0';b.style.padding='0';b.style.height='100%';b.style.width='100%';b.style.position='relative';b.style.overflow='hidden';}
-                    } catch(e){ console.log('viewport inject fail', e); }
-                })();
-                // Inject host environment flag early for UI logic
-                try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
-                \(panelLabBootstrap)
-                \(localPortBootstrap)
-                (function(){
-                    if(window.__ATOME_IOS_NATIVE_INVOKE) return;
-                    if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) return;
-                    const nativeInvokePending = new Map();
-                    var nativeInvokeSeq = 1;
-                    window.__ATOME_NATIVE_INVOKE_RESOLVE = function(requestId, payload, error){
-                        const key = String(requestId || '');
-                        const entry = nativeInvokePending.get(key);
-                        if(!entry) return;
-                        nativeInvokePending.delete(key);
-                        if(error){
-                            entry.reject(new Error(String(error)));
-                            return;
-                        }
-                        entry.resolve(payload);
-                    };
-                    window.__ATOME_IOS_NATIVE_INVOKE = function(command, payload){
-                        return new Promise(function(resolve, reject){
-                            const requestId = 'ios_native_invoke_' + String(nativeInvokeSeq++);
-                            nativeInvokePending.set(requestId, { resolve: resolve, reject: reject });
-                            try {
-                                window.webkit.messageHandlers.swiftBridge.postMessage({
-                                    action: 'nativeInvoke',
-                                    command: String(command || ''),
-                                    requestId: requestId,
-                                    payload: payload || {}
-                                });
-                            } catch(error) {
-                                nativeInvokePending.delete(requestId);
-                                reject(error instanceof Error ? error : new Error(String(error)));
-                            }
-                        });
-                    };
-                })();
-                window.onerror = function(m, s, l, c, e) {
-            var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
-            try {
-                window.webkit.messageHandlers.console.postMessage(msg);
-            } catch(x) {
-                console.warn("Error sending to Swift:", x);
-            }
-        };
-        window.addEventListener("unhandledrejection", function(e) {
-            var msg = "Unhandled Promise: " + e.reason + (e.reason && e.reason.stack ? " stack: " + e.reason.stack : "");
-            try {
-                window.webkit.messageHandlers.console.postMessage(msg);
-            } catch(x) {
-                console.warn("Error sending to Swift:", x);
-            }
-        });
-        """
+        let scriptSource = pageStartupScript(isExtension: isExtension)
 
     let contentController = webView.configuration.userContentController
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
@@ -472,5 +339,153 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static func addFileSystemAPI(to webView: WKWebView) {
         fileSystemBridge = FileSystemBridge()
         fileSystemBridge?.addFileSystemAPI(to: webView)
+    }
+}
+
+extension WebViewManager {
+    /// The script every app page gets before its own code (the local server port, the host, the native invoke
+    /// bridge, the console relay). The page a connected screen shows (ExternalDisplaySceneDelegate) gets the
+    /// same one, so it reaches the same local server as the app's page (R-212).
+    static func pageStartupScript(isExtension: Bool) -> String {
+        let startupLocalPort = FeatureFlags.startLocalHTTPServer ? (LocalServer.shared.port ?? 0) : 0
+        let localPortBootstrap = startupLocalPort > 0
+            ? """
+                try {
+                    window.__ATOME_LOCAL_HTTP_PORT__ = \(startupLocalPort);
+                    window.ATOME_LOCAL_HTTP_PORT = \(startupLocalPort);
+                    window.__LOCAL_HTTP_PORT = \(startupLocalPort);
+                    window.__SQUIRREL_TAURI_LOCAL_PORT__ = \(startupLocalPort);
+                } catch(e) { }
+                """
+            : ""
+        let panelLabBootstrap = FeatureFlags.panelLabEnabled
+            ? "try { window.__EVE_PANEL_LAB__ = true; } catch(e) { }"
+            : ""
+        let scriptSource = """
+                // Pre-paint background black ASAP to avoid white flash (especially on app launch)
+                (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
+                (function(){
+                    if(window.__ATOME_XCODE_CONSOLE_BRIDGE__) return;
+                    window.__ATOME_XCODE_CONSOLE_BRIDGE__ = true;
+                    var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console;
+                    if(!bridge || !window.console) return;
+                    // WebKit's `stack` holds the frames only: an error is told by its name and message, then where it was made.
+                    function errorText(error) {
+                        var head = String(error);
+                        return error.stack ? head + ' ' + error.stack : head;
+                    }
+                    function stringify(value, depth) {
+                        if(depth > 2) return '[depth-limit]';
+                        if(value === null) return 'null';
+                        if(value === undefined) return 'undefined';
+                        if(value instanceof Error) return errorText(value);
+                        var type = typeof value;
+                        if(type === 'string') return value;
+                        if(type === 'number' || type === 'boolean' || type === 'bigint') return String(value);
+                        if(type === 'function') return '[function ' + (value.name || 'anonymous') + ']';
+                        try {
+                            return JSON.stringify(value, function(key, item) {
+                                if(item instanceof Error) return errorText(item);
+                                if(typeof item === 'function') return '[function ' + (item.name || 'anonymous') + ']';
+                                return item;
+                            });
+                        } catch(error) {
+                            try { return String(value); } catch(_) { return '[unserializable]'; }
+                        }
+                    }
+                    function limit(text) {
+                        text = String(text || '');
+                        return text.length > 4000 ? text.slice(0, 4000) + '…[truncated]' : text;
+                    }
+                    ['log','info','warn','error','debug'].forEach(function(level) {
+                        var original = typeof window.console[level] === 'function'
+                            ? window.console[level].bind(window.console)
+                            : function(){};
+                        window.console[level] = function() {
+                            var args = Array.prototype.slice.call(arguments || []);
+                            var rendered = args.slice(0, 8).map(function(item) { return limit(stringify(item, 0)); });
+                            try {
+                                bridge.postMessage({
+                                    source: 'js_console',
+                                    level: level,
+                                    message: rendered.join(' '),
+                                    payload: rendered
+                                });
+                            } catch(_) { }
+                            return original.apply(window.console, args);
+                        };
+                    });
+                })();
+                // Ensure proper mobile viewport for full edge-to-edge content
+                (function(){
+                    try {
+                        if(!document.querySelector('meta[name=viewport]')) {
+                            var m=document.createElement('meta');
+                            m.name='viewport';
+                            m.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+                            (document.head || document.documentElement).appendChild(m);
+                        } else if(!/viewport-fit=cover/.test(document.querySelector('meta[name=viewport]').content)) {
+                            document.querySelector('meta[name=viewport]').content += ',viewport-fit=cover';
+                        }
+                        var de=document.documentElement, b=document.body; if(de){de.style.margin='0';de.style.padding='0';de.style.height='100%';de.style.width='100%';}
+                        if(b){b.style.margin='0';b.style.padding='0';b.style.height='100%';b.style.width='100%';b.style.position='relative';b.style.overflow='hidden';}
+                    } catch(e){ console.log('viewport inject fail', e); }
+                })();
+                // Inject host environment flag early for UI logic
+                try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
+                \(panelLabBootstrap)
+                \(localPortBootstrap)
+                (function(){
+                    if(window.__ATOME_IOS_NATIVE_INVOKE) return;
+                    if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) return;
+                    const nativeInvokePending = new Map();
+                    var nativeInvokeSeq = 1;
+                    window.__ATOME_NATIVE_INVOKE_RESOLVE = function(requestId, payload, error){
+                        const key = String(requestId || '');
+                        const entry = nativeInvokePending.get(key);
+                        if(!entry) return;
+                        nativeInvokePending.delete(key);
+                        if(error){
+                            entry.reject(new Error(String(error)));
+                            return;
+                        }
+                        entry.resolve(payload);
+                    };
+                    window.__ATOME_IOS_NATIVE_INVOKE = function(command, payload){
+                        return new Promise(function(resolve, reject){
+                            const requestId = 'ios_native_invoke_' + String(nativeInvokeSeq++);
+                            nativeInvokePending.set(requestId, { resolve: resolve, reject: reject });
+                            try {
+                                window.webkit.messageHandlers.swiftBridge.postMessage({
+                                    action: 'nativeInvoke',
+                                    command: String(command || ''),
+                                    requestId: requestId,
+                                    payload: payload || {}
+                                });
+                            } catch(error) {
+                                nativeInvokePending.delete(requestId);
+                                reject(error instanceof Error ? error : new Error(String(error)));
+                            }
+                        });
+                    };
+                })();
+                window.onerror = function(m, s, l, c, e) {
+            var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
+            try {
+                window.webkit.messageHandlers.console.postMessage(msg);
+            } catch(x) {
+                console.warn("Error sending to Swift:", x);
+            }
+        };
+        window.addEventListener("unhandledrejection", function(e) {
+            var msg = "Unhandled Promise: " + e.reason + (e.reason && e.reason.stack ? " stack: " + e.reason.stack : "");
+            try {
+                window.webkit.messageHandlers.console.postMessage(msg);
+            } catch(x) {
+                console.warn("Error sending to Swift:", x);
+            }
+        });
+        """
+        return scriptSource
     }
 }

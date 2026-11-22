@@ -1,6 +1,7 @@
 import UIKit
 
-/// Presents a small confirmation alert so the subsequent openURL call is clearly user-initiated.
+/// Opens a URL whose scheme wants a user-initiated open (Shortcuts) a moment after the app's window is active.
+@MainActor
 enum TrustedTapOpener {
     /// Schemes that commonly require a trusted, user-initiated gesture to succeed.
     static let userGestureSchemes: Set<String> = ["shortcuts"]
@@ -11,17 +12,10 @@ enum TrustedTapOpener {
         return userGestureSchemes.contains(scheme)
     }
 
-    /// Find the top-most view controller in the foreground scene to present UI.
-    private static func topViewController(in scene: UIWindowScene) -> UIViewController? {
-        let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
-        var vc = window?.rootViewController
-        while let presented = vc?.presentedViewController { vc = presented }
-        return vc
-    }
-
     /// Silent strategy: wait briefly after foreground activation then attempt open without showing an alert.
     static func silentDelayAndOpen(_ url: URL, delay: TimeInterval = 0.35) {
-        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) else {
+        // The app's own window (never a Follow window, ExternalDisplayFollowWindow.swift).
+        guard let scene = AppWindowRoles.appScene, scene.activationState == .foregroundActive else {
             print("⚠️ TrustedTapOpener: no active scene to open \(url.absoluteString)")
             return
         }

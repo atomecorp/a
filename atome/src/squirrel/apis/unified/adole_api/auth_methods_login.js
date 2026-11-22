@@ -10,6 +10,8 @@ import { billingStorePurchase } from '../../../billing/store_purchase.js';
 import { normalizePhone, normalizeUser } from './auth_core.js';
 import { isTauriRuntime } from './runtime.js';
 import { setSessionState, getSessionState } from './session.js';
+import { isExternalDisplayFollower } from '../../../external_display_role.js';
+import { externalDisplayDeviceKeyInvoke } from '../../../external_display_device_key.js';
 
 let devices;
 let client;
@@ -71,9 +73,12 @@ export async function changeRemoteServer(apply) {
     } finally { changingRemoteServer = false; }
 }
 // Renew while idle so the device stays reachable for calls.
+// A connected screen's page (R-212) never renews the account's session: the device's page owns it, and the native
+// host refuses the screen its device link. Renewing there failed every 30 s, forever, each attempt rewriting the
+// profile and the tool catalogue into the device's store (user, 20 Nov. 2026: a slow, looping sync).
 const scheduleRemoteRenewal = () => {
     const env = globalThis.window;
-    if (!env?.setTimeout) return;
+    if (!env?.setTimeout || isExternalDisplayFollower()) return;
     if (remoteRenewalTimer) env.clearTimeout(remoteRenewalTimer);
     remoteRenewalTimer = env.setTimeout(() => {
         remoteRenewalTimer = null;
@@ -94,7 +99,9 @@ export function deviceStore() {
             const result = await env.__ATOME_IOS_NATIVE_INVOKE('auth_device_key', iosFields);
             return fields.action === 'public' ? result.publicKey : result.signature;
         }
-        const invoke = env.__TAURI_INTERNALS__?.invoke || env.__TAURI__?.core?.invoke || env.__TAURI__?.invoke;
+        // An Android screen's page has no bridge: the device's page asks its Keystore for it (external_display_device_key.js).
+        const invoke = env.__TAURI_INTERNALS__?.invoke || env.__TAURI__?.core?.invoke || env.__TAURI__?.invoke
+            || externalDisplayDeviceKeyInvoke(env);
         if (typeof invoke !== 'function') throw new Error('auth_protected_device_key_unavailable');
         // Tauri validates every Rust command argument before entering the
         // handler. `message` and `signature` are Option<String> in Rust, but
@@ -299,6 +306,7 @@ export async function lockLocalAuthorization() {
 
 export function ensureRemoteSession() {
     if (changingRemoteServer) return Promise.reject(new Error('sync_environment_busy'));
+    if (isExternalDisplayFollower()) return Promise.reject(new Error('external_display_follower_remote_session'));
     if (FastifyAdapter.getToken() && remoteExpiresAt > Date.now()) return Promise.resolve({ ok: true });
     if (!renewal) renewal = phoneLinkClient().renew().then(() => ({ ok: true })).finally(() => { renewal = null; });
     return renewal;
@@ -412,7 +420,11 @@ export async function initializePhoneLinks() {
                         'X-Atome-Id': file.atome_id || file.file_id, 'X-Atome-Type': file.atome_type || 'file', 'X-Mime-Type': file.blob.type || 'application/octet-stream' },
                     body: file.blob
                 });
-                if (!response.ok) throw new Error('workspace_media_sync_failed');
+                // The server's verdict on this file, with its status: a refusal is parked, not retried forever.
+                if (!response.ok) {
+                    const answer = await response.json().catch(() => null);
+                    return { success: false, ok: false, status: response.status, error: String(answer?.error || `workspace_media_http_${response.status}`) };
+                }
                 return response.json();
             } }, options);
     };

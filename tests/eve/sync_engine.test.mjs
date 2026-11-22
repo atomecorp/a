@@ -344,3 +344,44 @@ test('streams announced one by one are subscribed together in one batch', async 
     assert.deepEqual(subscribes[0].streams.map(entry => entry.stream), ['s1', 's2', 's3', 's4']);
     engine.disconnect();
 });
+
+test('the account never brings back a change this page already knows: its own commit or a connected screen\'s (R-212)', () => {
+    const env = createEnv(); const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => null }).install();
+    const announce = (detail) => env.dispatchEvent(new env.CustomEvent('squirrel:atome-updated', { detail }));
+    announce({ atome_id: 'text', event_id: 'own-move', properties: { left: 287 }, source: 'local', origin: 'commit' });
+    announce({ atome_id: 'text', event_id: 'screen-move', properties: { left: 300 }, source: 'realtime', origin: 'external_display' });
+    const before = env.dispatched.length;
+    const echo = (event_id, sequence, left) => ({ type: 'event', event_id, stream: 'stream-a', sequence, atome_id: 'text', kind: 'set',
+        patch: { props: { left } } });
+    engine.applyEvent(echo('own-move', 1, 177));
+    engine.applyEvent(echo('screen-move', 2, 197));
+    assert.equal(env.dispatched.length, before, 'a late echo of a known change moves nothing back');
+    engine.applyEvent(echo('third-machine', 3, 42));
+    assert.equal(env.dispatched.at(-1).detail.properties.left, 42, 'a change from another device still arrives');
+});
+
+test('a page tells the ids it commits, a gesture\'s frames too; the other page, told, drops their late echo (R-212)', () => {
+    const screenEnv = createEnv(); const screen = new SyncEngine({ env: screenEnv, WebSocketClass: FakeSocket, token: () => null }).install();
+    const told = [];
+    screenEnv.addEventListener('squirrel:atome-committed', event => told.push(...event.detail.event_ids));
+    screen.observeEvents([{ event_id: 'drag-frame-1', kind: 'gesture_frame', atome_id: 'photo' }, { stream_id: 'stream-a' }]);
+    assert.deepEqual(told, ['drag-frame-1']);
+    const deviceEnv = createEnv(); const device = new SyncEngine({ env: deviceEnv, WebSocketClass: FakeSocket, token: () => null }).install();
+    told.forEach(id => device.rememberEvent(id));
+    const before = deviceEnv.dispatched.length;
+    device.applyEvent({ type: 'event', event_id: 'drag-frame-1', stream: 'stream-a', sequence: 1, atome_id: 'photo', kind: 'set', patch: { props: { left: 10 } } });
+    assert.equal(deviceEnv.dispatched.length, before, 'the screen\'s drag, back from the account, moves nothing on the device');
+});
+
+test('the events a page knew stay known after a relaunch: the account handing them back moves nothing (R-212)', async () => {
+    const env = createEnv();
+    const first = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => null }).install();
+    await first.scopeLoad;
+    first.observeEvents([{ event_id: 'move-before-relaunch', kind: 'set', atome_id: 'text' }]);
+    await first.flushPersist();
+    const relaunched = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => null }).install();
+    await relaunched.scopeLoad;
+    const before = env.dispatched.length;
+    relaunched.applyEvent({ type: 'event', event_id: 'move-before-relaunch', stream: 'stream-a', sequence: 9, atome_id: 'text', kind: 'set', patch: { props: { left: 1 } } });
+    assert.equal(env.dispatched.filter(e => e.type === 'squirrel:atome-updated').length, env.dispatched.slice(0, before).filter(e => e.type === 'squirrel:atome-updated').length);
+});

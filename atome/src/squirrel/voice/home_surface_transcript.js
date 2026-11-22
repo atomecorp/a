@@ -19,27 +19,6 @@ const LOW_INFORMATION_TOKENS = new Set([
     'hum',
     'hein'
 ]);
-const AFFIRMATIVE_TOKENS = new Set([
-    'oui',
-    'ouais',
-    'ok',
-    'okay',
-    'd accord',
-    'dac',
-    'vas y',
-    'continue',
-    'continuer'
-]);
-const NEGATIVE_TOKENS = new Set([
-    'non',
-    'nan',
-    'no',
-    'stop',
-    'annule',
-    'annuler',
-    'laisse tomber',
-    'pas maintenant'
-]);
 const COMMAND_START_TOKENS = new Set([
     'ouvre',
     'ouvre-moi',
@@ -154,10 +133,6 @@ export const isClearlyCompleteCommand = (value = '') => {
     if (QUESTION_START_TOKENS.has(first) && words.length >= 3) return true;
     return false;
 };
-
-export const isAffirmativeDecision = (value = '') => AFFIRMATIVE_TOKENS.has(normalizeComparisonText(value));
-
-export const isNegativeDecision = (value = '') => NEGATIVE_TOKENS.has(normalizeComparisonText(value));
 
 export const detectInterruptCommand = (value = '') => {
     const normalized = normalizeComparisonText(value);

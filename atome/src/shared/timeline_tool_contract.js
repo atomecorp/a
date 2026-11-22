@@ -42,6 +42,8 @@ const MIX_COMMANDS = Object.freeze({
     'mix.output.set': stripCommand({ destination, enabled: { type: 'boolean' } }),
     'mix.input.set': stripCommand({ input: { type: 'object', properties: { kind: { type: 'string', enum: ['track', 'live_audio', 'instrument'] }, device_id: { type: 'string' },
         instrument_id: { type: 'string', description: 'For an instrument: the instrument atome (Mes instruments) whose notes the strip plays.' }, output } } }, ['input']),
+    'mix.record.set': stripCommand({ device_id: { type: ['string', 'null'], description: 'The input a take of this track opens: a microphone on its audio strip, a camera on its video strip (an id of media inputs); null for the input in use.' },
+        monitoring: { type: 'boolean', description: 'On the audio strip: whether the take is heard while it records (false: recorded, not heard).' } }),
     'mix.group.create': { type: 'object', required: ['group_id', 'master_strip_id', 'member_strip_ids'], properties: { group_id: { type: 'string' }, master_strip_id: { type: 'string' }, member_strip_ids: { type: 'array', items: { type: 'string' } } } },
     'mix.group.join': stripCommand({ group_id: { type: 'string' } }, ['group_id']),
     'mix.group.leave': stripCommand({}),

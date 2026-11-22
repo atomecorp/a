@@ -6,14 +6,14 @@
 // sequential test to avoid conflicts from parallel execution (the Kira
 // AudioManager lives behind a global Mutex).
 
+/// Held by every test that drives the global engine on the real devices (here and in
+/// scheduled_backend_tests.rs), so `cargo test` may run them in parallel with the rest.
+pub(crate) static ENGINE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod audio_engine_tests {
+    use super::ENGINE_TEST_LOCK as TEST_LOCK;
     use std::path::PathBuf;
-    use std::sync::Mutex;
-
-    // Serialise all tests that touch the global audio state.
-    static TEST_LOCK: once_cell::sync::Lazy<Mutex<()>> =
-        once_cell::sync::Lazy::new(|| Mutex::new(()));
 
     fn test_dir() -> PathBuf {
         let dir = std::env::temp_dir().join("squirrel_audio_tests");
@@ -224,6 +224,23 @@ mod audio_engine_tests {
             reader.len()
         );
         assert!(reader.len() > 0, "WAV should have samples");
+        // The stop gives the take's waveform: 256 peaks whose loudest is the file's loudest sample.
+        assert_eq!(rec_result.waveform_peaks.len(), 256);
+        let scale = 1.0 / (1u64 << (spec.bits_per_sample - 1)) as f32;
+        let loudest = hound::WavReader::open(&rec_result.file_path)
+            .unwrap()
+            .samples::<i32>()
+            .fold(0f32, |peak, sample| {
+                peak.max((sample.unwrap() as f32 * scale).abs())
+            });
+        let drawn = rec_result
+            .waveform_peaks
+            .iter()
+            .fold(0f32, |peak, value| peak.max(*value));
+        assert!(
+            (drawn - loudest.min(1.0)).abs() < 1e-3,
+            "{drawn} vs {loudest}"
+        );
 
         crate::playback::init().expect("init failed");
         crate::playback::load_clip("recorded", &rec_result.file_path)

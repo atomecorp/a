@@ -66,9 +66,13 @@ const bindable = (candidate, host) => new Promise((resolve) => {
 });
 // IPv4 and IPv6 apart: on macOS a `::` bind succeeds beside an IPv4 `*:port` listener (atome-server's).
 const portFree = async (candidate) => await bindable(candidate, '0.0.0.0') && await bindable(candidate, '::');
+// The ports of this range Chromium refuses to open (net/base/port_util.cc: apple-sasl, lockd): a page there fails with
+// ERR_UNSAFE_PORT before the server is even asked.
+const CHROMIUM_UNSAFE_PORTS = new Set([3659, 4045]);
 const freePort = async () => {
     for (let attempt = 0; attempt < 200; attempt += 1) {
         const candidate = 3100 + Math.floor(Math.random() * 800);
+        if (CHROMIUM_UNSAFE_PORTS.has(candidate) || CHROMIUM_UNSAFE_PORTS.has(candidate + 200)) continue;
         if (await portFree(candidate) && await portFree(candidate + 200)) return candidate;
     }
     throw new Error('probe_server_no_free_port');

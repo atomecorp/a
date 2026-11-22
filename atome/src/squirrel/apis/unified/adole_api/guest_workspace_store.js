@@ -452,8 +452,28 @@ export async function importWorkspaceStates(ownerId, states) {
 export async function acknowledgeWorkspaceFile(ownerId, fileId) {
     await transact([STORE_FILES], 'readwrite', tx => {
         const files = tx.objectStore(STORE_FILES), found = files.get(key(ownerId, fileId));
-        found.onsuccess = () => { if (found.result) files.put({ ...found.result, uploaded: true }); };
+        found.onsuccess = () => { if (found.result) files.put({ ...found.result, uploaded: true, refused: undefined }); };
     });
+}
+
+// A file the server refused is kept, marked, and left out of the next passes, like a refused row: one file can never
+// hold back every later change. It goes again once a session is (re)established.
+export async function parkRefusedWorkspaceFile(ownerId, fileId, error) {
+    await transact([STORE_FILES], 'readwrite', tx => {
+        const files = tx.objectStore(STORE_FILES), found = files.get(key(ownerId, fileId));
+        found.onsuccess = () => {
+            if (found.result) files.put({ ...found.result, refused: { error: String(error || 'workspace_media_refused'), at: new Date().toISOString() } });
+        };
+    });
+}
+
+export async function requeueRefusedWorkspaceFiles(ownerId) {
+    const refused = (await listGuestFiles(ownerId)).filter(file => file.refused && !file.uploaded);
+    if (!refused.length) return 0;
+    await transact([STORE_FILES], 'readwrite', tx => {
+        for (const { refused: _refused, ...file } of refused) tx.objectStore(STORE_FILES).put(file);
+    });
+    return refused.length;
 }
 
 // Called only after the remote adoption owner confirms all files and records.

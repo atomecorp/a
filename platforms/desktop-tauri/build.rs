@@ -29,6 +29,9 @@ fn main() {
             .file("native/clipboard.m")
             .file("native/file_selection.m")
             .flag("-fobjc-arc")
+            // The app's own deployment target (MACOSX_DEPLOYMENT_TARGET below is rustc's only): cc's
+            // default, 10.13, warned on every API of 10.15 these files use (Contacts' change history).
+            .flag("-mmacosx-version-min=11.0")
             .compile("atome_personal_import");
         for framework in [
             "Foundation",

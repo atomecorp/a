@@ -270,6 +270,14 @@ impl Storage {
                 "access": "owner",
                 "shared": false,
                 "profiles": description.and_then(|row| js::first(row, &["profiles"]).cloned()).unwrap_or(json!([])),
+                // What the media is, as its Atome describes it (atome-store vault.rs#files_described).
+                "atome_type": description.and_then(|row| js::first(row, &["atome_type"]).cloned()),
+                "mime_type": description.and_then(|row| js::first(row, &["mime_type"]).cloned()),
+                "width": description.and_then(|row| js::first(row, &["width"]).cloned()),
+                "height": description.and_then(|row| js::first(row, &["height"]).cloned()),
+                "natural_width": description.and_then(|row| js::first(row, &["natural_width"]).cloned()),
+                "natural_height": description.and_then(|row| js::first(row, &["natural_height"]).cloned()),
+                "duration_sec": description.and_then(|row| js::first(row, &["duration_sec"]).cloned()),
             }));
         }
         files.sort_by(|a, b| b["modified"].as_str().cmp(&a["modified"].as_str()));

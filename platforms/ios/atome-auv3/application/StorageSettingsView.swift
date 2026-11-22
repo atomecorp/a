@@ -190,8 +190,8 @@ struct StorageSettingsView: View {
         UserDefaults.standard.set(false, forKey: "AtomeStorageChoiceMade")
         
         // Redémarrer l'app ou montrer le setup à nouveau
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
+        // On the app's own window (never a Follow window, ExternalDisplayFollowWindow.swift).
+        if let window = AppPageHost.shared.webView.window {
             
             let storageSetupVC = StorageSetupViewController()
             let nav = UINavigationController(rootViewController: storageSetupVC)

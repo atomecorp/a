@@ -89,6 +89,9 @@ Coche `[x]` ce qui marche ; pour ce qui ne marche pas, écris ce que tu as vu, e
 - [ ] **T94 · Écran externe sur iPhone 17 Pro (iOS 27)** (R-212, suite de T55) — session `local_b490806d-aada-4738-ac38-d28e517d27ea`
   Avec la prochaine build iOS (R-223, R-245, R-212). Ouvre Atome sur l'iPhone, puis branche un écran (USB-C/HDMI ou AirPlay). (1) L'écran est rempli, à son format : ni bandes noires, ni image étirée, ni outils, et ce n'est pas le miroir de l'iPhone. (2) Sur le Dashboard, il montre le même endroit, avec plus de tuiles. (3) Ouvre un projet : l'écran le montre et suit le téléphone quand tu déplaces ou zoomes. (4) Débranche : rien ne change sur l'iPhone ; rebranche : la vue revient. À savoir : une autre app au premier plan (l'Appareil photo, par exemple) reste toujours en miroir à bandes ; regarde l'écran pendant qu'Atome est ouvert. Si l'écran est noir ou vide au lieu du miroir, dis-le : c'est le partage du stockage entre les deux vues web, jamais vérifié sur appareil.
 
+- [x] **T96 · Forme d'onde en direct pendant l'enregistrement micro** (R-247) — session `local_c08ade4e-c064-46cf-aca5-e36813085641` — validé utilisateur 19 nov.
+  Avec la prochaine build iOS (qui embarque les fichiers de R-247). Dans un projet, vue Timeline : (1) lance Enr. › Audio, parle 4 à 5 s. Attendu : l'onde se dessine au fur et à mesure dans le bloc qui grandit, pas seulement après Arrêter. (2) Même chose en AUv3 (prise de piste) : l'onde doit aussi apparaître en direct. Web : vérifié 5/5 PASS, le défaut n'existe que sur iOS.
+
 ## iPad
 
 - [ ] **T21 · iPad audio interruptions en sport** (R-225) — session `local_5aa66468-903a-46e3-b397-92e45e8fc72b`
@@ -315,6 +318,13 @@ Coche `[x]` ce qui marche ; pour ce qui ne marche pas, écris ce que tu as vu, e
 - [ ] **T69 · Effets audio sur Windows** (R-184) — session `local_166feb68`
   Sur un PC Windows : lance eVe, mets un effet sur une entrée micro et écoute au casque. ASIO : réponse donnée (« Ok pour asio »), codé, R-235 — essais ci-dessous.
   ASIO (R-235, session `local_c90c7471`) : la build Windows compile avec ASIO (Visual Studio, MSVC, LLVM libclang). Mon matériel › Audio liste tes pilotes ASIO ; choisis-en un : le son, l'effet au micro, le chemin direct et une prise marchent. Reviens à WASAPI exclusif ; relance : le pilote choisi revient. Débranche la carte, ou retire son pilote : un message le dit, rien ne passe en douce sur WASAPI. La voix : « joue en ASIO », « reviens en WASAPI ».
+
+## Tests sessions parallèles (20 nov. 22h)
+
+- [ ] **T70 · Scanner code-barres continu et Nitoscore** — session `local_19c15133`
+  Code vérifié sur ports 3000 + 3001 (20 nov. 22:49) : `barcode_scan.js` exports OK, `isValidGtin` tous cas passés, `stop()` propre, `POLL_MS=80` ; `food_runtime.js` bypass caméra avec `input.barcode` + `input.image` ; `dashboard_shopping.js` state/stop/import OK ; `BarcodeDetector` et `ImageCapture` disponibles en contexte Tauri ; aucune erreur console liée aux modifs.
+  **TEST UTILISATEUR REQUIS** : toggle scan dans la bande Mes courses (toucher → allumé, re-toucher → éteint), navigation vers Mes courses. Le canvas Bevy ne répond pas aux clics automatisés (isTrusted). Tester manuellement OU connecter l'extension Chrome (Claude in Chrome) OU accorder full-screen control.
+  ⚠ Le Service Worker sur 3001 cache les JS : vider le cache SW ou Ctrl+Shift+R pour voir les modifs.
 
 ## À surveiller au moment du commit
 

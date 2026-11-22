@@ -53,6 +53,9 @@ test('text intents focus synchronously and preserve the new editor through a pen
     const editor = dom.window.document.activeElement;
     assert.equal(editor.tagName, 'TEXTAREA');
     await first;
+    // An edit to save: a text left as it was saves nothing (text_bridge.js#commitEditing).
+    editor.value = 'a!';
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     const switched = emitProjectSceneIntent({ projectId: 'focus_project', intent: { kind: 'text.edit.begin', atome_id: 'b' } });
     assert.equal(dom.window.document.activeElement, editor);
     assert.equal(editor.value, 'b');
@@ -65,6 +68,9 @@ test('text intents focus synchronously and preserve the new editor through a pen
     await commitProjectSceneTextEdit({ projectId: 'focus_project' });
     assert.equal(editor.isConnected, false);
     await emitProjectSceneIntent({ projectId: 'focus_project', intent: { kind: 'text.edit.begin', atome_id: 'b' } });
+    const again = dom.window.document.activeElement;
+    again.value = 'b!';
+    again.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     dom.window.Atome.commit = async () => ({ ok: false, error: 'write_denied' });
     const failed = await commitProjectSceneTextEdit({ projectId: 'focus_project' });
     assert.equal(failed.committed, false);

@@ -323,7 +323,9 @@ import {
                 PENDING.delete(sessionId);
                 throw error;
             }
-            if (context === 'tauri') {
+            // The take's scope (its live peaks, the Timeline's waveform while it runs): Tauri reads it here; on iOS a
+            // strip take goes straight to the engine (no Swift recorder, so no Swift scope monitor), read here too.
+            if (context === 'tauri' || stripId) {
                 pendingEntry.disposeScope = createTauriRecordingScopePoller({
                     windowRef: window,
                     invoke,

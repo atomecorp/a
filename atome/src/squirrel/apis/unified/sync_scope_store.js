@@ -14,9 +14,12 @@ const LEGACY_KEYS = ['squirrel_sync_streams_v1', 'squirrel_sync_cursors_v1'];
 const UNREADABLE_PREFIX = 'unreadable_legacy:';
 
 const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+// The last events the engine knows (applied, or this device's own), kept across launches: the account may hand them back.
+export const SEEN_EVENTS_KEPT = 2000;
 const toScope = (record) => ({
     streams: Array.isArray(record?.streams) ? record.streams : [],
-    cursors: asObject(record?.cursors)
+    cursors: asObject(record?.cursors),
+    seen: Array.isArray(record?.seen) ? record.seen.filter(id => typeof id === 'string' && id).slice(-SEEN_EVENTS_KEPT) : []
 });
 const parseLegacy = (raw) => {
     try {

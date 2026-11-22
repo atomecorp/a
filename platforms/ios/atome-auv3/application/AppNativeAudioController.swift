@@ -31,6 +31,8 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     var wakeCaptureOverrun = false
     var wakeCaptureFailed = false
     var wakeCaptureInterrupted = false
+    /// Bumped by every interruption: a recovery scheduled for an older one gives way.
+    var interruptionGeneration: UInt64 = 0
     var wakeCaptureBackground = false
     var voicePump: DispatchSourceTimer?
     var activeRecordingSessionId: String?
@@ -157,14 +159,17 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
         let interruptionType = AVAudioSession.InterruptionType(rawValue: typeValue)
         let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
         let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+        let reasonValue = userInfo[AVAudioSessionInterruptionReasonKey] as? UInt ?? 0
         queue.async {
+            self.interruptionGeneration &+= 1
             guard interruptionType == .ended else {
                 self.wakeCaptureInterrupted = true
                 self.captureGate.cancel()
                 self.stopWakeCapture()
                 AppNativeAudioDiagnostics.log(
-                    "session interruption_began \(self.audioSessionDiagnosticSnapshot())"
+                    "session interruption_began reason=\(reasonValue) \(self.audioSessionDiagnosticSnapshot())"
                 )
+                self.scheduleInterruptionRecovery(generation: self.interruptionGeneration, attempt: 0)
                 return
             }
             self.wakeCaptureInterrupted = false
@@ -172,6 +177,27 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
             // The system owns the session while it is interrupted; the plan is
             // re-applied only once it gives the session back.
             self.applyCurrentAudioSessionPlan(transition: "interruption_ended")
+        }
+    }
+
+    /// An interruption iOS never ends (R-212, 20 Nov. 2026: the output blinking from the connected screen's HDMI to the
+    /// loudspeaker as a camera take starts) left the session dead: every later take and every sound failed with
+    /// `insufficientPriority` (OSStatus 561017449, « une prise sur deux échoue »). Without its `ended`, the plan is
+    /// re-applied a little later; during a real interruption (a call) that activation is refused and tried again,
+    /// three times at most, and the `ended` re-applies it as before.
+    private static let interruptionRecoveryDelays: [Double] = [0.4, 1.2, 3.0]
+
+    private func scheduleInterruptionRecovery(generation: UInt64, attempt: Int) {
+        guard attempt < Self.interruptionRecoveryDelays.count else { return }
+        queue.asyncAfter(deadline: .now() + Self.interruptionRecoveryDelays[attempt]) {
+            guard self.interruptionGeneration == generation, self.wakeCaptureInterrupted else { return }
+            do {
+                try self.reapplyAudioSessionPlan(transition: "interruption_recover:\(attempt)")
+                self.wakeCaptureInterrupted = false
+            } catch {
+                AppNativeAudioDiagnostics.log("session interruption_recover:\(attempt) failed error=\(error.localizedDescription)")
+                self.scheduleInterruptionRecovery(generation: generation, attempt: attempt + 1)
+            }
         }
     }
 

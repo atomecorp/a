@@ -412,11 +412,22 @@ impl Vault<'_> {
         let rows = row_json::query_objects(
             db,
             &format!(
-                "SELECT f.atome_id, f.particle_value AS file_name, o.particle_value AS original_name, p.particle_value AS profiles
+                "SELECT f.atome_id, f.particle_value AS file_name, o.particle_value AS original_name, p.particle_value AS profiles,
+                        a.atome_type AS atome_type, m.particle_value AS mime_type, w.particle_value AS width, h.particle_value AS height,
+                        nw.particle_value AS natural_width, nh.particle_value AS natural_height,
+                        COALESCE(d.particle_value, dd.particle_value, md.particle_value) AS duration_sec
                  FROM particles f
                  JOIN atomes a ON a.atome_id = f.atome_id AND a.deleted_at IS NULL
                  LEFT JOIN particles o ON o.atome_id = f.atome_id AND o.particle_key = 'original_name'
                  LEFT JOIN particles p ON p.atome_id = f.atome_id AND p.particle_key = 'profiles'
+                 LEFT JOIN particles m ON m.atome_id = f.atome_id AND m.particle_key = 'mime_type'
+                 LEFT JOIN particles w ON w.atome_id = f.atome_id AND w.particle_key = 'width'
+                 LEFT JOIN particles h ON h.atome_id = f.atome_id AND h.particle_key = 'height'
+                 LEFT JOIN particles nw ON nw.atome_id = f.atome_id AND nw.particle_key = 'natural_width'
+                 LEFT JOIN particles nh ON nh.atome_id = f.atome_id AND nh.particle_key = 'natural_height'
+                 LEFT JOIN particles d ON d.atome_id = f.atome_id AND d.particle_key = 'duration_sec'
+                 LEFT JOIN particles dd ON dd.atome_id = f.atome_id AND dd.particle_key = 'duration'
+                 LEFT JOIN particles md ON md.atome_id = f.atome_id AND md.particle_key = 'media_duration'
                  WHERE f.particle_key = 'file_name' AND f.particle_value IN ({})
                  ORDER BY COALESCE(a.updated_at, a.created_at) DESC",
                 placeholders(quoted.len())
@@ -426,6 +437,14 @@ impl Vault<'_> {
         let parse = |value: &JsonValue| -> Result<JsonValue, String> {
             serde_json::from_str(value.as_str().unwrap_or("null")).map_err(|e| e.to_string())
         };
+        // A measure the import wrote (`asset_box_media.js`), else null: the list carries what the media is.
+        let measure = |value: &JsonValue| -> Result<JsonValue, String> {
+            if value.is_null() {
+                Ok(JsonValue::Null)
+            } else {
+                parse(value)
+            }
+        };
         rows.into_iter()
             .map(|row| {
                 Ok(json!({
@@ -433,6 +452,13 @@ impl Vault<'_> {
                     "file_name": parse(&row["file_name"])?,
                     "original_name": if row["original_name"].is_null() { JsonValue::Null } else { parse(&row["original_name"])? },
                     "profiles": if row["profiles"].is_null() { json!([]) } else { parse(&row["profiles"])? },
+                    "atome_type": row["atome_type"],
+                    "mime_type": measure(&row["mime_type"])?,
+                    "width": measure(&row["width"])?,
+                    "height": measure(&row["height"])?,
+                    "natural_width": measure(&row["natural_width"])?,
+                    "natural_height": measure(&row["natural_height"])?,
+                    "duration_sec": measure(&row["duration_sec"])?,
                 }))
             })
             .collect::<Result<Vec<_>, String>>()

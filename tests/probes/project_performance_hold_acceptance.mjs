@@ -125,8 +125,8 @@ export const runProjectPerformanceHoldAcceptance = async ({ page, report, check,
             await switchView(page, project.id, 'list');
             report.performanceReplayView = 'list';
         }
+        // A touch on the level's row plays the level (R-273, user 22 Nov. 2026).
         await clickCanvasTarget(page, await node('project_view_footer'));
-        await clickCanvasTarget(page, await tool('container_play'));
         await waitFor(page, async (firstId) => {
             const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
             const state = projectViewTransport.read();

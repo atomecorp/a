@@ -1,5 +1,6 @@
 import {
     assert,
+    awaitBevyUiNodeTarget,
     clickCanvasTarget,
     findBevyUiNodeTarget,
     playwrightPointForClientTarget,
@@ -178,10 +179,8 @@ export const contextualTool = async (page, ids) => {
 };
 
 export const moleculePlayTool = async (page) => {
-    const ids = [
-        'atome_contextual_tool_container_play', 'atome_contextual_tool_play',
-        'atome_contextual_tool_molecule_play'
-    ];
+    // An object's own Play (Natural); a structured level plays by its row (R-273).
+    const ids = ['atome_contextual_tool_play', 'atome_contextual_tool_molecule_play'];
     await waitFor(page, (expectedIds) => {
         const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
             .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
@@ -191,7 +190,20 @@ export const moleculePlayTool = async (page) => {
     return contextualTool(page, ids);
 };
 
+// A structured view plays a row by a touch on its film (List) or its tile (Matrix), Natural by its own Play (R-273).
+const structuredPlayTarget = async (page, rowId) => {
+    const mode = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_surface_runtime.js')).readProjectViewSurfaceState().mode);
+    if (!['list', 'table'].includes(mode)) return null;
+    const index = (await structuredRows(page)).find((row) => row.id === rowId)?.index ?? -1;
+    assert(index >= 0, `structured_row_missing:${rowId}`);
+    const nodeId = mode === 'list' ? `project_view_list_entry_${index}_preview` : `project_view_matrix_tile_${index}`;
+    return awaitBevyUiNodeTarget(page, { nodeId, treeId: 'eve_bevy_ui_project_view' });
+};
+
 export const memberPlayTool = async (page) => {
+    const selected = await page.evaluate(async () => (await import('/eVe/intuition/runtime/selection.js')).getCurrentSelectionIds()[0] || '');
+    const structured = selected ? await structuredPlayTarget(page, selected) : null;
+    if (structured) return structured;
     await waitFor(page, async () => {
         const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
             .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
@@ -380,9 +392,9 @@ export const playbackTrace = (page, moleculeId, memberIds) => page.evaluate(({ i
 }, { id: moleculeId, members: memberIds });
 
 export const startMoleculePlayback = async (page, moleculeId, memberIds) => {
-    const play = await moleculePlayTool(page);
+    const play = await structuredPlayTarget(page, moleculeId) || await moleculePlayTool(page);
     if (!play) {
-        const explained = await Promise.all(['atome_contextual_tool_container_play', 'atome_contextual_tool_play', 'atome_contextual_tool_molecule_play']
+        const explained = await Promise.all(['atome_contextual_tool_play', 'atome_contextual_tool_molecule_play']
             .map(async (nodeId) => ({ nodeId, ...(await explainBevyUiNodeTarget(page, { nodeId, treeId: 'eve_bevy_panel_atome_contextual_edit' })) })));
         assert(false, `molecule_play_tool_not_actionable:${JSON.stringify(explained.filter((entry) => entry.boxes?.length))}`);
     }

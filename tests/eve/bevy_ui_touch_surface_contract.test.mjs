@@ -17,7 +17,6 @@ import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/ev
 import { createAtomeContextualSurfaceInterceptor } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
 import { resolveComposedInteractionTarget } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
 import { createAtomeContextualRailModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_model_runtime.js';
-import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
 import {
     markDashboardWorkspaceMode,
     markProjectWorkspaceMode
@@ -343,7 +342,9 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     assert.equal(projected.records.some((record) => record.id.includes('atome_contextual_edit_a_footer')), false);
 });
 
-test('structured List and Matrix rows carry persistent Play through production rail resolution into the Bevy tree', async () => {
+// A structured row plays by its own touch (R-273, user 22 Nov. 2026): its rail, `play` dropped as the production rail
+// does (atome_contextual_rail_runtime.js), keeps the fold case at its base.
+test('structured List and Matrix rows lay no Play in the persistent rail, the fold case at its base', async () => {
     const records = ['video', 'sound', 'image', 'text', 'shape', 'group'].map((kind, index) => ({
         id: `${kind}_row`, type: kind, project_id: 'structured_project',
         properties: { kind, left: 20 + (index * 10), top: 20, width: 120, height: 70 }
@@ -373,7 +374,8 @@ test('structured List and Matrix rows carry persistent Play through production r
                 atomeId, kind, toolKeys: ['detail', 'delete', 'play'],
                 hasProjectAutomation: structuredContext === true, railOnly
             });
-            return keys.map((key) => model.resolveAtomeContextualRailToolDefinition(key, { structuredContext, record }));
+            return keys.filter((key) => !structuredContext || key !== 'play')
+                .map((key) => model.resolveAtomeContextualRailToolDefinition(key, { structuredContext, record }));
         },
         invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
@@ -388,21 +390,11 @@ test('structured List and Matrix rows carry persistent Play through production r
         await runtime.render();
         assert.equal(runtime.readState().railOnly, true);
         const tree = rendered.at(-1);
-        const play = findNode(tree.root, 'atome_contextual_tool_play');
-        assert.ok(play, `${record.type} must project Play into the persistent rail`);
-        assert.equal(play.kind, 'icon_button');
+        assert.equal(findNode(tree.root, 'atome_contextual_tool_play'), null, `${record.type} lays no Play in the rail`);
+        const fold = findNode(tree.root, 'atome_contextual_tool_rail_fold');
+        assert.ok(fold, `${record.type} carries the fold case`);
+        assert.equal(fold.kind, 'icon_button');
         assert.equal(findNode(tree.root, 'atome_contextual_edit_' + record.id + '_footer'), null);
-        assert.equal(JSON.stringify(play).includes('tooltip'), false);
-        assert.equal(JSON.stringify(play).includes('popup'), false);
-        if (record.type === 'video') {
-            await projectViewPlayback.triggerChild({ record, projectId: record.project_id });
-            await runtime.render();
-            const stopped = findNode(rendered.at(-1).root, 'atome_contextual_tool_play');
-            assert.equal(JSON.stringify(stopped).includes('Stop'), true);
-            await projectViewPlayback.stop();
-            await runtime.render();
-            assert.equal(JSON.stringify(findNode(rendered.at(-1).root, 'atome_contextual_tool_play')).includes('Play'), true);
-        }
     }
     assert.equal(observed.every((entry) => entry.railOnly && entry.structuredContext), true);
 });

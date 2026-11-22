@@ -31,6 +31,22 @@ fn remember_media_outcome(key: &str, refused: bool) {
     }
 }
 
+// A local copy counts as whole when it holds the atome's own `size_bytes`. A copy cut short by an
+// earlier download (23 videos of 17–18 Oct. 2026 stopped on a 256 KiB boundary, unreadable: « moov
+// atom not found ») was taken as present and never fetched again, so its Timeline preview stayed black.
+fn local_copy_is_whole(path: &Path, props: &JsonValue) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    match props.get("size_bytes").and_then(JsonValue::as_u64) {
+        Some(expected) => metadata.len() == expected,
+        None => true,
+    }
+}
+
 // The file's path from the root (`data/users/<id>/...`); `LocalAtomeState::media_file` places it.
 fn local_media_path(
     local_user_id: &str,
@@ -281,13 +297,15 @@ pub(super) async fn recover_inbound_media(
             && media_owner
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-            && state
-                .storage_root()
-                .join("data/users")
-                .join(media_owner)
-                .join("Downloads")
-                .join(name)
-                .is_file()
+            && local_copy_is_whole(
+                &state
+                    .storage_root()
+                    .join("data/users")
+                    .join(media_owner)
+                    .join("Downloads")
+                    .join(name),
+                &props,
+            )
         {
             continue;
         }
@@ -442,9 +460,27 @@ pub(super) async fn download_inbound_media(
 
 #[cfg(test)]
 mod tests {
-    use super::{local_media_path, rewrite_remote_media_properties};
+    use super::{local_copy_is_whole, local_media_path, rewrite_remote_media_properties};
     use serde_json::json;
     use std::path::Path;
+
+    #[test]
+    fn a_copy_shorter_than_its_atome_is_fetched_again() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../temp")
+            .join(format!("whole-copy-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("video.mov");
+        std::fs::write(&path, [0_u8; 48]).unwrap();
+        assert!(!local_copy_is_whole(
+            &path,
+            &json!({ "size_bytes": 3_339_874 })
+        ));
+        assert!(local_copy_is_whole(&path, &json!({ "size_bytes": 48 })));
+        assert!(local_copy_is_whole(&path, &json!({})));
+        assert!(!local_copy_is_whole(&root.join("absent.mov"), &json!({})));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn media_paths_are_scoped_to_the_local_user_and_rewritten_for_fastify() {

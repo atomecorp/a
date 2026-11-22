@@ -111,6 +111,8 @@ final class AppPageHost {
                 AppWorkspaceResume.shared.handle(command: command, payload: payload, completion: completion)
             } else if CarPlayAssistantLink.canHandle(command: command) {
                 CarPlayAssistantLink.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppNativeScreens.canHandle(command: command) {
+                AppNativeScreens.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeStreamingView.canHandle(command: command) {
                 AppNativeStreamingView.shared.handle(command: command, payload: payload, completion: completion)
             } else {

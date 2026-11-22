@@ -313,7 +313,7 @@ exports[`advanced preserves its existing toolbar, options and List projection > 
                                   0,
                                   0,
                                   0,
-                                  0.35,
+                                  0.39,
                                 ],
                                 "offset": [
                                   0,
@@ -788,7 +788,7 @@ exports[`advanced preserves its existing toolbar, options and List projection > 
                                   0,
                                   0,
                                   0,
-                                  0.35,
+                                  0.39,
                                 ],
                                 "offset": [
                                   0,
@@ -987,9 +987,6 @@ exports[`advanced preserves its existing toolbar, options and List projection 1`
       "find",
       "communicate",
       "calendar",
-      "view",
-      "help",
-      "contact",
     ],
   },
 }
@@ -1308,7 +1305,7 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
                                   0,
                                   0,
                                   0,
-                                  0.35,
+                                  0.39,
                                 ],
                                 "offset": [
                                   0,
@@ -1783,7 +1780,7 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
                                   0,
                                   0,
                                   0,
-                                  0.35,
+                                  0.39,
                                 ],
                                 "offset": [
                                   0,
@@ -1982,9 +1979,6 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
       "find",
       "communicate",
       "calendar",
-      "view",
-      "help",
-      "contact",
     ],
   },
 }

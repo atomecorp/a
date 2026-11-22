@@ -181,11 +181,11 @@ describe('urgent campaign contracts', () => {
         expect(resolveRecordCompositePreviewHit({ layout, point: { x: 20, y: 20 } })?.id).toBe('back');
     });
 
-    it('keeps common contextual tools stable and Play at the lowest reachable priority', () => {
+    it('keeps common contextual tools stable, with no Lecture in the rail (R-273)', () => {
         const definitions = projectViewLevelRailDefinitions({ entity: 'molecule' });
         const priorities = definitions.map((definition) => definition.priority);
         expect(priorities.every(Number.isFinite)).toBe(true);
-        expect(definitions.at(-1).key).toBe('container_play');
+        expect(definitions.some((definition) => definition.key === 'container_play')).toBe(false);
         expect(priorities).toEqual([...priorities].sort((a, b) => a - b));
     });
 
@@ -204,7 +204,7 @@ describe('urgent campaign contracts', () => {
         });
         const options = enter.mock.calls[0][0];
         expect(options.extraDefinitions.map((definition) => definition.key)).toEqual([
-            'container_multiselect', 'container_play_mode', 'molecule_import', 'molecule_info', 'molecule_activity'
+            'molecule_import', 'molecule_info', 'molecule_activity'
         ]);
         expect(options.extraDefinitions.every((definition) => definition.priority < 1000)).toBe(true);
         expect(typeof options.extraInvoker).toBe('function');

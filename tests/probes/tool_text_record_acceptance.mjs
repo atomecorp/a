@@ -122,37 +122,7 @@ export const runToolTextRecordAcceptance = async ({ page, report, check, ensureP
                 return { ok: ids.every((id) => selected.includes(id)), selected };
             }, [textId, secondId]);
             await screenshot({ page, report, outDir, name: `${mode}_multiple_selected` });
-            if (process.env.MOLECULE_UI_MULTI_PLAY === '1') {
-                await clickCanvasTarget(page, await railTool(page, 'play'));
-                await waitFor(page, async ({ ids, pid }) => {
-                    const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
-                    const { getCurrentSelectionIds } = await import('/eVe/intuition/runtime/selection.js');
-                    const state = projectViewTransport.read();
-                    return { ok: state.playing && state.rootId === pid && ids.every((id) => state.selectionIds?.includes(id))
-                        && getCurrentSelectionIds().length === 2, state };
-                }, { ids: [textId, secondId], pid: project.id });
-                report.measurements[`${mode}_multi_play`] = await waitFor(page, async () => {
-                    const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
-                    const current = projectViewTransport.read();
-                    const expected = current.activeLeafRecords.map((record) => String(record.properties?.text || record.properties?.content || '')).sort();
-                    const texts = [];
-                    const visit = (node) => { if (!node) return; if (node.kind === 'text' && String(node.id).startsWith('project_view_visual_preview')) texts.push(node.text); (node.children || []).forEach(visit); };
-                    visit(window.eveBevyUiRuntime.state.sourceTrees.get('eve_bevy_ui_project_view')?.tree.root);
-                    return { ok: texts.length > 0 && JSON.stringify(texts.sort()) === JSON.stringify(expected), current, texts, expected };
-                });
-                await screenshot({ page, report, outDir, name: `${mode}_multiple_playing` });
-                await page.keyboard.down('Meta');
-                await clickCanvasTarget(page, await target(1));
-                await page.keyboard.up('Meta');
-                await waitFor(page, async (id) => {
-                    const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
-                    const { getCurrentSelectionIds } = await import('/eVe/intuition/runtime/selection.js');
-                    const current = projectViewTransport.read();
-                    return { ok: current.playing && current.selectionIds?.length === 1 && current.selectionIds[0] === id
-                        && getCurrentSelectionIds().length === 1 && getCurrentSelectionIds()[0] === id, current };
-                }, textId);
-                await clickCanvasTarget(page, await railTool(page, 'play'));
-            }
+            // A multiple selection no longer plays from the rail (R-273, user 22 Nov. 2026): a touch plays one row or tile.
 
             await clickCanvasTarget(page, await target(0));
             await waitFor(page, async () => {
@@ -271,8 +241,8 @@ export const runToolTextRecordAcceptance = async ({ page, report, check, ensureP
             }
             if (process.env.MOLECULE_UI_TRANSPORT_SELECTION === '1') {
                 const footer = await awaitBevyUiNodeTarget(page, { treeId: 'eve_bevy_ui_project_view', nodeId: 'project_view_footer', step: 2 });
+                // A touch on the level's row plays the level (R-273, user 22 Nov. 2026).
                 await clickCanvasTarget(page, footer);
-                await clickCanvasTarget(page, await railTool(page, 'container_play'));
                 await waitFor(page, async () => {
                     const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
                     return { ok: projectViewTransport.read().playing === true };
@@ -290,7 +260,9 @@ export const runToolTextRecordAcceptance = async ({ page, report, check, ensureP
                         && playback.activeLeafIds.length === 1 && playback.activeLeafIds[0] === selected[0], selected, playback };
                 });
                 await screenshot({ page, report, outDir, name: mode + '_container_retarget' });
-                await clickCanvasTarget(page, await railTool(page, 'play'));
+                // No Lecture in the rail any more (R-273): the canonical transport command stops it, as voice does.
+                await page.evaluate(async () => (await import('/eVe/intuition/runtime/tool_gateway.js')).invokeToolGateway({
+                    tool_id: 'ui.project.transport', action: 'pointer.click', input: { operation: 'stop' }, source: { type: 'ui' } }));
                 await waitFor(page, async () => {
                     const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
                     return { ok: !projectViewTransport.read().playing };

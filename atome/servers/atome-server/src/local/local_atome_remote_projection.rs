@@ -215,6 +215,27 @@ pub(super) fn register_stream(
     Ok(())
 }
 
+// The type of the Atome a received event wrote, as its projection keeps it (`atomes.atome_type`):
+// the announcement of a replay names them, so a reader re-reads only when its own type arrived
+// (a calendar of 7 000 events is not read again for a tool written on another device).
+pub(super) fn written_atome_type(
+    db: &Connection,
+    local_user_id: &str,
+    remote_user_id: &str,
+    event: &JsonValue,
+) -> Result<Option<String>, String> {
+    let Some(atome_id) = projection_atome_id(event, local_user_id, remote_user_id) else {
+        return Ok(None);
+    };
+    db.query_row(
+        "SELECT LOWER(COALESCE(atome_type, '')) FROM atomes WHERE atome_id = ?1",
+        [atome_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|error| error.to_string())
+}
+
 pub(super) fn stream_cursors(
     db: &Connection,
     local_user_id: &str,

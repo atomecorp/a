@@ -1,4 +1,4 @@
-use atome_audio_kernels::wav;
+use atome_audio_kernels::{peaks, wav};
 use ringbuf::traits::*;
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
@@ -29,6 +29,63 @@ impl OutputFormat {
     }
 }
 
+/// Peaks a take's clip shows (its waveform, as `waveform_peaks` gives it for a take recorded in the page).
+pub(super) const TAKE_WAVEFORM_PEAKS: usize = 256;
+/// Envelope points kept at most: past it, neighbours merge and each point covers twice the samples.
+const ENVELOPE_POINTS: usize = 65_536;
+
+/// The take's envelope, built as its samples are written: each point the highest absolute sample of a
+/// run of frames (a millisecond at first), so its waveform is known at the stop without reading the file.
+struct TakeEnvelope {
+    points: Vec<f32>,
+    peak: f32,
+    filled: usize,
+    run: usize,
+}
+
+impl TakeEnvelope {
+    fn new(sample_rate: u32, channels: u16) -> Self {
+        let frames = usize::try_from(sample_rate / 1_000).unwrap_or(48).max(1);
+        Self {
+            points: Vec::new(),
+            peak: 0.0,
+            filled: 0,
+            run: frames * usize::from(channels.max(1)),
+        }
+    }
+
+    fn push(&mut self, samples: &[f32]) {
+        for &sample in samples {
+            self.peak = self.peak.max(sample.abs());
+            self.filled += 1;
+            if self.filled == self.run {
+                self.close_point();
+            }
+        }
+    }
+
+    fn close_point(&mut self) {
+        self.points.push(self.peak.min(1.0));
+        self.peak = 0.0;
+        self.filled = 0;
+        if self.points.len() == ENVELOPE_POINTS {
+            self.points = self
+                .points
+                .chunks(2)
+                .map(|pair| pair.iter().fold(0f32, |peak, value| peak.max(*value)))
+                .collect();
+            self.run *= 2;
+        }
+    }
+
+    fn waveform(mut self) -> Vec<f32> {
+        if self.filled > 0 {
+            self.close_point();
+        }
+        peaks::waveform_peaks(&[&self.points], TAKE_WAVEFORM_PEAKS)
+    }
+}
+
 /// A take's WAV file written as it comes, through the kernels' WAV codec (atome-audio-kernels
 /// `wav::float_header` / `push_float_sample`): the bytes are those `wav::encode` writes for the
 /// same samples. The header is written with no frame first, then again once they are counted.
@@ -40,6 +97,7 @@ pub(super) struct TakeWav {
     bits: u16,
     samples: usize,
     bytes: Vec<u8>,
+    envelope: TakeEnvelope,
 }
 
 impl TakeWav {
@@ -49,12 +107,14 @@ impl TakeWav {
             wav::push_float_sample(&mut self.bytes, sample, self.bits);
         }
         self.samples += samples.len();
+        self.envelope.push(samples);
         self.file
             .write_all(&self.bytes)
             .map_err(|error| format!("Failed to write WAV sample: {error}"))
     }
 
-    fn finalize(mut self) -> Result<(), String> {
+    /// Closes the file and gives the take's waveform peaks.
+    fn finalize(mut self) -> Result<Vec<f32>, String> {
         let frames = self.samples / usize::from(self.channels);
         let header = wav::float_header(
             usize::from(self.channels),
@@ -67,7 +127,8 @@ impl TakeWav {
         self.file.flush().map_err(finalize)?;
         self.file.seek(SeekFrom::Start(0)).map_err(finalize)?;
         self.file.write_all(&header).map_err(finalize)?;
-        self.file.flush().map_err(finalize)
+        self.file.flush().map_err(finalize)?;
+        Ok(self.envelope.waveform())
     }
 }
 
@@ -115,7 +176,7 @@ pub(super) fn spawn_wav_writer_thread(
     mut writer: TakeWav,
     writer_stop: Arc<AtomicBool>,
     capture_channels: u16,
-) -> std::thread::JoinHandle<Result<(), String>> {
+) -> std::thread::JoinHandle<Result<Vec<f32>, String>> {
     crate::engine_thread::spawn(move || {
         let mut buffer = vec![0.0_f32; 4096];
         let frame = usize::from(capture_channels.max(1));
@@ -169,6 +230,7 @@ pub(super) fn create_wav_writer(
         bits,
         samples: 0,
         bytes: Vec::new(),
+        envelope: TakeEnvelope::new(sample_rate, channels),
     })
 }
 
@@ -182,7 +244,7 @@ mod tests {
     fn a_take_is_the_kernels_encoding_of_its_samples() {
         let directory = tempfile::tempdir().expect("a temporary directory");
         let rate = 48_000;
-        let frames = 4_801;
+        let frames: usize = 4_801;
         let left: Vec<f32> = (0..frames)
             .map(|i| (i as f32 * 0.013).sin() * 1.2 - 0.05)
             .collect();
@@ -205,7 +267,14 @@ mod tests {
             for chunk in interleaved.chunks(1_023) {
                 take.write(chunk).expect("the samples");
             }
-            take.finalize().expect("the header");
+            let waveform = take.finalize().expect("the header");
+            // A tenth of a second: one envelope point a millisecond, fewer than 256 peaks.
+            assert_eq!(waveform.len(), frames.div_ceil(48), "{format:?}");
+            let loudest = interleaved
+                .iter()
+                .fold(0f32, |peak, sample| peak.max(sample.abs()));
+            let drawn = waveform.iter().fold(0f32, |peak, value| peak.max(*value));
+            assert_eq!(drawn, loudest.min(1.0), "{format:?}");
             let expected = wav::encode(&[&left, &right], rate, format.bits()).expect("encoded");
             assert_eq!(
                 std::fs::read(path).expect("the file"),
@@ -213,5 +282,28 @@ mod tests {
                 "{format:?}"
             );
         }
+    }
+
+    // A long take keeps a bounded envelope whose peaks still hold its loudest moment, wherever it lies.
+    #[test]
+    fn a_long_take_keeps_its_loudest_moment_in_a_bounded_envelope() {
+        let mut envelope = TakeEnvelope::new(1_000, 1);
+        let quiet = vec![0.1_f32; 4_096];
+        for block in 0..40 {
+            envelope.push(&quiet);
+            if block == 31 {
+                envelope.push(&[-0.9]);
+            }
+        }
+        assert!(envelope.points.len() < ENVELOPE_POINTS);
+        let waveform = envelope.waveform();
+        assert_eq!(waveform.len(), TAKE_WAVEFORM_PEAKS);
+        let loud = waveform
+            .iter()
+            .position(|value| *value == 0.9)
+            .expect("the loud sample drawn");
+        // It came after 32 of the 40 quiet blocks.
+        assert!(loud.abs_diff(32 * TAKE_WAVEFORM_PEAKS / 40) <= 1, "{loud}");
+        assert_eq!(waveform.iter().filter(|value| **value == 0.9).count(), 1);
     }
 }

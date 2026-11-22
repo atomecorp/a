@@ -256,8 +256,9 @@ impl Uploads {
             Some(name) => crate::http::uri::decode_uri_component(name)?,
             None => String::new(),
         };
-        let Some(body) = body.filter(|body| !body.is_empty()) else {
-            return Ok(failed(StatusCode::BAD_REQUEST, "Empty upload body"));
+        // A file is kept as it came (R-202), an empty one too: only a body that is not the file's bytes is refused.
+        let Some(body) = body else {
+            return Ok(failed(StatusCode::BAD_REQUEST, "Missing upload body"));
         };
         let destination = destination(
             &self.storage,
