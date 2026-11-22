@@ -54,6 +54,12 @@ export const normalizeSliderOptions = (options = {}) => {
     if (length !== null && length !== 'fill' && (!Number.isFinite(length) || length <= 0)) throw new Error('slider_length_invalid');
     if (!Number.isFinite(inset) || inset < 0) throw new Error('slider_value_inset_invalid');
     const normalized = { showBounds: options.showBounds === true, lengthPx: length, valueInsetPx: inset };
+    // `lengthTools`: a gauge laid beside its tool (a rail's, a ribbon's) this many tools long, whole tools, cut to the room
+    // it has (bevy_ui_linear_menu_lens_geometry.js#sliderTiles); many stops need more travel than the three by default.
+    if (options.lengthTools != null) {
+        if (!Number.isSafeInteger(options.lengthTools) || options.lengthTools < 1) throw new Error('slider_length_tools_invalid');
+        normalized.lengthTools = options.lengthTools;
+    }
     // `valueFontSizePx`: the value read large above an expanded horizontal rail (an event's time).
     if (options.valueFontSizePx != null) {
         if (!Number.isFinite(options.valueFontSizePx) || options.valueFontSizePx <= 0) throw new Error('slider_value_font_size_invalid');

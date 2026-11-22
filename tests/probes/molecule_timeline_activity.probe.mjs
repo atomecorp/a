@@ -174,7 +174,7 @@ test('Mute and Solo answer the touch and are stored in the order of the touches'
 });
 
 // A touch on a header selects its track without opening it; a double touch opens its keys; a touch then folds them,
-// the track staying chosen; a hold shows its name's bubble (user, 21 Nov. 2026). Only that header opens.
+// the track staying chosen; a hold widens the header to its whole name (user, 22 Nov. 2026). Only that header opens.
 test('a header touch selects its track, a double touch opens its keys', async () => {
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
@@ -189,7 +189,7 @@ test('a header touch selects its track, a double touch opens its keys', async ()
         header.on.double_click();
         header.on.long_press();
         assert.deepEqual(emitted.map((intent) => intent.type),
-            ['project_view.timeline.header.tap', 'project_view.timeline.header.open', 'project_view.timeline.header.bubble']);
+            ['project_view.timeline.header.tap', 'project_view.timeline.header.open', 'project_view.timeline.header.widen']);
         const keysShown = () => {
             let found = false;
             const look = (node) => { if (!node) return; if (node.id.endsWith(`${trackId}_mute`)) found = true; (node.children || []).forEach(look); };
@@ -206,6 +206,15 @@ test('a header touch selects its track, a double touch opens its keys', async ()
         await content.handleEvent(emitted[0]);
         assert.equal(keysShown(), false, 'a touch folds them');
         assert.equal(content.readState().selectedTrackId, trackId, 'the track stays chosen');
+        // A hold widens the header itself to two tools, nothing beside it; a touch on it edits the name in place.
+        const headerOf = () => { let found = null; const look = (node) => { if (!node) return; if (node.id === header.id) found = node; else (node.children || []).forEach(look); };
+            content.build({ width: 900, height: 420, emit: () => {} }).forEach(look); return found; };
+        const width = headerOf().style.size[0];
+        await content.handleEvent(emitted[2]);
+        assert.ok(headerOf().style.size[0] > width + 30, 'a hold widens the header');
+        assert.ok(!JSON.stringify(content.build({ width: 900, height: 420, emit: () => {} })).includes('name_bubble'), 'no name beside it');
+        // The touch goes to the track's own field (here, with no document, the hidden text service refuses to mount).
+        await assert.rejects(() => content.handleEvent(emitted[0]), /hidden_text_document_required/, 'a touch on the widened header opens its field');
     });
 });
 

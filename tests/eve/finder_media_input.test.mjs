@@ -12,7 +12,7 @@ const setup = options => {
     const runtime = createFinderPanelSurface({ events: { on: () => () => {} }, createQuerySession: () => session,
         loadRecords: async () => [], ...options });
     const draw = () => flatten(runtime.surface.buildContent(runtime.readState(), { bodyWidth: 500, bodyHeight: 450, emit() {} }));
-    // The words come from the ribbon's Trouver field (bevy_ui_main_menu_finder_tool.js), not from a field of the panel.
+    // The words come from her field's search in the ribbon (R-264) (bevy_ui_main_menu_assistant_field.js), not from a field of the panel.
     return { runtime, draw, type: value => runtime.editQuery(value), submit: () => runtime.submitQuery() };
 };
 const tvRows = [{ id: 'france2', type: 'tv_channel', name: 'France 2', textIndex: 'france 2 fr2', categories: ['general'] },

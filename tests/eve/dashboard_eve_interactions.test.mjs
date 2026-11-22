@@ -7,6 +7,8 @@ import { createCommNotificationDetail } from '../../eVe/intuition/runtime/bevy_p
 import { resolveBevyPanelGeometry } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js';
 import { bevyUiMysticActivation } from '../../eVe/intuition/ribbon/bevy_ui_mystic_activation.js';
 import { createDashboardMysticSources } from '../../eVe/domains/dashboard/dashboard_mystic_sources.js';
+// The sources register the library's presenter by a lazy import: loaded here, it never lands after the test ends.
+import '../../eVe/domains/dashboard/dashboard_library.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 

@@ -40,7 +40,9 @@ test('quantized launches share one grid; a Follow Action starts on the exact end
     const player = createCellPlayer(session);
     const handOvers = [];
     const first = await player.launch({ key: 'a', from: 0, until: 0.25, trackIds: ['a'], passes: null });
-    await wait(60);
+    // Past the launch grace (molecule_cell_player.js LAUNCH_GRACE_SECONDS, 80 ms): a launch that close to a step joins
+    // that step late, by design (fingers landing together); this one waits for the next step of the grid.
+    await wait(120);
     const second = await player.launch({
         key: 'b', from: 1, until: 1.1, trackIds: ['b'], passes: 2, quantumSeconds: 0.25,
         onEnd: async (frame) => {

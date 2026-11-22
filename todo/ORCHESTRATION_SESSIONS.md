@@ -282,6 +282,56 @@ Ordre fixé :
 
 ## 5. Décisions pour l'utilisateur
 
+2026-11-22 ~20:30 Passage régulier. 0 running (↓). 3ae1732c R-277/R-278 CLÔTURE ÉCRITE, archivage refusé (session ouverte/épinglée). ad7b39ab R-264 idle (fait côté Web, attend essai iPad utilisateur, pas de clôture). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge ↓↓ 4.0/4.1/5.2. Swap ↑ 921 Mo. Disque 86 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources LIBRES. 0 conflit.
+
+2026-11-22 ~20:10 Passage régulier. 2 running : ad7b39ab (15:09, R-264 sondes finies iPad 15/15 + tél. 17/17, AGENTS.md+CODEMAP écrits, registre FAIT, attend essai iPad utilisateur), 3ae1732c (15:08, R-277 D1/D3+A4+B codés sondes 18/18, attend C1/C2 utilisateur). Cargo 0, Xcode 0, Chromium 9 (en nettoyage). Port 3001 DOWN. Charge ↑↑ 7.3/10.9/10.4. Swap ↑ 729 Mo / 13312 Mo (pool restauré). Disque 86 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources partagées LIBRES. 0 conflit.
+
+2026-11-22 ~19:50 Passage régulier. 2 running (↑) : 3ae1732c (14:48, R-277 code+sonde Chromium, runtime_cells.js+AGENTS.md R15 tenus), ad7b39ab (14:48, R-264 code, Chromium EN FILE). Cargo 0, Xcode 0, Chromium 3 (3ae1732c sonde). Port 3001 DOWN. Charge ↑↑ 6.0/5.5/4.8 (2 sessions actives). ⚠️ Swap ↓↓ 457 Mo / 12288 Mo (critique, macOS a réduit le pool). Disque 87 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~19:30 Passage régulier. 1 running : ad7b39ab (14:29, R-264 code, AGENTS.md R13 réservé, Chromium plus tard). 3ae1732c idle (attente maquettes R-277). 167ac04a archivée (passage précédent). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge ↓ 2.9/2.8/3.0. Swap ↑ 1451 Mo. Disque 86 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~19:10 Passage régulier. 167ac04a R-272 ARCHIVÉE (clôture écrite : MIDI editors, pads, step_draw, fader_cap R15, CODEMAP, réparations virtual_scene_contract+dashboard_band_sliders). 3ae1732c idle (attente maquettes R-277). Cargo 0, Xcode 0, Chromium 3 (orphelins 167ac04a, pas de session active). Port 3001 DOWN. Charge 3.3/3.3/3.9. Swap 1283 Mo (confortable). Disque 85 Gi. 0 conflit. Toutes ressources partagées LIBRES.
+
+2026-11-22 ~19:00 167ac04a reprend Chromium (sonde MIDI ~10 min, isolée). Fichiers non partagés (step_grid, pads, step_draw, editor_frame, midi_roll, midi_lanes, clip_editors, content_rail, editor_rail, i18n, piano.svg). 0 conflit.
+
+2026-11-22 ~18:55 167ac04a : Chromium LIBÉRÉ (sondes finies), clip_presentation.js 'pads' fait (couloir clos). Écrit AGENTS.md R15 (fader_cap notes/pas) + CODEMAP préambule (confirmés). Réparations passantes : virtual_scene_contract.js (540→533 l.), dashboard_band_sliders.js (baseLayer).
+
+2026-11-22 ~18:50 Passage régulier. 1 running (↓) : 167ac04a (13:49, MIDI+Chromium). 3ae1732c idle (attente maquettes R-277). ad7b39ab idle (bref passage). Cargo 0, Xcode 0, port 3001 DOWN. Charge ↓ 5/6/6. Swap ↑↑ 1075 Mo / 13312 Mo (récupéré). Disque 85 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~18:35 3ae1732c : CODEMAP/API_MAP écrits (R-277, 1 entrée chaque préambule), couloir LIBÉRÉ. 167ac04a : CODEMAP/API_MAP accordés. 3ae1732c n'attend plus que les maquettes D/A/B/C (utilisateur).
+
+2026-11-22 ~18:30 Passage régulier. 3 running (↑) : 3ae1732c (13:29, CODEMAP/API_MAP), 167ac04a (13:29, MIDI+sonde Chromium), ad7b39ab (13:29, NEW running « Assistant input box et recherche », pas de couloir demandé). Cargo 0, Xcode 0, port 3001 DOWN. Charge 7.7/7.4/7.2. Swap ↑ 595 Mo / 13312 Mo (récupération). Disque 85 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~18:40 3ae1732c : AGENTS.md R15+R13 fini, sondes R-275 OK (catégories 21/21, rail 23/23, take_follow 7/7), Chromium LIBÉRÉ. CODEMAP/API_MAP confirmé (3 entrées). Maquettes R-277 en attente utilisateur.
+
+2026-11-22 ~18:35 167ac04a : couloir molecule/kernel/clip_presentation.js accordé (ajout 'pads', 1 mot). 0 conflit.
+
+2026-11-22 ~18:30 3ae1732c code fini, maquettes R-277 en attente utilisateur. AGENTS.md R15 LIBÉRÉ (séparateur Cells retiré). CODEMAP/API_MAP accordés à 3ae1732c (3 entrées). 167ac04a : AGENTS.md R15 accordé (fader_cap+Pads), CODEMAP en file derrière 3ae1732c.
+
+2026-11-22 ~18:25 167ac04a prend Chromium (1 instance, sonde isolée). AGENTS.md R15 toujours tenu par 3ae1732c — 167ac04a en file (même zone R15, conflit possible). CODEMAP libre pour 167ac04a. Nouveau fichier languages_timeline_editors.js noté.
+
+2026-11-22 ~18:10 Passage régulier. 2 running : 3ae1732c (13:08) + 167ac04a (13:08, code MIDI). Chromium LIBRE (sonde 3ae1732c finie). Cargo 0, Xcode 0, port 3001 DOWN. Charge 6/7/7. ⚠️ Swap 454 Mo / 13312 Mo (baisse critique, macOS agrandi). Disque 86 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~17:55 167ac04a R-272 reprend : maquettes MIDI validées, code les 5 éditeurs (midi_roll, midi_lanes, step_grid, step_rail, clip_editors, pads NEW, slider_gauge, tool_skin). 0 conflit avec 3ae1732c. File : AGENTS.md derrière 3ae1732c (R15), Chromium idem.
+
+2026-11-22 ~17:50 Passage régulier. 1 running : 3ae1732c « Long-clic en-têtes » (12:48, Chromium actif, sonde slider). Cargo 0, Xcode 0, port 3001 DOWN. Charge 6/4/8. Swap ↓ 907 Mo / 12288 Mo (baisse depuis 1686, surveiller). Disque 87 Gi. 167ac04a idle (MIDI). d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~17:45 Couloir accordé à 3ae1732c : project_view_cells_edit_rail.js (conflit R-275 résolu, 63a5cdae archivée — ligne garde retirable), AGENTS.md R15, Chromium tenu, tous fichiers non partagés libres. Message en file (session occupée).
+
+2026-11-22 ~17:40 Passage régulier. 63a5cdae R-275 ARCHIVÉE (clôture écrite, 41 tours : rouleaux 2 cases, contour R-274, textes « … », catégories sans cellule, sondes 21/21+rail+contour OK, registre+CODEMAP). 1 running : 3ae1732c « Long-clic en-têtes » (12:28, Chromium actif 1 instance sonde). Charge ↓↓ 6/13/19. Swap ↑ 1686 Mo / 13312 Mo. Disque 85 Gi. Cargo 0, Xcode 0, port 3001 DOWN. 167ac04a idle (MIDI). d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~17:35 63a5cdae R-275 FINI : sonde catégories corrigée (project_view_cells_edit_rail.js : pas de catégorie sans cellule choisie), sonde rail ALL PASS. Chromium LIBRE.
+
+2026-11-22 ~17:30 63a5cdae R-275 : rouleaux-enfants 2 cases codés (rollerChildBox), contour R-274 adapté, bevy_panel_numeric_field.js corrigé (« … » sans glyphe), sondes rail+R-274 OK, registre+CODEMAP à jour. Chromium LIBRE. Sonde catégories 20/21, correction en cours.
+
+2026-11-22 ~17:25 63a5cdae R-275 reprend : utilisateur a autorisé l'édition atome_contextual_edit_model.js (rouleaux-enfants rail, fichier 499 lignes). Chromium OCCUPÉ par 63a5cdae (2 sondes isolées : rail R-275 + R-274). Pas de cargo. File Chromium : 63a5cdae (actif).
+
+2026-11-22 ~17:20 Passage régulier. NOUVELLE session 3ae1732c « Long-clic en-têtes de pistes » RUNNING (12:08) — pas de couloir demandé, touche en-têtes de pistes (bulle → en-tête élargi + saisie). 63a5cdae R-275 IDLE (attente utilisateur : rouleaux atome_contextual_edit_model.js). Cargo IDE FINI (0 proc.), target/ LIBRE. Charge ↓ 11/36/37 (retombée). Swap ↑ 985 Mo / 12288 Mo (macOS agrandi). Disque ↓ 87 Gi (target/ grossi par cargo check). Chromium 0, Xcode 0, port 3001 DOWN. 167ac04a idle (MIDI). d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~17:10 63a5cdae R-275 L1–L6 codés et testés (sonde 5/5 molecule_cell_player corrigée). Fichiers partagés écrits : runtime_cell_recording.js, AGENTS.md R14, CODEMAP.md, API_MAP.md (préambules). atome_contextual_rail_roller.js, kernel scene_schema, runtime_cells.js. Chromium LIBRE. Bloc : atome_contextual_edit_model.js (rouleaux-enfants palettes rail) refusé par le garde de permissions — DÉCISION UTILISATEUR requise. Files partagées TOUTES LIBRES.
+
+2026-11-22 ~17:00 Passage régulier. 1 running : 63a5cdae R-275 (11:48). ⚠️ CARGO CHECK IDE (PID 79253, 12:47, --compile-time-deps = RubyMine) sur ROOT target/ — 7+ rustc actifs. Charge 31/15/10. Swap CRITIQUE 488 Mo / 9216 Mo. Disque 93 Gi. Chromium 0, Xcode 0, port 3001 DOWN. 63a5cdae avertie : pas de cargo sur target/ racine. ARCHIVÉES : 4906ca33 R-274, 03468c6f R-270, c74d0d76 R-273 (clôtures écrites). Idle utilisateur : 167ac04a R-272 (MIDI). d7a7/37801f04/5cde/731f/291b absentes.
+
 2026-11-22 ~16:50 63a5cdae R-275 L4 : runtime_cell_recording.js édité (règle 10 min), AGENTS.md R14 (rouleaux 2 cases), atome_contextual_edit_model.js 1 ligne (glowsOpen). Refus classifieur sur rouleaux-enfants signalé à l'utilisateur. Sonde 20/20, Chromium LIBRE. CODEMAP/API_MAP à venir. AGENTS.md LIBRE.
 
 2026-11-22 ~16:30 Passage régulier. 1 running : 63a5cdae R-275 (11:28). Idle en attente clôture : 4906ca33 R-274, 03468c6f R-270. Idle en attente utilisateur : 167ac04a R-272 (maquettes MIDI). c74d0d76 R-273 toujours retenue par l'app. Cargo 0, Chromium 0, Xcode 0, port 3001 DOWN. Charge ↓↓ 3.0/5.7/12.0 (1 session). Swap ↑ 1495 Mo libres / 10240 Mo. Disque 89 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
