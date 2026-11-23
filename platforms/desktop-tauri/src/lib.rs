@@ -5,6 +5,8 @@ mod auth_device;
 mod code_workspace;
 mod dev_logging;
 #[cfg(not(target_os = "android"))]
+mod display_density;
+#[cfg(not(target_os = "android"))]
 mod external_display;
 mod local_http_navigation;
 mod native_alarms;
@@ -249,6 +251,8 @@ pub fn run() {
             auth_device::auth_local_request,
             auth_device::auth_development_request,
             dev_logging::log_from_webview,
+            #[cfg(not(target_os = "android"))]
+            display_density::viewport_zoom_set,
             native_contacts::macos_contacts_snapshot,
             native_contacts::contacts_open_settings,
             native_personal_import::native_calendar_snapshot,

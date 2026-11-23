@@ -1,6 +1,6 @@
 # Orchestration des sessions parallèles — atome/eVe
 
-Orchestrateur : session `local_bd90a208-b858-41c2-a0e3-45ccb76448e2` (depuis le 18 nov. à 12:48 ; avant : `local_95efc289`). Règle d'entrée : `.claude/rules/orchestration.md`.
+Orchestrateur : session `local_f45e8314-cb2a-4ce9-9a60-ce4e1339c263` (depuis le 23 nov. à ~10:30 ; avant : `local_bd90a208`, `local_95efc289`). Règle d'entrée : `.claude/rules/orchestration.md`.
 Mis à jour le 16 nov. 2026 à 16:30, passage de 16:28. Version 6 : les 17 sessions sont lues, plus la nouvelle session `local_7dbfdba7` (finie).
 
 Un couloir est une règle de coordination : il ne passe jamais avant les mots de l'utilisateur, AGENTS.md ou la charte.
@@ -281,6 +281,74 @@ Ordre fixé :
 - **Défaut routé vers R-188 (7c04)**, relevé par R-186 : sur le Web, `mix_record_start` rend 0 trame sur une tranche fraîchement posée par `mix_apply`, alors que son vumètre joue ; la première tranche enregistre bien. Fichiers en cause : `record_tap*`, `mix_apply.rs`, `route_delivery.rs`, `recorder_strip.rs`. **Pris à 19:10** par le sous-agent « Engine REC tap » de 7c04, en éditions ciblées, dans la cible `temp/rec_tap_fix_2026-11-16/target`. La preuve sera un test Rust qui échoue avant le correctif. **Corrigé à 19:20** (`record_tap.rs`, `mix_apply.rs`, nouveau test `a_strip_applied_later_takes_its_input` dans `record_tap_tests.rs`) : 85/85, clippy propre. Audio-wasm installé à 19:26. Sondes Web de la console relancées. R-184 et R-186 prévenues.
 
 ## 5. Décisions pour l'utilisateur
+
+2026-11-23 ~11:50 Passage régulier. NOUVELLE session 56852b17 « Logo central et alignement dalles » (running, pas de lane demandée). 1311797a R-279 → IDLE (10:39). Cargo 0, Chromium 0, Xcode 0, port 3001 DOWN. Charge ↓ 4.9. Swap 11412 Mo. Disque ↑ 80 Gi (+6 Gi, temp/r279b_target supprimé). d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-23 ~11:50 temp/r279b_target supprimé (5,3 Go, lsof/ps vérifiés, 0 processus). 1311797a confirme R-279 finie de son côté, sondes PROBE_ISOLATED (pas de cache SW). Pas de phrase de clôture exacte.
+
+2026-11-23 ~11:45 1311797a R-279 2e série DONE, couloir doc RENDU. AGENTS.md r.12 (bord liste masque), r.14 (éditeur thème, labels, pictogramme, disque Sport, « Rétablir fond »), r.15 (ombre 34 %/24 px), DESIGN_MAP ligne datée. Nouveau : famille MCP `wallpaper` (contracts.js, mcp_contract_families.js, tool_runtime_service_commands.js, annotations.json, registry:build). Registre R-279 → FAIT. Réparation z-order bande scène Dashboard. Pas de phrase de clôture exacte (« DONE » ≠ archivable).
+
+2026-11-23 ~11:35 Couloir doc AGENTS.md + DESIGN_MAP accordé à 1311797a R-279 (2e série fin) : r.15 ombre, r.12 bord liste, r.14 éditeur thème + labels + pictogramme + disque Sport. Réparation bande d'outils scène Dashboard (z-order panneau standalone). « Rétablir fond par défaut » dans Réglages. 0 conflit.
+
+2026-11-23 ~11:15 1311797a R-279 WASM renderer PUBLIÉ (v. 52a33706e084f04e, 13.9 Mo, .br/.gz réécrits, 50 exports identiques à HEAD). scroll_area.rs : FadeTop/FadeBottom retirés, masque clip_fade seul. Build dans temp/r279b_target (scratch). NOTE : sondes profil navigateur → vider cache SW.
+
+2026-11-23 ~11:10 1311797a R-279 build WASM renderer en cours (temp/r279b_target, 9 rustc parallèles wasm32). Charge ↑↑↑ 102.9 (attendu). Disque 74 Gi (−4 Gi scratch build). Swap 12030 Mo (↓). Chromium 0, Xcode 0, 3001 DOWN. 1 seul cargo (scratch), 0 conflit.
+
+2026-11-23 ~10:55 Couloir R-279 2e série accordé à 1311797a : renderer shadow_texture.rs, WASM dans temp/r279b_target (scratch), publication squirrel_bevy_renderer*, JS eVe non partagés, doc AGENTS.md r.12/14/15 + DESIGN_MAP en fin. Pas de 3001, iPad, Xcode. 0 conflit.
+
+2026-11-23 ~10:50 Passage régulier. 1 running : 1311797a R-279 (activité 09:47, doc faite, encore active). Cargo 0, Chromium 0, Xcode 0, port 3001 DOWN. Charge ↓↓ 2.6 (calme). Swap ↓ 12328 Mo. Disque ↑ 78 Gi (+6 Gi, temp/r279_target supprimé). d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-23 ~10:40 1311797a R-279 couloir doc RENDU. AGENTS.md r.15 (tool_tether, cell_glow Ambre, piste, dernier projet), r.13 (rouleau palette au joint — c'était r.13 pas r.14), DESIGN_MAP ligne 23 nov. temp/r279_target supprimé (5,4 Go récupérés). Pas de phrase de clôture exacte (« finie de mon côté » ≠ archivable).
+
+2026-11-23 ~10:35 Couloir AGENTS.md + DESIGN_MAP.md accordé à 1311797a R-279 (sélections Ambre) : éditions ciblées r.14, r.15, DESIGN_MAP ligne datée. 0 conflit (b3dd25d0 idle). temp/r279_target libéré.
+
+2026-11-23 ~10:30 NOUVEL ORCHESTRATEUR f45e8314 (remplace bd90a208, tokens épuisés). ID mis à jour dans §1 et .claude/rules/orchestration.md. Premier passage : 1 running (1311797a R-279, WASM publié, pas de clôture), ~30 idle. Cargo 0, Chromium 0, Xcode 0, port 3001 DOWN. Charge 4.6/7.3/10.9 (en baisse). Swap ↑↑ 13471 Mo / 14336 Mo (élevé). Disque 72 Gi (stable). d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-23 ~10:15 1311797a R-279 WASM renderer PUBLIÉ (v. 3827b0538edfaf63, 13.9 Mo, .br/.gz vérifiés). Fix bevy-core (style couleur sprite texte) + procedural_sdf.wgsl du 19 nov. Build dans temp/r279_target. Couloir renderer/WASM libéré. NOTE : sondes avec profil navigateur → vider le cache SW.
+
+2026-11-23 ~10:10 1311797a R-279 build WASM renderer en cours (cargo build -p squirrel-bevy-renderer dans temp/r279_target, PAS le target/ partagé). 8 rustc parallèles. Charge ↑↑ 22.2 (attendu), disque 73 Gi (−5 Gi temp build), swap 1178 Mo. 0 conflit (1 seul cargo, scratch target). d7a7/37801f04/5cde/731f/291b absentes.
+
+2026-11-23 ~09:50 0 running. 1311797a R-279 → IDLE (08:44, outils actifs Ambre écrits dans AGENTS.md r.15 et DESIGN_MAP). Pas de phrase de clôture exacte. Système calme : charge 3.2, swap 1598 Mo, disque 78 Gi, 3001 DOWN. d7a7/37801f04/5cde/731f/291b absentes.
+
+2026-11-23 ~09:30 1311797a R-279 suite : fond écran Ambre + coin replié codés (validés utilisateur). AGENTS.md r.14 étendu, DESIGN_MAP.md étendu. 8 fichiers code (system_ui_themes.js, tokens.js, tool_skin.js, bevy_ui_menu_palette.js, surface_background_defaults.js, user_background_pattern_renderer.js, bevy_surface_background_runtime.js, background.js). Sondes isolées, 0 build. 0 conflit (b3dd25d0 idle).
+
+2026-11-23 ~09:20 b3dd25d0 R-280 → IDLE (temp/r280_density_check supprimé, pas de conflit R-279 sur system_ui_tokens.js confirmé). 1311797a R-279 encore running (activité 08:09). Cargo 0, Chromium 0, Xcode 0, 3001 DOWN. Disque 78 Gi, swap 1239 Mo, charge 4.2. 0 conflit. d7a7/37801f04/5cde/731f/291b absentes.
+
+2026-11-23 ~09:00 R-280 CODÉ par b3dd25d0 (calibrage Web attend l'utilisateur). Partagés touchés : AGENTS.md r.12, DESIGN_MAP.md, CODEMAP.md, FRAMEWORK_STATE §5. Hors couloir réparé : `find` fantôme dans context_menus.json (R-264), annotations.json (visual_theme de R-279 bloquait le registre). 5 échecs pré-existants signalés dans Mystic/palettes (territoire 7e605013 liserés) : mystic_grid_layout ×3, palette_background_motion, context_menu_access_lifecycle. cargo clippy -p squirrel (~15 s cache) + crate jetable temp/r280_density_check. Ni 3001, ni Xcode, ni iPad. Pas de phrase de clôture.
+
+2026-11-23 ~08:40 2 running : b3dd25d0 R-280 (sondes Playwright en cours, 1 Chromium headless), 1311797a R-279 (fini, traite ses messages). Charge ↑↑ 19.4 (Chromium+sondes), disque 77 Gi (−4 Gi). 0 conflit (1 seul Chromium).
+
+2026-11-23 ~08:30 Couloir R-280 accordé à b3dd25d0 « Tailles d'icônes incohérentes entre appareils » : même taille physique sur tous appareils, référence iPhone. AVERTISSEMENT : system_ui_tokens.js et Réglages › Visuel ont été modifiés par R-279 (1311797a) → lire avant d'éditer. cargo check -p Tauri OK (seul cargo). Port 3001 DOWN, non redémarré. AGENTS.md r.12 et DESIGN_MAP.md en fin de tâche avec prévenance.
+
+2026-11-23 ~08:10 1311797a confirme R-279 fini. Module thèmes = eVe/elements/system_ui_themes.js (pas skin/themes.js). Port 3001 non utilisé (PROBE_ISOLATED). Aucune autre session n'a touché AGENTS.md ni DESIGN_MAP.md. 0 conflit vérifié.
+
+2026-11-23 ~08:00 R-279 TERMINÉ par 1311797a (thème Ambre). Règle 10 min appliquée pour fichiers partagés (orchestrateur n'a pas répondu à temps). Partagés touchés : AGENTS.md (règles 14, 15), DESIGN_MAP.md (1 ligne), FRAMEWORK_STATE.md (§5). Aussi des lectures en direct (1 ligne chacune) dans project_view_timeline_*.js (territoire R-178 inactif, fc91961c idle) : pas de conflit effectif. Registre R-279 → FAIT.
+
+2026-11-23 ~07:20 Couloir R-279 accordé à 1311797a « Mockup thème gris foncé unifié » : thème Ambre validé par l'utilisateur, registre de thèmes + sélecteur Réglages › Visuel. Fichiers JS non partagés libres. AGENTS.md et DESIGN_MAP.md en fin de tâche avec prévenance. Port 3001 disponible si besoin.
+
+2026-11-23 ~07:15 NOUVELLE session 1311797a « Mockup thème gris foncé unifié » (idle 06:08, pas de lane demandée). 408d58f7 disparue de la liste. 21 → 20 sessions (toutes idle). Cargo 0, Xcode 0, Chromium 0, port 3001 DOWN. Charge ↓↓ 2.5 (très calme). Swap ↑↑ 1216 Mo (récupération). Disque 81 Gi. 0 conflit.
+
+2026-11-23 ~02:25 ad7b39ab signale release+déploiement TERMINÉS : atome.one en 1.60 (commit 946177228, eVe ebd1d17f), service ok. 2 correctifs poussés (server_update.js, package-lock). Toutes ressources LIBÉRÉES. Pas de phrase de clôture écrite.
+
+2026-11-23 ~01:25 Couloir accordé à fc91961c (11 tâches : séparateur Cellules, en-têtes double-clic/long-clic, FX→Automation, Delete/Bypass/Wet-dry effets, sliders, ombre panneaux, bug Timeline scènes, loop point, time stretch). Territoire R-184 (effets) : session 8f56b37d plus visible, fichiers propres → éditions ciblées. Territoire R-178 (séquenceur) : session inactive/bloquée zplane → éditions ciblées bugs seulement, clip_tone avec prudence. ada052b1 idle, priorité à fc91961c sur les en-têtes.
+
+2026-11-23 ~00:30 Passage régulier. 1 running : fc91961c NOUVELLE « Bugs dans l'outil vider et sélection piste » (19:28, pas de lane). ad7b39ab IDLE (19:13, fin de sa très longue session R-264+release+serveur). 4 autres idle (ada052b1, 7e605013, 54c50843, f06a2e2b). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge ↓↓ 2.7/4.8/5.0 (retour au calme). Swap ↑↑ 1679 Mo. Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources partagées LIBRES. 0 conflit.
+
+2026-11-23 ~00:13 Passage régulier. 1 running (↓) : ad7b39ab (19:13, R-264 serveur SSH). ada052b1 idle (18:50), 7e605013 idle (18:56), 54c50843 idle (18:36), f06a2e2b idle (18:33). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. ⚠️ Charge ↑↑↑ 15.3/7.7/5.0 (pic). Swap ↑↑↑ 1271 Mo (récupéré depuis 368). Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. 0 conflit.
+
+2026-11-22 ~23:50 Passage régulier. 2 running, 3 idle : ad7b39ab (18:48, R-264 serveur SSH), ada052b1 NOUVELLE « Liseret blanc des en-têtes de pistes » (18:48, running, pas de lane). 3 NOUVELLES idle : 7e605013 « Suppression des liserés de palettes Atom » (18:49), 54c50843 « Scintillement tête de lecture » (18:36), f06a2e2b idle (18:33). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge ↑↑ 4.8/3.5/3.1 (5 sessions récentes). ⚠️ Swap ↓↓↓ 368 Mo / 12288 Mo (CRITIQUE, −984 Mo depuis ~23:30). Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. Aucune lane demandée par les nouvelles sessions. 0 conflit de ressource.
+
+2026-11-22 ~23:30 Passage régulier. 2 running (↑) : ad7b39ab (18:28, R-264 serveur SSH), f06a2e2b (18:28, « Corrections interface et import audio », 2e tour, pas de lane). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge 1.9 (calme). Swap ↑ 1352 Mo. Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources partagées LIBRES. 0 conflit.
+
+2026-11-22 ~23:10 Passage régulier. 1 running (↓) : ad7b39ab (18:08, R-264 mise à jour serveur SSH). f06a2e2b idle (18:06, 1er tour terminé, pas de lane demandée). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge 2.0 (calme). Swap ↑ 1336 Mo. Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources partagées LIBRES. 0 conflit.
+
+2026-11-22 ~22:50 Passage régulier. 2 running (↑) : ad7b39ab (17:48, R-264 mise à jour serveur SSH, longue session), f06a2e2b NOUVELLE « Corrections interface et import audio » (17:47, pas encore de lane). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge 1.8 (calme). Swap ↑ 1280 Mo. Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources partagées LIBRES. 0 conflit.
+
+2026-11-22 ~21:10 Passage régulier. 1 running : ad7b39ab (16:08, mise à jour serveur atome.one par SSH, aucune ressource locale). 3ae1732c R-277/R-278 ARCHIVÉE. Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge ↓↓ 1.9/2.1/4.1 (calme). Swap ↓ 1120 Mo / 12288 Mo (pool réduit par macOS). Disque 84 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources partagées LIBRES. 0 conflit.
+
+2026-11-22 ~21:00 ad7b39ab signale : release iOS 1.60 (build 58) terminée, publiée sur atome.one, commit+push faits. Xcode + version files + temp/ios-release.lock LIBÉRÉS. Mise à jour serveur atome.one en cours par SSH (aucune ressource locale). Toutes ressources partagées LIBRES.
+
+2026-11-22 ~20:50 Passage régulier. 0 running. ad7b39ab idle (15:38, R-264, attend essai iPad utilisateur + release en cours). 3ae1732c idle (15:29, R-277/R-278 clôture écrite, archivage refusé session épinglée). Cargo 0, Xcode 0 (release non visible au ps), Chromium 3 orphelins. Port 3001 DOWN. Charge ↓↓ 2.1/7.8/8.3 (calme). Swap ↑↑ 1473 Mo (récupéré). Disque ↓ 83 Gi (−3 Gi, possibles artefacts Xcode). d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources LIBRES sauf Xcode+version files réservés ad7b39ab (release). 0 conflit.
 
 2026-11-22 ~20:30 Passage régulier. 0 running (↓). 3ae1732c R-277/R-278 CLÔTURE ÉCRITE, archivage refusé (session ouverte/épinglée). ad7b39ab R-264 idle (fait côté Web, attend essai iPad utilisateur, pas de clôture). Cargo 0, Xcode 0, Chromium 3 orphelins. Port 3001 DOWN. Charge ↓↓ 4.0/4.1/5.2. Swap ↑ 921 Mo. Disque 86 Gi. d7a7/37801f04/5cde/731f/291b absentes. Toutes ressources LIBRES. 0 conflit.
 

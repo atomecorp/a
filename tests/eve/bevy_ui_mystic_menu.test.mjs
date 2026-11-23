@@ -23,7 +23,7 @@ import {
     isMysticCenterItem, resolveMysticCenterItem, resolveMysticItemSlot, resolveMysticMenuLayout
 } from '../../eVe/intuition/mystic/mystic_menu_items.js';
 import {
-    INTUITION_MYSTIC_MODE, MYSTIC_CENTER_PLATE, MYSTIC_CENTER_TINT,
+    INTUITION_MYSTIC_MODE, MYSTIC_CENTER_PLATE, mysticCenterTint,
     MYSTIC_CENTER_SHADOW,
     MYSTIC_EDGE_SOFTNESS_PX, MYSTIC_HOLE_DOSE, MYSTIC_PERSPECTIVE_TILES, 
     MYSTIC_GLASS_TINT, MYSTIC_SKIN, resolveMysticEdgeSoftness,
@@ -478,7 +478,7 @@ test('the mystic tree carries one tile per entry and the Atom handle alone in th
     assert.equal(centre.style.shadow.spread, EVE_MYSTIC_SKIN_TOKENS.center.shadow.spread);
     assert.deepEqual(centre.style.shadow.offset, [...EVE_MYSTIC_SKIN_TOKENS.center.shadow.offset]);
     assert.deepEqual(centre.style.background, [...MYSTIC_CENTER_PLATE]);
-    assert.deepEqual(centre.children[0].image.tint, [...MYSTIC_CENTER_TINT]);
+    assert.deepEqual(centre.children[0].image.tint, [...mysticCenterTint()]);
     assert.equal(centre.children[0].image.source.endsWith('atome.svg'), true);
     assert.deepEqual(centre.children[0].style.size, [SYSTEM_UI_METRICS.scalePx(26), SYSTEM_UI_METRICS.scalePx(26)]);
 });
@@ -1103,7 +1103,7 @@ test('every Mystic element is skinned from the shared Atome tokens', () => {
     assert.equal(MYSTIC_SKIN, EVE_MYSTIC_SKIN_TOKENS);
     assert.equal(MYSTIC_GLASS_TINT[3], EVE_MYSTIC_SKIN_TOKENS.plate.backdropTint[3]);
     assert.equal(MYSTIC_CENTER_PLATE, EVE_MYSTIC_SKIN_TOKENS.center.plate);
-    assert.equal(MYSTIC_CENTER_TINT, EVE_MYSTIC_SKIN_TOKENS.center.tint);
+    assert.deepEqual(mysticCenterTint(), EVE_MYSTIC_SKIN_TOKENS.center.tint);
     assert.equal(MYSTIC_HOLE_DOSE, EVE_MYSTIC_SKIN_TOKENS.hole.dose);
     assert.equal(MYSTIC_EDGE_SOFTNESS_PX, EVE_MYSTIC_SKIN_TOKENS.edge.softnessPx);
     assert.deepEqual(resolveMysticFamilyColor('blue'),[0,0,0,0]);

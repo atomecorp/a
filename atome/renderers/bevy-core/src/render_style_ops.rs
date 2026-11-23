@@ -169,7 +169,19 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             .insert(crate::surface_paint::AtomeSurfacePaint(paint));
         sync_backdrop_surface_border(world, entity)?;
     }
-    if let Some(color) = patch.color {
+    if let Some(patched) = patch.color {
+        let textured = world
+            .get::<Sprite>(entity)
+            .is_some_and(|sprite| sprite.image != Handle::default());
+        let kind = world
+            .get::<AtomeRenderKind>(entity)
+            .map(|value| value.0.as_str())
+            .unwrap_or("");
+        let color = if crate::spawn::texture_owns_sprite_color(kind, textured) {
+            [1.0; 4]
+        } else {
+            patched
+        };
         if let Some(mut current) = world.get_mut::<AtomeVisualColor>(entity) {
             current.0 = color;
         }

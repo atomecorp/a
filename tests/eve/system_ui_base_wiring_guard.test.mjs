@@ -40,7 +40,7 @@ const RULES = [
     ['offscreen', /left: '-\d+px'|width: '1px', height: '1px'/, null, 'parked off-screen or visually hidden: never drawn'],
     ['time', /TRAINING_SET_END = Object\.freeze\(\{ after: \d+, gap: \d+/, /^domains\/training\/training_beep_plan.js$/, 'beeps apart in milliseconds, not pixels'],
     ['noise', /description: '[^']*\d+px/, null, 'prose naming a CSS size in a schema description'],
-    ['guard', /cellsSeparatorWidthPx: 1,|size: \[bar\.width, bar\.height\], radius: 1 \}/, null, 'a one-pixel hairline: the resolution floor'],
+    ['guard', /size: \[bar\.width, bar\.height\], radius: 1 \}/, null, 'a one-pixel hairline: the resolution floor'],
     ['guard', /marginPx: 2 \}/, /^domains\/rendering\/bevy_ui_runtime.js$/, 'the clearance a revealed focus keeps from the scroll edge']
 ];
 

@@ -75,6 +75,59 @@ fn assert_srgba_near(color: Color, expected: [f32; 4]) {
     }
 }
 
+fn patch(id: &str, color: Option<[f32; 4]>, opacity: Option<f32>) -> AtomeStylePatch {
+    AtomeStylePatch {
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
+        id: id.to_string(),
+        color,
+        shadow: None,
+        surface_paint: None,
+        backdrop: None,
+        selected: None,
+        opacity,
+        playback_progress: None,
+        filters: None,
+        effects: None,
+        transition: None,
+        procedural: None,
+        progress_ring: None,
+    }
+}
+
+// A text drawn into its texture already carries its ink: a colour patch (a theme change) must not tint its sprite,
+// else an orange ink is multiplied by itself and shows red (R-279, user 23 Nov. 2026).
+#[test]
+fn textured_text_colour_patch_keeps_white_sprite_modulation() {
+    let mut world = setup_world();
+    let node = AtomeRenderNode {
+        kind: "text".to_string(),
+        source: None,
+        ..textured_image_node("textured_text")
+    };
+    let entity = apply_spawn(&mut world, node).unwrap();
+    let orange = [243.0 / 255.0, 152.0 / 255.0, 0.0, 1.0];
+    apply_style(&mut world, patch("textured_text", Some(orange), None)).unwrap();
+    assert_srgba_near(
+        world.get::<Sprite>(entity).unwrap().color,
+        [1.0, 1.0, 1.0, 1.0],
+    );
+    assert_eq!(
+        world.get::<AtomeVisualColor>(entity).unwrap().0,
+        [1.0, 1.0, 1.0, 1.0]
+    );
+    apply_style(&mut world, patch("textured_text", None, Some(0.5))).unwrap();
+    assert_srgba_near(
+        world.get::<Sprite>(entity).unwrap().color,
+        [1.0, 1.0, 1.0, 0.5],
+    );
+}
+
 #[test]
 fn textured_image_opacity_patch_keeps_white_sprite_modulation() {
     let mut world = setup_world();
@@ -85,32 +138,7 @@ fn textured_image_opacity_patch_keeps_white_sprite_modulation() {
         [1.0, 1.0, 1.0, 1.0]
     );
 
-    apply_style(
-        &mut world,
-        AtomeStylePatch {
-            corner_radius: None,
-            corner_radii: None,
-            shape_variant: None,
-            star_branches: None,
-            star_inner_radius: None,
-            polygon_sides: None,
-            mask: None,
-            id: "textured_image".to_string(),
-            color: None,
-            shadow: None,
-            surface_paint: None,
-            backdrop: None,
-            selected: None,
-            opacity: Some(0.42),
-            playback_progress: None,
-            filters: None,
-            effects: None,
-            transition: None,
-            procedural: None,
-            progress_ring: None,
-        },
-    )
-    .unwrap();
+    apply_style(&mut world, patch("textured_image", None, Some(0.42))).unwrap();
 
     assert_srgba_near(
         world.get::<Sprite>(entity).unwrap().color,

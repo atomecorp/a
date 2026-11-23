@@ -75,16 +75,14 @@ pub struct ScrollChainLink {
     pub clip: Option<ScrollClip>,
 }
 
-/// What a record is to its list: content moves with it; the thumb runs along its track; an edge's fade
-/// shows while that edge hides content.
+/// What a record is to its list: content moves with it; the thumb runs along its track. A list's edges fade
+/// by its clip's mask (`edge_fades`), never by a record.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ScrollRecordRole {
     #[default]
     Content,
     Thumb,
-    FadeTop,
-    FadeBottom,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -94,7 +92,7 @@ pub struct ScrollRecordSpec {
     pub opacity: f32,
     #[serde(default)]
     pub role: ScrollRecordRole,
-    /// The list a thumb or a fade belongs to.
+    /// The list a thumb belongs to.
     #[serde(default)]
     pub area: Option<String>,
     pub chain: Vec<ScrollChainLink>,
@@ -478,7 +476,7 @@ pub(crate) fn present_record(
             clip.intersect(&link_clip.moved(clip_dy));
         }
     }
-    let mut opacity = spec.opacity;
+    let opacity = spec.opacity;
     let mut position = base.position;
     match spec.role {
         ScrollRecordRole::Content => position[1] += dy,
@@ -487,19 +485,6 @@ pub(crate) fn present_record(
             let max = area.motion.max().max(f64::EPSILON);
             let progress = (area.motion.offset() - described(&area.spec.id)?) / max;
             position[1] += dy + (area.spec.thumb_travel * progress) as f32;
-        }
-        ScrollRecordRole::FadeTop | ScrollRecordRole::FadeBottom => {
-            let area = areas.get(spec.area.as_ref()?)?;
-            let (offset, max) = (area.motion.offset(), area.motion.max());
-            let hides = if spec.role == ScrollRecordRole::FadeTop {
-                offset > EDGE_EPSILON_PX
-            } else {
-                offset < max - EDGE_EPSILON_PX
-            };
-            position[1] += dy;
-            if !(max > 0.0 && hides) {
-                opacity = 0.0;
-            }
         }
     }
     let mut pose = base.clone();

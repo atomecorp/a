@@ -324,12 +324,15 @@ test('BevyUI main menu marks each palette group with its folded corner and famil
         previousIds: pressedIds
     });
     assert.equal(closedIds.every((id) => expandedIds.includes(id)), true);
-    // The open parent keeps its own records (its state is a sunk translation, not a new shell paint).
+    // The open parent keeps its own records (its state is a sunk translation, not a new shell paint); the tool and what
+    // it opened gain their one outline, the tool tether (R-274, AGENTS.md rule 15): its fills (no separator since 23 Nov. 2026).
+    const prefix = '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_';
     assert.deepEqual(
         expandedIds.filter((id) => !closedIds.includes(id)),
-        ['photo', 'import'].flatMap((key) => ['background', 'label_text', 'icon_image'].map((part) => (
-            `__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_capture__${key}_${part}`))),
-        'only the two new palette controls may spawn'
+        [...[0, 1, 2].map((index) => `${prefix}tether_capture_0_fill_${index}`),
+            ...['photo', 'import'].flatMap((key) => ['background', 'label_text', 'icon_image'].map((part) => (
+                `${prefix}tool_capture__${key}_${part}`)))],
+        'only the two new palette controls and their tether may spawn'
     );
     const openingBatches = compositorCalls.filter((call) => Array.isArray(call.ops));
     const openingOps = openingBatches.flatMap((call) => call.ops);
@@ -377,8 +380,8 @@ test('BevyUI main menu marks each palette group with its folded corner and famil
     assert.equal(closingBatches.length, 1, 'palette closing must stay one atomic renderer batch');
     assert.equal(
         closingOps.filter((operation) => operation.type === 'despawn').length,
-        6,
-        'closing removes the two palette controls'
+        10,
+        'closing removes the two palette controls and their tether'
     );
     assert.equal(closingOps.some((operation) => String(operation.id || operation.payload?.id || '').includes('__eve_dashboard_sentinel')), false);
     assert.equal(restoredState.projection?.render_result?.direct_prefix, true);

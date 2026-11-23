@@ -20,11 +20,13 @@ extension WebViewManager {
     static func publishSafeAreaViewport(for webView: WKWebView) {
         guard webView.bounds.width > 0, webView.bounds.height > 0 else { return }
         let insets = webView.safeAreaInsets
-        let viewport: [String: Any] = [
+        var viewport: [String: Any] = [
             "width": Double(webView.bounds.width), "height": Double(webView.bounds.height),
             "safeAreaInsets": ["top": Double(insets.top), "right": Double(insets.right),
                                "bottom": Double(insets.bottom), "left": Double(insets.left)]
         ]
+        // The screen's density at zoom 1 (R-280): eVe zooms the page so a px is the iPhone's everywhere.
+        if let density = DisplayDensity.cssPxPerMillimetre() { viewport["cssPxPerMm"] = density }
         guard let payload = jsonLiteral(viewport) else {
             shared.log.error("Unable to serialize native safe-area viewport")
             return

@@ -106,7 +106,7 @@ test('the capture palette keeps only its capture sources and Actions while the r
     assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'midi'\];/);
 });
 
-test('the permanent bar is the five intents; mode, activity, view, help and contact stay declared', async () => {
+test('the permanent bar is the four intents; mode, activity, view, help and contact stay declared', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
@@ -132,7 +132,8 @@ test('the permanent bar is the five intents; mode, activity, view, help and cont
     });
     // 2026-09-29 : `mode` et `activity` quittent la barre permanente ; 2026-11-21 :
     // `view` (rangee dans Utilitaires du Mystic), `help` et `contact` la quittent aussi.
-    assert.deepEqual(content.toolbox.children, ['capture', 'create', 'find', 'communicate', 'calendar']);
+    // 2026-11-22 (R-264): no Find tool any more; the assistant, touched, unfolds her field with its search toggle.
+    assert.deepEqual(content.toolbox.children, ['capture', 'create', 'communicate', 'calendar']);
     for (const key of ['mode', 'activity', 'view', 'help', 'contact']) {
         assert.ok(content[key], `${key} reste un outil declare, hors barre permanente`);
         assert.equal(content.toolbox.children.includes(key), false, `${key} ne reside plus dans la barre`);

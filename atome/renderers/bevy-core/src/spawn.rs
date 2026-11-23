@@ -33,7 +33,9 @@ fn white_with_opacity(opacity: f32) -> Color {
     color_from_rgba([1.0, 1.0, 1.0, normalize_opacity(opacity)])
 }
 
-fn texture_owns_sprite_color(kind: &str, has_texture: bool) -> bool {
+/// A text, image or waveform drawn into its texture carries its own colours: its sprite stays white (a tint would
+/// multiply the painted ink by itself, an orange text turning red).
+pub(crate) fn texture_owns_sprite_color(kind: &str, has_texture: bool) -> bool {
     has_texture && matches!(kind, "image" | "text" | "audio_waveform")
 }
 

@@ -1,8 +1,8 @@
-use tauri::{command, AppHandle, Runtime};
+use tauri::{AppHandle, Runtime, command};
 
-use crate::models::*;
 use crate::Result;
 use crate::SttExt;
+use crate::models::*;
 
 /// Prepare the local recognition model without opening the microphone.
 #[command]
@@ -12,7 +12,7 @@ pub(crate) async fn prepare_model<R: Runtime>(
 ) -> Result<()> {
     #[cfg(desktop)]
     {
-        return app.stt().prepare_model(language.as_deref());
+        app.stt().prepare_model(language.as_deref())
     }
     #[cfg(mobile)]
     {

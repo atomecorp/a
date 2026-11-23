@@ -10,6 +10,13 @@ import { createRuntimeHarness, findNode, waitFrame } from './bevy_ui_main_menu_t
 import { eveT } from '../../eVe/i18n/i18n.js';
 import { restoreProjectWorkModeValue } from '../../eVe/domains/rendering/project_work_mode_state.js';
 
+// The project's view as the menu reads it (project_view_mode_state.js), set by the Expert toolbar test without mounting
+// its surfaces; every other test reads the Natural view, the getter's own default.
+const viewState = vi.hoisted(() => ({ view: 'natural' }));
+vi.mock('../../eVe/domains/rendering/project_view_mode_state.js', async (original) => ({
+    ...(await original()), getProjectViewMode: () => viewState.view
+}));
+
 const ensureString = (value, fallback = '') => {
     const normalized = String(value == null ? '' : value).trim();
     return normalized || fallback;
@@ -105,9 +112,12 @@ describe('User tool canonical command', () => {
         h.window.__eveProfilePreferences = { visual: { masteryLevel: 'advanced' } };
         try {
             await h.runtime.showFully();
-            const expected = ['capture', 'create', 'find', 'communicate', 'calendar'];
+            // No Find since R-264; the project's Lecture (`transport`) lies right after rec. in the Timeline, Cells, Mix and
+            // Natural views, never in the List nor the Matrix (rule 13, R-273); the List adds « Réalig » last (R-010).
+            const expected = ['capture', 'create', 'communicate', 'calendar'];
+            const laid = (view, keys) => (['natural', 'mix', 'timeline'].includes(view) ? [keys[0], 'transport', ...keys.slice(1)]
+                : view === 'list' ? [...keys, 'realign'] : keys);
             // In a project the band keeps Organize beside the Atom (its way back to the Dashboard, rule 13).
-            expect(h.runtime.measure().itemCount).toBe(expected.length + 2);
             expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(expect.arrayContaining(expected));
             expect(h.runtime.measure().treeMounted).toBe(true);
             expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);
@@ -115,11 +125,13 @@ describe('User tool canonical command', () => {
             expect(content.contact.longPressActive).toBeUndefined();
             for (const view of ['natural', 'list', 'table', 'mix', 'timeline']) {
                 h.window.__currentProject = { id: 'expert-toolbar', properties: { view_mode: view } };
+                viewState.view = view;
+                h.window.dispatchEvent(new h.window.CustomEvent('eve:project-view-mode-changed', { detail: { project_id: 'expert-toolbar', mode: view } }));
                 for (const mode of ['edit', 'consultation', 'performance']) {
                     restoreProjectWorkModeValue('expert-toolbar', mode, { windowRef: h.window });
                     await waitFrame();
                     expect(h.runtime.measure().workContext).toBe(mode);
-                    expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(['atome', 'organize', ...expected]);
+                    expect(h.runtime.state.lastTree.items.map(item => item.key), `${view}/${mode}`).toEqual(['atome', 'organize', ...laid(view, expected)]);
                     for (const level of ['advanced', 'beginner', 'advanced']) {
                         const preferences = { visual: { masteryLevel: level } };
                         h.window.__eveProfilePreferences = preferences;
@@ -127,7 +139,7 @@ describe('User tool canonical command', () => {
                             detail: { preferences }
                         }));
                         // A beginner keeps every root of context_menus.json `main` except Calendar (intermediate).
-                        const keys = ['atome', 'organize', ...expected.filter(key => level !== 'beginner' || key !== 'calendar')];
+                        const keys = ['atome', 'organize', ...laid(view, expected.filter(key => level !== 'beginner' || key !== 'calendar'))];
                         expect(h.runtime.state.lastTree.items.map(item => item.key), `${view}/${mode}/${level}`).toEqual(keys);
                         expect(h.runtime.measure().itemCount).toBe(keys.length);
                         expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);
@@ -136,6 +148,7 @@ describe('User tool canonical command', () => {
             }
         } finally {
             restoreProjectWorkModeValue('expert-toolbar', 'edit', { windowRef: h.window });
+            viewState.view = 'natural';
             h.runtime.destroy(); h.restore(); h.dom.window.close();
         }
     });
@@ -344,15 +357,15 @@ describe('User ribbon countdown gesture lifetime', () => {
         vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'performance'] });
         const complete = vi.fn(async () => ({ ok: true }));
         let h;
-        // The User command left the ribbon's roots (21 Nov. 2026); a person lays it back from Trouver › Outils.
-        // Its slot here is a root's, carrying the same command, so the countdown runs on the real ribbon.
-        const content = { toolbox: { children: ['find'] }, find: { atome_tool: true,
+        // The User command left the ribbon's roots (21 Nov. 2026). Its slot here is a root's (`capture`, Find having
+        // left the roots too, R-264), carrying the same command, so the countdown runs on the real ribbon.
+        const content = { toolbox: { children: ['capture'] }, capture: { atome_tool: true,
             label: 'User', icon: 'contact', tool_id: 'ui.contact.panel', long_press_action: 'pointer.long' } };
         h = createRuntimeHarness({ content, onInvoke: () => h.runtime.startToolCountdown({ toolId: 'ui.contact.panel', complete }) });
         h.window.eveBevyUiRuntime.updateTreeMotion = vi.fn();
         try {
             await h.runtime.showFully();
-            const tool = () => findNode(h.calls.filter(call => call.payload?.tree).at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_find');
+            const tool = () => findNode(h.calls.filter(call => call.payload?.tree).at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture');
             tool().on.press({ x: 20, y: 20 });
             const pending = tool().on.long_press();
             await vi.advanceTimersByTimeAsync(elapsed);

@@ -46,6 +46,8 @@ import { SENSORS_ASSISTANT_INSTRUCTIONS, SENSORS_COMMANDS, validateSensorsInput 
 import { BODY_DATA_ASSISTANT_INSTRUCTIONS, BODY_DATA_COMMANDS, validateBodyDataInput } from '../health/body_data_contracts.js';
 import { SITE_ASSISTANT_INSTRUCTIONS, SITE_COMMANDS, SITE_CONFIRMED_COMMANDS, validateSiteInput } from '../site/contracts.js';
 import { QR_ASSISTANT_INSTRUCTIONS, QR_COMMANDS, validateQrInput } from '../qr/contracts.js';
+import { VISUAL_THEME_ASSISTANT_INSTRUCTIONS, VISUAL_THEME_COMMANDS, validateVisualThemeInput } from '../visual_theme/contracts.js';
+import { WALLPAPER_ASSISTANT_INSTRUCTIONS, WALLPAPER_COMMANDS, validateWallpaperInput } from '../wallpaper/contracts.js';
 import { INTERACTIONS_ASSISTANT_INSTRUCTIONS, INTERACTIONS_COMMANDS, validateInteractionsInput } from '../interactions/contracts.js';
 import { PUBLISH_ASSISTANT_INSTRUCTIONS, PUBLISH_COMMANDS, PUBLISH_CONFIRMED_COMMANDS, validatePublishInput } from '../publish/contracts.js';
 import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS, validateForumInput } from '../forum/contracts.js';
@@ -192,6 +194,12 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         preload: ['site.publish'] },
     { id: 'qr', commands: QR_COMMANDS, validate: validateQrInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: QR_ASSISTANT_INSTRUCTIONS, preload: ['qr.open'] },
+    // The system's theme (R-279): Settings › Visual › Theme, by voice — the theme chosen, its colours, a new one.
+    { id: 'visual_theme', commands: VISUAL_THEME_COMMANDS, validate: validateVisualThemeInput, noClient: 'WRITE_FAILED',
+        instructions: VISUAL_THEME_ASSISTANT_INSTRUCTIONS, preload: ['visual_theme.set'] },
+    // eVe's own wallpaper back (Settings › Visual › Wallpaper), by voice.
+    { id: 'wallpaper', commands: WALLPAPER_COMMANDS, validate: validateWallpaperInput, noClient: 'WRITE_FAILED',
+        instructions: WALLPAPER_ASSISTANT_INSTRUCTIONS, preload: ['wallpaper.restore_default'] },
     { id: 'interactions', commands: INTERACTIONS_COMMANDS, validate: validateInteractionsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: INTERACTIONS_ASSISTANT_INSTRUCTIONS, preload: ['interactions.create'] },
     // Sending a session to people and withdrawing a contribution are the user's to confirm.
