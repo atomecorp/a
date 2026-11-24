@@ -60,6 +60,21 @@ test('moving a Scene column moves its content with it, to the frame', () => {
     assert.deepEqual(frames(moved).sort(), [['c~sA', 3 * RATE, RATE, 0], ['c~sB', 0, RATE, RATE]].sort());
 });
 
+test('moving a Scene across a gap: the gap stays after its slot and its content stays in it (R-295, TIM-07)', () => {
+    let timeline = createTimeline({ timeline_id: 'tl', project_id: 'p', owner_atome_id: 'm', initial_section_id: 's', initial_track_id: 't' });
+    timeline = updateSection(timeline, { section_id: 's', duration_frames: 10 * RATE });
+    timeline = addClip(timeline, {
+        clip_id: 'c', track_id: 't', kind: 'audio', source: { type: 'atome', atome_id: 'a' },
+        timeline: { start_seconds: 1, duration_seconds: 3, source_in_seconds: 0, source_out_seconds: 3 },
+        next_empty_track_id: 't2', next_empty_track_name: 'Piste 2'
+    });
+    timeline = addScene(timeline, { scene_id: 'A', name: 'A', start_frame: 0, duration_frames: 2 * RATE });
+    timeline = addScene(timeline, { scene_id: 'B', name: 'B', start_frame: 3 * RATE, duration_frames: 2 * RATE });
+    const moved = moveScene(timeline, { scene_id: 'B', index: 0 });
+    assert.deepEqual(moved.scenes.map((scene) => [scene.scene_id, scene.start_frame]).sort(), [['A', 3 * RATE], ['B', 0]]);
+    assert.deepEqual(frames(moved).sort(), [['c~sA', 4 * RATE, RATE, 0], [`c~g${2 * RATE}`, 2 * RATE, RATE, RATE], ['c~sB', 0, RATE, 2 * RATE]].sort());
+});
+
 test('session: scene and cell operations are durable, reachable by their verbs', async () => {
     const events = [];
     const session = createMoleculeSession({ timeline: fixture(), eventSink: { append: async (event) => { events.push(event); return event; } } });

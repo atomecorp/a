@@ -72,6 +72,30 @@ pub fn waveform_peaks(channels: &Array, max_peaks: u32) -> Result<Vec<f32>, JsVa
     ))
 }
 
+/// A sound file's waveform, decoded by the engine's own decoder (lib.rs
+/// `decode_sound`): `{ peaks: Float32Array, durationSeconds }`, or the decoder's
+/// refusal — a sound the engine cannot play shows no waveform either.
+#[wasm_bindgen(js_name = waveformOfSound)]
+pub fn waveform_of_sound(data: &[u8], max_peaks: u32) -> Result<JsValue, JsValue> {
+    let sound = crate::decode_sound(data).map_err(|error| JsValue::from_str(&error))?;
+    let frames = &sound.frames;
+    let peaks = peaks::frame_peaks(frames.len(), max_peaks as usize, |index| {
+        frames[index].left.abs().max(frames[index].right.abs())
+    });
+    let out = Object::new();
+    Reflect::set(
+        &out,
+        &"peaks".into(),
+        &Float32Array::from(peaks.as_slice()),
+    )?;
+    Reflect::set(
+        &out,
+        &"durationSeconds".into(),
+        &(sound.frames.len() as f64 / f64::from(sound.sample_rate)).into(),
+    )?;
+    Ok(out.into())
+}
+
 #[wasm_bindgen(js_name = detectOnsets)]
 pub fn detect_onsets(
     channels: &Array,

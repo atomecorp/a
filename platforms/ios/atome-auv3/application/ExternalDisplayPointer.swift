@@ -23,8 +23,9 @@ import WebKit
 /// An iPad (R-212, 20 Nov. 2026) has a system pointer of its own, mouse or trackpad, and hands the app its moves and its
 /// buttons; it stays on the iPad's screen (the screen's scene takes no input). The same crossing applies: on the iPad the
 /// system's pointer works alone; past the edge this pointer works on the screen, the system's one, held at the iPad's
-/// edge, hidden by the shield, which takes its clicks (no hover reaches the iPad's page under it). A button reaching the
-/// screen's page twice (the mouse's button, the shield's tap) is pressed once.
+/// edge, locked (ExternalDisplayPointerHold.swift: unlocked, pinned at the edge, it hands the app no move any more and the
+/// pointer froze on the screen, user 24 Nov. 2026), else hidden by the shield, which takes its clicks. A button reaching
+/// the screen's page twice (the mouse's button, the shield's tap) is pressed once.
 final class ExternalDisplayPointer {
     static let shared = ExternalDisplayPointer()
 
@@ -40,6 +41,7 @@ final class ExternalDisplayPointer {
     private var side: Side = .device {
         // A button still down is released on the side the pointer leaves.
         willSet { if newValue != side { releaseButtons() } }
+        didSet { holdSystemPointer() }
     }
     private var point = CGPoint(x: 40, y: 120)
     private var displayEdge: UIRectEdge?
@@ -48,7 +50,7 @@ final class ExternalDisplayPointer {
     private var cursors: [Side: CAShapeLayer] = [:]
     private var pendingMove = false
     private var frame: CADisplayLink?
-    private var mice = 0
+    private var mice = 0 { didSet { holdSystemPointer() } }
     private var started = false
     /// The system's pointer (AssistiveTouch) seen over the device's page: it works there alone.
     private var systemPointer = false
@@ -65,6 +67,9 @@ final class ExternalDisplayPointer {
         active: { [weak self] point in self?.side == .display && self?.trackpad == nil && self?.underSystemPointer(point) == true },
         press: { [weak self] pressed in self?.shieldPress(pressed) }
     )
+
+    /// An iPad's pointer is locked while a mouse drives this pointer on the screen (ExternalDisplayPointerHold.swift).
+    private func holdSystemPointer() { ExternalDisplayPointerLock.shared.want(side == .display && mice > 0) }
 
     /// A tap of the system's pointer while this pointer is on the screen: its click there.
     private func shieldPress(_ pressed: Bool) {
@@ -144,6 +149,10 @@ final class ExternalDisplayPointer {
         case "screen": tellScreen()
         case "trackpad":
             if message["open"] as? Bool == true { openTrackpad(holes: Self.holes(message["holes"])) } else { closeTrackpad(tellPage: false) }
+        // Extended (R-212, external_display_mode.js): the screen goes on past the device's right edge, so that edge leads
+        // to it; mirror leaves the side to the first push.
+        case "screen-edge":
+            if message["edge"] as? String == "right" { displayEdge = .right }
         default: break
         }
     }
@@ -466,43 +475,4 @@ final class ExternalDisplayPointer {
         default: return "bottom"
         }
     }
-}
-
-/// Over the device's page while the pointer is on the connected screen: the taps of the system's pointer (the mouse's
-/// buttons, under AssistiveTouch) become the pointer's clicks there. Transparent to every other touch: a finger on the
-/// device keeps its page (user, 19 Nov. 2026: the Trackpad's case « ça clique sur le moniteur à la place »).
-/// While the pointer works on the screen, the system's pointer left on the device (held at its edge, where its taps are
-/// the clicks) is hidden there (user, 20 Nov. 2026: « un pointeur circulaire qui continue de pointer sur l'écran du
-/// téléphone »): the shield is the view under it then, and asks iOS for no pointer over it.
-private final class DevicePageShield: UIView, UIPointerInteractionDelegate {
-    private let active: (CGPoint) -> Bool
-    private let press: (Bool) -> Void
-
-    init(active: @escaping (CGPoint) -> Bool, press: @escaping (Bool) -> Void) {
-        self.active = active
-        self.press = press
-        super.init(frame: .zero)
-        backgroundColor = .clear
-        isMultipleTouchEnabled = false
-        addInteraction(UIPointerInteraction(delegate: self))
-    }
-
-    func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
-        .hidden()
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        bounds.contains(point) && active(convert(point, to: superview)) ? self : nil
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        print("[pointer] shielded touch, type \(touches.first?.type.rawValue ?? -1)")
-        press(true)
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { press(false) }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { press(false) }
 }

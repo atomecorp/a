@@ -60,13 +60,13 @@ const reached = (pid, view) => app(page, `const m = await import('/eVe/domains/r
     const since = () => Math.round(performance.now() - (window.__viewsProbeInput || started));
     return new Promise((resolve) => { const step = () => (ok() ? resolve({ ok: true, ms: since() }) : performance.now() - started > 8000 ? resolve({ ok: false, ms: since() }) : requestAnimationFrame(step)); step(); });`,
 { pid, mode: view.mode, layout: view.layout });
-// The views lie in the rail's Multitrack palette (R-253; Timeline, Cells, Mix since R-258): opened, then its choice.
+// The views lie in the band's Vue (user 23 Nov. 2026), its choices laid in the rail (R-294): opened, then its choice.
 const switchTo = async (pid, view) => {
     const since = Date.now();
-    const opener = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack' }, { timeoutMs: 4000 });
-    if (!opener) return { ok: false, error: 'rail_multitrack_missing' };
+    const opener = await awaitBevyUiNodeTarget(page, { nodeId: 'eve_bevy_ui_main_menu_tool_view' }, { timeoutMs: 4000 });
+    if (!opener) return { ok: false, error: 'band_view_missing' };
     await clickCanvasTarget(page, opener);
-    const target = await awaitBevyUiNodeTarget(page, { nodeId: `atome_contextual_tool_container_multitrack_multitrack_${view.key}` }, { timeoutMs: 4000 });
+    const target = await awaitBevyUiNodeTarget(page, { nodeId: `atome_contextual_tool_main_band_view_${view.key}` }, { timeoutMs: 4000 });
     if (!target) return { ok: false, error: `rail_view_missing:${view.key}` };
     await clickCanvasTarget(page, target);
     const { ok, ms } = await reached(pid, view);

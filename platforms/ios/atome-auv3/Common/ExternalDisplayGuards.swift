@@ -49,7 +49,7 @@ final class ExternalDisplayRelay: NSObject, WKScriptMessageHandler {
         case "place":
             lastPlace = message
             deliver(message)
-        case "trackpad", "screen":
+        case "trackpad", "screen", "screen-edge":
             NotificationCenter.default.post(name: .externalDisplayPageMessage, object: nil, userInfo: message)
         case "change", "frame", "known", "scope", "scope-end", "tool-result", "native-result", "native-push", "molecule-result":
             // An Atome this page committed, or a frame of its gesture, for the screen's page to show at once

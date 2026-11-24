@@ -6,6 +6,7 @@ import {
     ensureRuntimeCommandBus,
     getOptionalVoiceApi
 } from './mcp_bridges.js';
+import { BRICKS_TEMPLATE, isBricksUri } from './mcp_bricks.js';
 
 // The navigation tree of eVe as the registry places it (architecture §4-§5): `eve://navigation/{style}/{level}/{platform}`.
 const NAVIGATION_URI = /^eve:\/\/navigation\/(eve|eve_basic)\/(beginner|intermediate|advanced)\/([a-z_]+)$/;
@@ -29,10 +30,10 @@ export const MCP_RESOURCE_TEMPLATES = Object.freeze([{
     name: 'eVe navigation tree',
     description: 'The rubrics, levels and leaves the person reaches from the home, for a style (eve, eve_basic) and a level (beginner, intermediate, advanced).',
     mimeType: 'application/json'
-}]);
+}, BRICKS_TEMPLATE]);
 
 /** Whether a uri names a readable resource: a listed one, or an instance of a template. */
-export const isMcpResourceUri = uri => NAVIGATION_URI.test(String(uri || '')) || listMcpResourceEntries().some(entry => entry.uri === uri);
+export const isMcpResourceUri = uri => NAVIGATION_URI.test(String(uri || '')) || isBricksUri(uri) || listMcpResourceEntries().some(entry => entry.uri === uri);
 
 export function listMcpResourceEntries() {
     const resources = [{
@@ -47,6 +48,12 @@ export function listMcpResourceEntries() {
         description: 'The navigation of eVe Pro at the advanced level on the Web, as the registry places it.',
         mime_type: 'application/json',
         source: 'registry'
+    }, {
+        uri: 'eve://bricks',
+        name: 'eVe bricks',
+        description: 'The families of tools; open one (eve://bricks/{family}) for its bricks, a brick for its input schema.',
+        mime_type: 'application/json',
+        source: 'mcp'
     }];
     try {
         ensureRuntimeCommandBus();

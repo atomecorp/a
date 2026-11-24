@@ -68,6 +68,8 @@ serde_json = "1"
 # cpal 0.18 and Symphonia 0.6, so the engines use those same versions.
 kira = { version = "0.12.6", default-features = false }
 symphonia = { version = "0.6.1", default-features = false }
+# Opus (Ogg, WebM), which Symphonia does not decode: libopus 1.6 ported to Rust, no FFI, the same on the Web.
+opus-rs = "0.1.42"
 cpal = "0.18"
 hound = "3"
 ringbuf = "0.5.3"

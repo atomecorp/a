@@ -22,28 +22,11 @@ export const runMoleculeEnduranceAcceptance = async ({ page, project, fixture, r
         await check('the real Molecule UI remains stable through the configured playback and Record endurance', async () => {
             const openView = async mode => {
                 const rail = 'eve_bevy_panel_atome_contextual_edit';
-                const current = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode());
-                if (current === 'timeline') {
-                    // A selected clip has its own rail. Its track header restores the level's view tools.
-                    const header = await awaitBevyUiNodeTarget(page, { nodePrefix: 'project_view_timeline_header_', treeId: 'eve_bevy_ui_project_view' });
-                    assert(header, 'endurance_track_header_missing');
-                    await clickCanvasTarget(page, header);
-                }
-                if (mode === 'list') {
-                    await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view'));
-                    await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view_list'));
-                } else {
-                    // Multitrack opens the multitrack view used last (R-243); the views row then chooses among them.
-                    if (current !== 'timeline' && current !== 'mix') {
-                        const multitrack = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack', treeId: rail });
-                        assert(multitrack, 'endurance_multitrack_missing');
-                        await clickCanvasTarget(page, multitrack);
-                    }
-                    const row = current === 'mix' ? 'project_view_mix_row' : 'project_view_timeline_row';
-                    const choice = await awaitBevyUiNodeTarget(page, { nodeId: `${row}_multitrack_${mode}`, treeId: 'eve_bevy_ui_project_view' });
-                    assert(choice, `endurance_view_choice_missing:${mode}`);
-                    await clickCanvasTarget(page, choice);
-                }
+                // The band's Vue lays every view in the rail, whatever the view shown (user 23 Nov. 2026, R-294).
+                await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view'));
+                const choice = await awaitBevyUiNodeTarget(page, { nodeId: `atome_contextual_tool_main_band_view_${mode}`, treeId: rail });
+                assert(choice, `endurance_view_choice_missing:${mode}`);
+                await clickCanvasTarget(page, choice);
                 await waitFor(page, async expected => {
                     const actual = (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode();
                     const surface = (await import('/eVe/domains/rendering/project_view_surface_runtime.js')).readProjectViewSurfaceState();

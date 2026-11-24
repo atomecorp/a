@@ -45,6 +45,27 @@ pub(crate) fn register(device: Sender<()>, render: Thread) {
 }
 
 static STAY_AWAKE: AtomicBool = AtomicBool::new(false);
+// Owners holding the output awake (a surface played by touch: its first touch after a silence sounds at once,
+// never behind the device stream's restart; R-307).
+static HOLDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+// `owner` holds the output awake (`on`) or lets it go; held, it wakes now and never rests.
+pub fn hold(owner: &str, on: bool) {
+    let held = HOLDS.lock().map(|mut holds| {
+        holds.retain(|held| held != owner);
+        if on {
+            holds.push(owner.to_string());
+        }
+        !holds.is_empty()
+    });
+    if matches!(held, Ok(true)) {
+        note_activity();
+    }
+}
+
+fn is_held() -> bool {
+    HOLDS.lock().is_ok_and(|holds| !holds.is_empty())
+}
 
 // A host-driven output (AUv3) never rests: the host pulls every quantum.
 pub(crate) fn stay_awake() {
@@ -74,6 +95,7 @@ pub fn note_activity() -> bool {
 // Called by the device thread: whether the output should rest now.
 pub(crate) fn should_rest() -> bool {
     if STAY_AWAKE.load(Ordering::Acquire)
+        || is_held()
         || !is_active()
         || now_ms().saturating_sub(LAST_ACTIVITY_MS.load(Ordering::Acquire)) < IDLE_SECONDS * 1000
     {
@@ -98,5 +120,22 @@ pub(crate) fn render_wait() -> Option<Duration> {
         Some(Duration::from_millis(1))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_held_output_never_rests_until_every_owner_lets_go() {
+        hold("surface_a", true);
+        hold("surface_b", true);
+        LAST_ACTIVITY_MS.store(0, Ordering::Release);
+        assert!(!should_rest(), "held, the output stays awake");
+        hold("surface_a", false);
+        assert!(is_held(), "another owner still holds it");
+        hold("surface_b", false);
+        assert!(!is_held(), "every owner gone, it may rest again");
     }
 }

@@ -139,7 +139,6 @@ const DISCIPLINES = [
 ];
 
 export const TRAINING_DISCIPLINES = deep(DISCIPLINES.map(discipline => ({ when: {}, sourced: [], sources_when: {}, flags: {}, adaptations: [], exercises: [], ...discipline })));
-export const TRAINING_DISCIPLINE_IDS = Object.freeze(TRAINING_DISCIPLINES.map(discipline => discipline.id));
 
 const fail = code => Object.assign(new Error(code), { code });
 const matches = (condition, context) => Object.entries(condition || {}).every(([key, values]) => values.includes(context?.[key]));
@@ -155,8 +154,6 @@ const DISCIPLINE_WORKOUTS = Object.freeze({ walk: 'walking', run: 'running', str
     indoor_cardio: 'mixed_cardio', fitness: 'functional', mobility: 'flexibility', yoga_pilates: 'yoga', balance: 'flexibility', outdoor: 'hiking',
     dance: 'dance', combat: 'martial_arts' });
 export const trainingDisciplineWorkout = id => DISCIPLINE_WORKOUTS[id] || 'other';
-// The discipline a catalogue exercise belongs to (a strength or core exercise to Musculation, a stretch to Mobilité…).
-export const trainingDisciplineOfExercise = exerciseId => TRAINING_DISCIPLINES.find(discipline => discipline.exercises.includes(exerciseId))?.id || null;
 
 /** A record's matrix values, each one of its discipline's options (an option left out stays unknown). */
 export const trainingDisciplineContext = (discipline, context = {}) => {

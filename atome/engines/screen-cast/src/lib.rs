@@ -7,12 +7,14 @@
 //! - An AirPlay receiver (an Apple TV) plays it (`airplay`) once paired: a PIN shown on the television, typed once, gives the
 //!   long-term keys kept for that screen.
 //!
-//! Mirroring the whole view (R-212's second view) is the system's own on Apple devices (Control Center); this crate
-//! never starts it.
+//! Mirroring the whole screen (R-212's second view) is the system's own on Apple devices (Control Center); this crate
+//! never starts it. It does stream one view as live HLS (`hls`): the page encodes the view, this crate cuts it into
+//! fragmented MP4 segments, and the screen plays the stream as an ordinary video URL.
 
 pub mod airplay;
 pub mod cast;
 pub mod discovery;
+pub mod hls;
 mod tls;
 
 use serde::{Deserialize, Serialize};
@@ -50,6 +52,9 @@ pub struct MediaToSend {
     pub title: String,
     #[serde(default)]
     pub start_seconds: f64,
+    /// A live HLS stream of fMP4 segments (`hls`): no end, nothing to seek.
+    #[serde(default)]
+    pub live: bool,
 }
 
 /// Why a screen did not take a media.

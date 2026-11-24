@@ -18,6 +18,10 @@ impl Record {
         runtime: &SyncRuntime,
         message: &JsonValue,
     ) -> Result<Option<String>, String> {
+        // A program never syncs: it acts through an eVe page only (auth/program_scope.rs).
+        if runtime.sessions.names_program(&self.identity, message) {
+            return Ok(None);
+        }
         match runtime
             .sessions
             .resolve_principal(&self.identity, message)?

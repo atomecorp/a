@@ -251,7 +251,7 @@ pub fn apply_history(
         return Ok(failure("history_source_transaction_not_found"));
     }
     if sources.iter().any(|event| {
-        normalized_kind(event) != "delete"
+        !matches!(normalized_kind(event).as_str(), "delete" | "restore")
             && event.get("payload").and_then(|p| p.get("before")).is_none()
     }) {
         return Ok(failure("history_source_transaction_not_invertible"));
@@ -297,11 +297,19 @@ pub fn apply_history(
                 "project_id": project_id, "payload": carried }));
             continue;
         }
-        if normalized_kind(source) == "delete" {
+        // A delete is undone by a restore and a restore (a step brought back into the present, R-317) by a delete;
+        // redone, each is written again as it was.
+        let removal = match normalized_kind(source).as_str() {
+            "delete" => Some(true),
+            "restore" => Some(false),
+            _ => None,
+        };
+        if let Some(removes) = removal {
             if atome_id.is_empty() {
                 continue;
             }
-            events.push(json!({ "id": id, "kind": if redo { "delete" } else { "restore" }, "atome_id": atome_id,
+            let kind = if redo == removes { "delete" } else { "restore" };
+            events.push(json!({ "id": id, "kind": kind, "atome_id": atome_id,
                 "project_id": project_id, "payload": { "source_tx_id": source_tx, "source_event_id": source_id } }));
             continue;
         }

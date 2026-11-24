@@ -37,9 +37,9 @@ mod surface_ops;
 mod teleport_ops;
 mod vault_ops;
 
-use crate::auth::Sessions;
+use crate::auth::{Sessions, program_scope};
 use crate::social::live;
-use crate::vault_router::VaultRouter;
+use crate::vault_router::{self, VaultRouter};
 use axum::extract::ws::{self, WebSocket, WebSocketUpgrade};
 use axum::extract::{FromRequestParts, Request};
 use axum::http::header;
@@ -239,6 +239,49 @@ enum Route {
     Null,
 }
 
+impl Route {
+    // The frame a family answers; none for what no family claims (a `ping`, a log).
+    fn claimed(&self) -> Option<&JsonValue> {
+        match self {
+            Route::Here(frame)
+            | Route::Atome(frame)
+            | Route::GuestAdoption(frame)
+            | Route::Auth(frame)
+            | Route::AuthUpgrade(frame)
+            | Route::File(frame)
+            | Route::Notice(frame)
+            | Route::Contact(frame)
+            | Route::Message(frame)
+            | Route::News(frame)
+            | Route::Share(frame)
+            | Route::Projection(frame)
+            | Route::Provider(frame)
+            | Route::Source(frame)
+            | Route::Surface(frame)
+            | Route::RemoteControl(frame)
+            | Route::Shell(frame) => Some(frame),
+            Route::Unclaimed(_) | Route::Invalid | Route::Null => None,
+        }
+    }
+}
+
+impl Connection {
+    // A program's frame outside its scope (auth/program_scope.rs) is refused before any family reads it.
+    fn program_refusal(&self, routed: &Route) -> Option<JsonValue> {
+        let frame = routed.claimed()?;
+        if program_scope::reachable(frame)
+            || !self.ws_api.sessions.names_program(&self.identity, frame)
+        {
+            return None;
+        }
+        let mut refusal = json!({ "type": "error", "ok": false, "success": false, "error": program_scope::DENIED });
+        if let Some(request_id) = vault_router::js::first(frame, &["requestId", "request_id"]) {
+            refusal["requestId"] = request_id.clone();
+        }
+        Some(refusal)
+    }
+}
+
 // Where a client frame goes, read as Fastify read it (`JSON.parse(message.toString())`): each
 // family by its `type` as its own handler compares it (exact, or trimmed for the chained families).
 fn route(bytes: &[u8]) -> Route {
@@ -343,6 +386,10 @@ async fn join(ws_api: Arc<WsApi>, client: WebSocket, network: String, opening: O
             ws::Message::Close(_) => break,
             _ => continue,
         };
+        if let Some(refusal) = connection.program_refusal(&routed) {
+            connection.reply(refusal).await;
+            continue;
+        }
         let connection = connection.clone();
         // Fastify answered each message as it came, without waiting for the previous one.
         match routed {

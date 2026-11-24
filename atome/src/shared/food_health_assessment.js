@@ -24,9 +24,6 @@
 
 import { foodAllergenTag } from './food_allergen_contract.js';
 
-export const FOOD_HEALTH_VERDICTS = Object.freeze(['good', 'limit', 'avoid']);
-export const FOOD_SELECTION_STATES = Object.freeze(['compliant', 'excluded', 'to_check']);
-
 // The selection policy (todo/etude_nutrition_menus_2026-10-27.md §6.3): versioned data, each rule with
 // what it reads and where that comes from. v1 is provisional (arbitrage 2, 2026-10-28): it only restates
 // the rules eVe already applied to « avoid », in wait of the list established with professionals; the

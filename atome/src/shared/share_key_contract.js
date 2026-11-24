@@ -7,7 +7,6 @@
 
 export const SHARE_KEY_ATOME_TYPE = 'share_key';
 export const SHARE_KEY_FRAME = 'share-key';
-export const SHARE_KEY_ERRORS = Object.freeze(['SHARE_KEY_UNAVAILABLE', 'SHARE_KEY_LOCKED', 'SHARE_KEY_INVALID']);
 /** The record's Atome type (registered in core_atome_types.js): the public half, the private half sealed, never public. */
 export const SHARE_KEY_TYPE = Object.freeze({ type: SHARE_KEY_ATOME_TYPE, kind: 'data_model', traits: ['data'], schema: {
     public_jwk: { type: 'object' }, private: { type: 'object' }, created_at: { type: 'string', maxLength: 40 },

@@ -17,6 +17,10 @@ pub mod automation;
 mod automation_tests;
 #[cfg(feature = "decode")]
 pub mod clip_decode;
+#[cfg(feature = "decode")]
+mod clip_opus;
+#[cfg(all(test, feature = "decode"))]
+mod clip_decode_tests;
 pub mod direct_render;
 pub mod dsp;
 pub mod dsp_module;
@@ -117,7 +121,10 @@ pub struct ModuleReading {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StripLevel {
     pub strip_id: String,
+    // The loudest sample of both channels, then of each (the console's edges, user 23 Nov. 2026, R-285).
     pub peak: f32,
+    pub peak_left: f32,
+    pub peak_right: f32,
     pub rms: f32,
 }
 
@@ -126,7 +133,8 @@ pub struct MixGraph {
     modules: HashMap<String, ModuleEntry>,
     captures: HashMap<String, Arc<CaptureSlot>>,
     meters: HashMap<String, Arc<StripMeter>>,
-    live_inputs: HashMap<String, Arc<LiveInput>>,
+    // By interface and the channels taken from it (R-286).
+    live_inputs: HashMap<(String, Vec<u16>), Arc<LiveInput>>,
     record_taps: HashMap<String, Arc<record_tap::RecordTap>>,
     // Frames a live input's ring holds; its reader keeps the backlog under half.
     live_capacity: usize,
@@ -250,11 +258,12 @@ impl MixGraph {
         Ok(())
     }
 
-    // Live inputs the current program monitors, by device id (the host opens them).
+    // Live inputs the current program monitors, by device id (the host opens them); one device may appear for several
+    // inputs, each taking its own channels (`LiveInput::channels`).
     pub fn live_inputs(&self) -> Vec<(String, Arc<LiveInput>)> {
         self.live_inputs
             .iter()
-            .map(|(device, input)| (device.clone(), input.clone()))
+            .map(|((device, _), input)| (device.clone(), input.clone()))
             .collect()
     }
 
@@ -274,11 +283,13 @@ impl MixGraph {
             .meters
             .iter()
             .map(|(strip_id, meter)| {
-                let (peak, rms) = meter.read();
+                let reading = meter.read();
                 StripLevel {
                     strip_id: strip_id.clone(),
-                    peak,
-                    rms,
+                    peak: reading.left.max(reading.right),
+                    peak_left: reading.left,
+                    peak_right: reading.right,
+                    rms: reading.rms,
                 }
             })
             .collect();

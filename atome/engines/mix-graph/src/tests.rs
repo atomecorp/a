@@ -319,6 +319,21 @@ fn meters_report_each_strip() {
 }
 
 #[test]
+fn meters_report_each_channel() {
+    let mut rig = rig(r#"{"strips":[{"id":"a","output":{"kind":"main"}}]}"#);
+    rig.block(&[("a", Frame::new(0.5, 0.0))]);
+    let levels = rig.graph.levels();
+    assert!((levels[0].peak_left - 0.5).abs() < 1e-4);
+    assert_eq!(levels[0].peak_right, 0.0);
+    assert!((levels[0].peak - 0.5).abs() < 1e-4);
+    // A read empties the peaks: the next block alone is measured.
+    rig.block(&[("a", Frame::new(0.0, 0.25))]);
+    let levels = rig.graph.levels();
+    assert_eq!(levels[0].peak_left, 0.0);
+    assert!((levels[0].peak_right - 0.25).abs() < 1e-4);
+}
+
+#[test]
 fn a_live_input_strip_plays_its_input_not_its_track() {
     let mut rig = rig(
         r#"{"strips":[{"id":"mic","input":{"kind":"live_audio","device_id":"Interface 1"},"output":{"kind":"main"}}]}"#,

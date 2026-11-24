@@ -107,7 +107,7 @@ impl Direct {
 
     fn levels(&mut self) -> usize {
         let levels: Vec<serde_json::Value> = self.graph.levels().into_iter()
-            .map(|level| serde_json::json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
+            .map(|level| serde_json::json!({ "strip_id": level.strip_id, "peak": level.peak, "peak_left": level.peak_left, "peak_right": level.peak_right, "rms": level.rms }))
             .collect();
         self.text = serde_json::Value::Array(levels).to_string();
         self.text.len()

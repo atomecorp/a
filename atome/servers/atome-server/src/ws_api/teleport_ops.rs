@@ -7,7 +7,7 @@
 // (social/surfaces/). The offers awaiting an answer are this server's, as the seats they join.
 use super::projection_ops::response;
 use super::surface_ops::{action_of, failure, identity};
-use super::{Connection, seats};
+use super::{Connection, seats, surface_grant_ops};
 use crate::social::surfaces::{grants, teleport_state};
 use crate::social::{Social, live};
 use crate::vault_router::js;
@@ -135,22 +135,20 @@ async fn offer(
         .map_or_else(|| user.to_string(), js::string);
     let social = &connection.ws_api.social;
     let surfaces = &social.surfaces;
-    if target_user != user {
-        // Receiving and displaying are distinct capabilities, both needed on another's screen.
-        let receive = grants::TELEPORT_RECEIVE;
-        let display = grants::TELEPORT_DISPLAY;
-        let allowed = surfaces
-            .has_capability(&target_user, &target_surface_id, user, receive)
-            .await?
-            && surfaces
-                .has_capability(&target_user, &target_surface_id, user, display)
-                .await?;
-        if !allowed {
-            return refused("teleport_cross_user_not_authorized");
-        }
-    }
     if seats::get(&target_user, &target_surface_id).is_none() {
         return refused("teleport_target_offline");
+    }
+    // Receiving and displaying are distinct capabilities, both needed on another's screen; a
+    // grant for one use is spent by this offer.
+    let both = [grants::TELEPORT_RECEIVE, grants::TELEPORT_DISPLAY];
+    if target_user != user {
+        let gate =
+            surface_grant_ops::gate(connection, &target_user, &target_surface_id, user, &both)
+                .await?;
+        if let Some((error, grant_id)) = gate.refusal() {
+            let fields = json!({ "error": error, "grant_id": grant_id });
+            return Ok(response(KIND, message, false, fields));
+        }
     }
     let Some(properties) = surfaces.properties(user, &atome_id).await? else {
         return refused("teleport_atome_missing");

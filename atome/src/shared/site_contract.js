@@ -71,16 +71,6 @@ export const sitePageSlugs = (pages = []) => {
 // « Aller » (Q6): to a page of the project (its id, stable through a rename) or to an outside http(s) address,
 // in the same tab or a new one.
 export const SITE_GOTO_TOOL_ID = 'site.goto';
-export const normalizeGotoParameters = (input = {}) => {
-    const page = text(input.page_id);
-    if (page) return { page_id: page };
-    const url = text(input.url);
-    if (!url) throw new Error('goto_target_required');
-    let parsed;
-    try { parsed = new URL(url); } catch { throw new Error('goto_url_invalid'); }
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('goto_url_invalid');
-    return { url: parsed.href, new_tab: input.new_tab === true };
-};
 
 // Hosting is included in the subscription (Q15): a reasonable traffic per month by offer, beyond which a site is
 // slowed down and its author warned, never cut nor charged.

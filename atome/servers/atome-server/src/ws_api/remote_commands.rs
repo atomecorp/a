@@ -2,7 +2,7 @@
 // seat", carried by the `remote-control` family (actions `command` and `command-result`). The
 // server runs nothing: it authorizes the pair of seats, forwards the request to the target and
 // hands the target's own answer back; only the seat a command was sent to may answer it.
-use super::{Connection, seats};
+use super::{Connection, seats, surface_grant_ops};
 use crate::social::surfaces::grants;
 use crate::vault_router::js;
 use indexmap::IndexMap;
@@ -57,6 +57,90 @@ struct Pending {
 }
 
 static PENDING: LazyLock<Mutex<IndexMap<String, Pending>>> = LazyLock::new(Mutex::default);
+
+// R-248, the whole view of one account's device followed on another account's seat: asked by
+// `display.follow`, its owner having granted `teleport_display` on that seat, the two seats then
+// trade `display.relay` and `display.unfollow` until either ends it or the leading seat leaves.
+const DISPLAY_FOLLOW: &str = "display.follow";
+const DISPLAY_FOLLOWING: [&str; 2] = ["display.relay", "display.unfollow"];
+
+// (account, seat) of the leader, then of the follower.
+type Follow = ((String, String), (String, String));
+
+static FOLLOWS: LazyLock<Mutex<Vec<Follow>>> = LazyLock::new(Mutex::default);
+
+fn paired(follow: &Follow, a: &(String, String), b: &(String, String)) -> bool {
+    (&follow.0 == a && &follow.1 == b) || (&follow.0 == b && &follow.1 == a)
+}
+
+/// The account of the seat `target` when it follows, or leads, the seat `caller` across accounts and `tool_id` is
+/// one of the follow's own (`display.relay`, `display.unfollow`): neither page then names the other's account.
+/// Otherwise the caller's own.
+fn followed_account(
+    user: &str,
+    caller_surface: &str,
+    target_surface: &str,
+    tool_id: &str,
+) -> String {
+    let caller = (user.to_string(), caller_surface.to_string());
+    let paired = DISPLAY_FOLLOWING
+        .contains(&tool_id)
+        .then(|| {
+            FOLLOWS
+                .lock()
+                .expect("follows")
+                .iter()
+                .find_map(|(leader, follower)| {
+                    if leader == &caller && follower.1 == target_surface {
+                        Some(follower.0.clone())
+                    } else if follower == &caller && leader.1 == target_surface {
+                        Some(leader.0.clone())
+                    } else {
+                        None
+                    }
+                })
+        })
+        .flatten();
+    paired.unwrap_or_else(|| user.to_string())
+}
+
+/// Whether the seat `caller` may run `tool_id` on `target`, another account's seat: open, or
+/// refused (`surface_grant_pending` once its owner was asked).
+async fn cross_gate(
+    connection: &Connection,
+    caller: (String, String),
+    target: (String, String),
+    tool_id: &str,
+) -> Result<surface_grant_ops::Gate, String> {
+    let gate = |capabilities: &'static [&'static str]| {
+        surface_grant_ops::gate(connection, &target.0, &target.1, &caller.0, capabilities)
+    };
+    if tool_id == DISPLAY_FOLLOW {
+        let opened = gate(&[grants::TELEPORT_DISPLAY]).await?;
+        if matches!(opened, surface_grant_ops::Gate::Open) {
+            let mut follows = FOLLOWS.lock().expect("follows");
+            follows.retain(|follow| !paired(follow, &caller, &target));
+            follows.push((caller, target));
+        }
+        return Ok(opened);
+    }
+    if DISPLAY_FOLLOWING.contains(&tool_id) {
+        let mut follows = FOLLOWS.lock().expect("follows");
+        let found = follows
+            .iter()
+            .any(|follow| paired(follow, &caller, &target));
+        if tool_id == "display.unfollow" {
+            follows.retain(|follow| !paired(follow, &caller, &target));
+        }
+        // Inside a follow only: no grant is asked for it.
+        return Ok(if found {
+            surface_grant_ops::Gate::Open
+        } else {
+            surface_grant_ops::Gate::Refused("remote_command_cross_user_not_authorized".into())
+        });
+    }
+    gate(&[grants::REMOTE_COMMAND]).await
+}
 
 fn settle(command_id: &str, outcome: Settled) -> bool {
     let Some(command) = PENDING.lock().expect("commands").shift_remove(command_id) else {
@@ -135,13 +219,16 @@ pub(super) async fn relay(
         Ok(mcp) => mcp,
         Err(error) => return Ok(refused(error)),
     };
-    // Only a program's own seat (its paired key, never an announced platform) speaks MCP.
-    let program_id = mcp
-        .and_then(|_| seats::get(user, &caller_surface))
+    // Only a program's own seat (its paired key, never an announced platform) speaks MCP, and a
+    // program speaks nothing else: a bare `tool_id` would reach the page as an ordinary device's.
+    let program_id = seats::get(user, &caller_surface)
         .and_then(|seat| seat["program_id"].as_str().map(str::to_string))
         .filter(|id| !id.is_empty());
-    if mcp.is_some() && program_id.is_none() {
-        return Ok(refused("remote_command_mcp_not_program"));
+    if mcp.is_some() != program_id.is_some() {
+        return Ok(refused(match program_id {
+            Some(_) => "remote_command_program_mcp_required",
+            None => "remote_command_mcp_not_program",
+        }));
     }
     let tool_id = js::id(message.get("tool_id"));
     let tool_action = js::id(message.get("tool_action"));
@@ -158,8 +245,10 @@ pub(super) async fn relay(
     if bytes(&input) > MAX_INPUT_BYTES {
         return Ok(refused("remote_command_input_too_large"));
     }
-    let target_user = js::first(message, &["target_user_id", "targetUserId"])
-        .map_or_else(|| user.to_string(), js::string);
+    let target_user = match js::first(message, &["target_user_id", "targetUserId"]) {
+        Some(named) => js::string(named),
+        None => followed_account(user, &caller_surface, &target_surface, &tool_id),
+    };
     // A program reaches its own account's devices alone.
     if mcp.is_some() && target_user != user {
         return Ok(refused("remote_command_mcp_not_program"));
@@ -167,14 +256,17 @@ pub(super) async fn relay(
     let Some(target) = seats::get(&target_user, &target_surface) else {
         return Ok(refused("remote_command_target_offline"));
     };
-    // Another account's device only with a grant its owner gave for exactly this capability.
+    // Another account's device only with a grant its owner gave for exactly this capability:
+    // `remote_command`, or `teleport_display` for the whole view (`display.*`).
+    let caller = (user.to_string(), caller_surface.clone());
+    let target_seat = (target_user.clone(), target_surface.clone());
     if target_user != user {
-        let surfaces = &connection.ws_api.social.surfaces;
-        let allowed = surfaces
-            .has_capability(&target_user, &target_surface, user, grants::REMOTE_COMMAND)
-            .await?;
-        if !allowed {
-            return Ok(refused("remote_command_cross_user_not_authorized"));
+        let gate = cross_gate(connection, caller, target_seat, &tool_id).await?;
+        if let Some((error, grant_id)) = gate.refusal() {
+            return Ok(Outcome {
+                error: Some(error.to_string()),
+                fields: json!({ "grant_id": grant_id }),
+            });
         }
     }
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -201,7 +293,9 @@ pub(super) async fn relay(
         json!(tool_action)
     };
     command["input"] = input;
-    command["confirmed"] = json!(message.get("confirmed") == Some(&json!(true)));
+    // A person's yes is never a program's to give: it is asked on the page (mcp_relay_target.js).
+    command["confirmed"] =
+        json!(program_id.is_none() && message.get("confirmed") == Some(&json!(true)));
     command["from_surface_id"] = json!(caller_surface);
     command["from_user_id"] = json!(user);
     if let Some(program_id) = &program_id {
@@ -216,6 +310,7 @@ pub(super) async fn relay(
     if !seats::send(&target_user, &target_surface, command).await {
         settle(&command_id, Err("remote_command_target_offline".into()));
     }
+    let follow_asked = target_user != user && tool_id == DISPLAY_FOLLOW;
     let settled = match tokio::time::timeout(timeout(), &mut answered).await {
         Ok(settled) => settled,
         Err(_) => {
@@ -224,6 +319,15 @@ pub(super) async fn relay(
         }
     }
     .map_err(|_| "remote_command_settle_lost".to_string())?;
+    // A follow the other seat never took is no follow.
+    if follow_asked && settled.is_err() {
+        let (caller, target) = (
+            (user.to_string(), caller_surface.clone()),
+            (target_user.clone(), target_surface.clone()),
+        );
+        let mut follows = FOLLOWS.lock().expect("follows");
+        follows.retain(|follow| !paired(follow, &caller, &target));
+    }
     Ok(match settled {
         Err(error) => Outcome {
             error: Some(error),
@@ -298,4 +402,10 @@ pub(super) fn surface_lost(user: &str, surface_id: &str) {
     for (command_id, error) in ended {
         settle(&command_id, Err(error.into()));
     }
+    // The leading seat gone, its whole view ends; a follower reloads into following and keeps it.
+    let lost = (user.to_string(), surface_id.to_string());
+    FOLLOWS
+        .lock()
+        .expect("follows")
+        .retain(|(leader, _)| leader != &lost);
 }

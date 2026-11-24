@@ -255,6 +255,8 @@ test('Contact-style panels use the shared footer drag and resize handles on desk
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: width, bottom: height, width, height });
     const mounted = [];
     dom.window.eveBevyUiRuntime = {
+        // The runtime's own record of the trees it holds (a panel's tether reads it, bevy_panel_tether.js).
+        state: { trees: new Map() },
         treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }),
         mountTree: async ({ tree }) => { mounted.push(tree); return tree; },
         updateTree: async ({ tree }) => { mounted.push(tree); return tree; },
@@ -318,6 +320,8 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 390, bottom: viewportHeight, width: 390, height: viewportHeight });
     const mounted = [];
     dom.window.eveBevyUiRuntime = {
+        // The runtime's own record of the trees it holds (a panel's tether reads it, bevy_panel_tether.js).
+        state: { trees: new Map() },
         treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }),
         mountTree: async ({ tree }) => {
             mounted.push(tree);
@@ -391,6 +395,8 @@ test('structural viewport resize and orientation reanchor every open Bevy panel 
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: width, bottom: height, width, height });
     const projected = new Map();
     dom.window.eveBevyUiRuntime = {
+        // The runtime's own record of the trees it holds (a panel's tether reads it, bevy_panel_tether.js).
+        state: { trees: new Map() },
         treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }),
         mountTree: async ({ id, tree }) => { projected.set(id, tree); return tree; },
         updateTree: async ({ id, tree }) => { projected.set(id, tree); return tree; },
@@ -486,6 +492,8 @@ test('the panel runtime reserves the contextual rail only while it is visible', 
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 });
     const projected = new Map();
     dom.window.eveBevyUiRuntime = {
+        // The runtime's own record of the trees it holds (a panel's tether reads it, bevy_panel_tether.js).
+        state: { trees: new Map() },
         treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }),
         mountTree: async ({ id, tree }) => { projected.set(id, tree); return tree; },
         updateTree: async ({ id, tree }) => { projected.set(id, tree); return tree; },

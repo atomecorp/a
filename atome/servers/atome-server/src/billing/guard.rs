@@ -6,8 +6,11 @@
 //   - A real account (paid with real money) on a proven client pays from its own wallet, never
 //     below zero.
 //   - A test account (sandbox, simulated or not yet paid) or a TestFlight client pays nothing
-//     itself: only an allowed tester spends, from atome's test budget, within its account's
-//     ceilings (per operation, day, month, AI prompts, categories) and the month's budgets.
+//     itself: an allowed tester (the white list) spends from atome's test budget within its
+//     account's ceilings (per operation, day, month, AI prompts, categories) and the month's
+//     budgets; while the access is open to everyone (`accessMode` `all`, R-342), anyone else
+//     spends on the AI within the ceilings `everyone` sets.
+//   - An account on the block list (role `blocked`, R-342) is refused, whatever the rest says.
 use super::{pricing, wallet};
 use crate::vault_router::central::row_json;
 use crate::ws_api::sources::account_roles;
@@ -111,7 +114,7 @@ fn spent(
     Ok(out + held)
 }
 
-fn ai_prompts_today(db: &Connection, principal: &str, now: i64) -> Result<i64, String> {
+pub fn ai_prompts_today(db: &Connection, principal: &str, now: i64) -> Result<i64, String> {
     db.query_row(
         "SELECT COUNT(*) FROM money_holds WHERE principal_id = ? AND payer = 'test_budget' AND category = 'ai'
            AND state != 'released' AND created_ms >= ?",
@@ -119,6 +122,14 @@ fn ai_prompts_today(db: &Connection, principal: &str, now: i64) -> Result<i64, S
         |row| row.get(0),
     )
     .map_err(|e| e.to_string())
+}
+
+// Everyone's ceilings while the access is open to all: a day's ceiling bounds one operation too.
+fn everyone(global: &JsonValue) -> JsonValue {
+    let day = cents(global, "/everyone/perDayCents");
+    json!({ "allowed": true, "categories": ["ai"], "perOpCents": day, "perDayCents": day,
+        "perMonthCents": cents(global, "/everyone/perMonthCents"),
+        "aiPromptsPerDay": cents(global, "/everyone/aiPromptsPerDay") })
 }
 
 /// Who pays for `cents` of `category` spent for `principal`: `wallet` or `test_budget`.
@@ -136,6 +147,10 @@ pub fn payer(
     if global["realSpending"] != json!(true) {
         return Err("money_real_spending_off".into());
     }
+    // The block list (R-342) refuses atome's spending to anyone on it, first.
+    if account_roles::holds(db, principal, account_roles::BLOCKED)? {
+        return Err(TESTFLIGHT_REFUSED.into());
+    }
     let real = wallet::account(db, principal)?
         .is_some_and(|account| account["environment"] == wallet::REAL);
     if real && !testflight(db, principal)? {
@@ -145,11 +160,16 @@ pub fn payer(
         }
         return Ok("wallet");
     }
-    // A test account or a TestFlight client: an allowed tester only, on atome's test budget.
-    if !account_roles::holds(db, principal, account_roles::TESTER)? {
+    // A test account or a TestFlight client, on atome's test budget: an allowed tester (the white
+    // list) on its own ceilings; else, while atome's AI is open to everyone (`accessMode` `all`,
+    // R-342), anyone on the ceilings `everyone` sets, for the AI alone.
+    let own = if account_roles::holds(db, principal, account_roles::TESTER)? {
+        controls(db, &format!("account:{principal}"))?
+    } else if global["accessMode"] == json!("all") {
+        everyone(&global)
+    } else {
         return Err(TESTFLIGHT_REFUSED.into());
-    }
-    let own = controls(db, &format!("account:{principal}"))?;
+    };
     let allowed_category = own["categories"]
         .as_array()
         .is_some_and(|list| list.iter().any(|known| known == category));

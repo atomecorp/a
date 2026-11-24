@@ -380,7 +380,8 @@ test('BevyUI main menu marks each palette group with its folded corner and famil
     assert.equal(closingBatches.length, 1, 'palette closing must stay one atomic renderer batch');
     assert.equal(
         closingOps.filter((operation) => operation.type === 'despawn').length,
-        10,
+        9,
+        // The tether is its ground alone: its separator in the joint was removed (user, 23 Nov. 2026, tool_tether.js).
         'closing removes the two palette controls and their tether'
     );
     assert.equal(closingOps.some((operation) => String(operation.id || operation.payload?.id || '').includes('__eve_dashboard_sentinel')), false);

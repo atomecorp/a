@@ -28,6 +28,7 @@ fn media() -> MediaToSend {
         mime: "video/mp4".into(),
         title: "Clip".into(),
         start_seconds: 12.5,
+        live: false,
     }
 }
 
@@ -104,4 +105,18 @@ async fn a_refused_load_is_an_error() {
     assert!(
         matches!(result, Err(ScreenError::Refused(reason)) if reason == "cast_load_LOAD_FAILED")
     );
+}
+
+#[test]
+fn a_live_stream_loads_as_live_fmp4() {
+    let mut live = media();
+    live.mime = "application/x-mpegURL".into();
+    live.live = true;
+    let load = load_payload(&live);
+    assert_eq!(load["media"]["streamType"], "LIVE");
+    assert_eq!(load["media"]["hlsSegmentFormat"], "fmp4");
+    assert_eq!(load["media"]["hlsVideoSegmentFormat"], "fmp4");
+    let file = load_payload(&media());
+    assert_eq!(file["media"]["streamType"], "BUFFERED");
+    assert!(file["media"].get("hlsSegmentFormat").is_none());
 }

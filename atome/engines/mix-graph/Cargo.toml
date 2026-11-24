@@ -14,12 +14,13 @@ atome-dsp = { path = "../atome-dsp" }
 atome-instrument = { path = "../atome-instrument" }
 kira.workspace = true
 serde.workspace = true
-symphonia = { workspace = true, optional = true, features = ["aac", "isomp4", "aiff", "pcm"] }
+symphonia = { workspace = true, optional = true, features = ["aac", "alac", "isomp4", "aiff", "caf", "pcm", "ogg", "mkv"] }
+opus-rs = { workspace = true, optional = true }
 
 [features]
 # The clip decoder of the engines that load files (native and Web playback);
 # the direct path's worklet decodes nothing.
-decode = ["dep:symphonia"]
+decode = ["dep:symphonia", "dep:opus-rs"]
 
 [dev-dependencies]
 serde_json.workspace = true

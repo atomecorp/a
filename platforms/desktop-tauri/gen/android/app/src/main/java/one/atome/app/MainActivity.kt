@@ -1,5 +1,6 @@
 package one.atome.app
 
+import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
@@ -13,9 +14,28 @@ import androidx.webkit.WebViewFeature
 class MainActivity : TauriActivity() {
   private var viewportScript: ScriptHandler? = null
 
+  // The screens of the network (R-248): the local server finds a Chromecast or an AirPlay receiver by mDNS
+  // (atome/engines/screen-cast/src/discovery.rs), whose answers are multicast. Android drops multicast on Wi-Fi unless
+  // a lock is held: held while the app is in front, never in the background.
+  private val screensMulticast: WifiManager.MulticastLock by lazy {
+    (applicationContext.getSystemService(WIFI_SERVICE) as WifiManager).createMulticastLock("atome.screens").apply {
+      setReferenceCounted(false)
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    screensMulticast.acquire()
+  }
+
+  override fun onPause() {
+    screensMulticast.release()
+    super.onPause()
   }
 
   // eVe is one document: once the WebView cannot go back, Tauri's app plugin calls this. Finishing

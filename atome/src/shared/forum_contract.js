@@ -4,14 +4,11 @@
 // (eVe/domains/forum/). A forum's posts are News publications whose audience is the forum.
 
 export const FORUM_NAME_MAX = 60;
-export const FORUM_MEMBERS_MAX = 200;
 const FORUM_ID = /^forum_[a-z0-9-]{8,64}$/;
 export const isForumId = id => typeof id === 'string' && FORUM_ID.test(id);
 export const forumAudience = id => ({ forum: String(id) });
-export const forumOfAudience = audience => (audience && typeof audience === 'object' && isForumId(audience.forum) ? audience.forum : '');
 // The invitation received in Communication carries its forum in its id.
 export const FORUM_INVITE_KIND = 'forum-invite';
-export const forumInviteId = forumId => `forum_invite_${forumId}`;
 export const forumOfInvite = item => {
     const id = String(item?.id || '').replace(/^forum_invite_/, '');
     return item?.kind === FORUM_INVITE_KIND && isForumId(id) ? id : '';

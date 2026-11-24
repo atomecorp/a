@@ -28,6 +28,7 @@ mod recorder_capture;
 mod recorder_strip;
 mod recorder_wav;
 mod scheduled_backend;
+pub mod session_input;
 pub use scheduled_backend::CaptureClock;
 #[cfg(not(target_os = "ios"))]
 pub mod transcode;

@@ -9,7 +9,7 @@ const TWINNED_VERBS = [
     'read', 'batch', 'transfer', 'transport.toggle', 'clip.place', 'transport.play', 'transport.stop',
     'transport.list.toggle', 'transport.list.stop', 'mix.param.set', 'history.undo', 'history.redo',
     'activity.list', 'activity.mix', 'activity.timeline', 'record.start', 'record.stop', 'record.cancel',
-    'operation', 'cells.trigger', 'cells.stop', 'record.prepare',
+    'operation', 'cells.trigger', 'cells.stop', 'record.prepare', 'performance.delete', 'realign', 'midi.export', 'midi.freeze', 'audio.export', 'track.import', 'mix.preset.list', 'mix.preset.save', 'mix.preset.load',
     ...TIMELINE_WRITE_VERBS
 ];
 

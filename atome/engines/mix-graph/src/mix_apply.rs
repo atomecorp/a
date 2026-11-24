@@ -129,10 +129,10 @@ impl MixGraph {
         let (live_inputs, live_capacity) = (&mut self.live_inputs, self.live_capacity);
         let feeds = Feeds::plan(
             &program,
-            &mut |device| {
+            &mut |device, channels| {
                 live_inputs
-                    .entry(device.to_string())
-                    .or_insert_with(|| LiveInput::new(live_capacity))
+                    .entry((device.to_string(), channels.to_vec()))
+                    .or_insert_with(|| LiveInput::with_channels(live_capacity, channels))
                     .clone()
             },
             &mut self.instruments,
@@ -192,7 +192,10 @@ impl MixGraph {
                 modules,
             });
         }
-        let devices: HashSet<String> = feeds.devices().map(str::to_string).collect();
+        let devices: HashSet<(String, Vec<u16>)> = feeds
+            .devices()
+            .map(|(device, channels)| (device.to_string(), channels.to_vec()))
+            .collect();
         let routed = feeds.routed();
         let output_channels = (usize::from(self.shared.aux.pairs()) + 1) * 2;
         let mut compiled = Graph::compile(
@@ -221,8 +224,7 @@ impl MixGraph {
         self.captures.retain(|id, _| live.contains(id.as_str()));
         self.record_taps.retain(|id, _| live.contains(id.as_str()));
         self.instruments.retain(routed);
-        self.live_inputs
-            .retain(|device, _| devices.contains(device));
+        self.live_inputs.retain(|key, _| devices.contains(key));
         self.meters.retain(|id, _| live.contains(id.as_str()));
         self.modules = next_modules;
         *self

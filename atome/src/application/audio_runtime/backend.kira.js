@@ -515,7 +515,7 @@ import { loadAudioKernels } from './audio_kernels.js';
 
     ...clipMeta.methods,
     ...createKiraLiveMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null),
-      readEngine: () => (mode === 'wasm' && wasmAudioManagerReady ? wasm : null) }),
+      readEngine: () => (mode === 'wasm' && wasmAudioManagerReady ? wasm : null), native: () => mode === 'tauri' }),
 
     dispatch_batch(batch) {
       for (let i = 0; i < batch.length; i++) {

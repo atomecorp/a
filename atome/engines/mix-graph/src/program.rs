@@ -55,8 +55,12 @@ impl Target {
 pub enum InputSpec {
     #[default]
     Track,
+    // A live input: an interface and the physical channels the strip takes from it (R-286), counted from 0 — one
+    // (mono, heard on both sides) or two (left, right); none: its first two, as before.
     LiveAudio {
         device_id: String,
+        #[serde(default)]
+        channels: Vec<u16>,
     },
     // One of the instrument's outputs (D-S2), 0 unless named.
     Instrument {
@@ -90,6 +94,8 @@ pub enum KeySource {
 pub enum MixSource {
     LiveAudio {
         device_id: String,
+        #[serde(default)]
+        channels: Vec<u16>,
     },
     Strip {
         id: String,

@@ -7,12 +7,14 @@ import Foundation
 extension AppNativeAudioController {
     private static let voicePumpMilliseconds = 40
 
-    func startVoiceEngine(completion: @escaping ([String: Any], String?) -> Void) {
+    /// `listening`: the first mode, "conversation", "wake" (standby or hung up: the wake models alone) or
+    /// "collect" (enrollment).
+    func startVoiceEngine(listening: String, completion: @escaping ([String: Any], String?) -> Void) {
         guard voicePump == nil else { complete(completion, payload: ["active": false], error: "voice_session_busy"); return }
         guard let assets = Bundle.main.resourceURL?.appendingPathComponent("atome_runtime/src/assets/voice").path else {
             complete(completion, payload: ["active": false], error: "voice_models_missing"); return
         }
-        let (_, startError) = NativeKiraEngine.run("audio_voice_start", ["modelsRoot": assets, "ownCapture": false])
+        let (_, startError) = NativeKiraEngine.run("audio_voice_start", ["modelsRoot": assets, "ownCapture": false, "listening": listening])
         if let startError { complete(completion, payload: ["active": false], error: startError); return }
         wakeCaptureFailed = false
         startWakeCapture(payload: ["sampleRate": 16000]) { result, error in

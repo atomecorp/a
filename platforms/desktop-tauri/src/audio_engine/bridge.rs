@@ -116,6 +116,11 @@ pub fn audio_render_clock() -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn audio_output_hold(owner: String, on: bool) -> Result<Value, String> {
+    commands::output_hold(&owner, on)
+}
+
+#[tauri::command]
 pub fn audio_mix_apply(program: Value) -> Result<Value, String> {
     commands::mix_apply(program)
 }
@@ -335,18 +340,23 @@ pub fn audio_wake_stop() -> Result<Value, String> {
 pub fn audio_wake_read() -> Result<Value, String> {
     super::wake_capture::read()
 }
+#[tauri::command]
+pub fn audio_wake_state() -> Result<Value, String> {
+    super::wake_capture::state()
+}
 
 // The native voice engine, through the shared `dispatch` (the iOS app sends the same names).
 #[tauri::command]
 pub async fn audio_voice_start(
     paths: tauri::State<'_, crate::ProjectPaths>,
     models_root: String,
+    listening: String,
 ) -> Result<Value, String> {
     let project_root = paths.project_root.clone();
     tauri::async_runtime::spawn_blocking(move || {
         commands::dispatch(
             "voice_start",
-            &serde_json::json!({ "modelsRoot": models_root, "ownCapture": true }),
+            &serde_json::json!({ "modelsRoot": models_root, "ownCapture": true, "listening": listening }),
             Some(&project_root),
         )
     })

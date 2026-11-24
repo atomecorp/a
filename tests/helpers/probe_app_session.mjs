@@ -36,8 +36,10 @@ export const openUserPastFirstLaunch = async ({ browser, server, report = {}, wr
     await page.reload({ waitUntil: 'commit' });
     await waitFor(page, async () => ({ ok: typeof window.Atome?.commit === 'function'
         && (await window.AdoleAPI?.auth?.current?.().catch(() => null))?.logged === true }), null, 120000, 500);
-    await page.waitForTimeout(3000);
-    const skipped = await page.evaluate(async () => {
+    // The page may reload itself once more (its session renewed): the write waits for the commit pipeline of the page
+    // it runs in, and starts again in the new page when the old one went away under it.
+    const markFirstLaunchDone = () => page.evaluate(async () => {
+        for (let waited = 0; typeof window.Atome?.commit !== 'function' && waited < 60_000; waited += 250) await new Promise(r => setTimeout(r, 250));
         const api = await import('/eVe/domains/user/profile_api.js');
         const current = await window.AdoleAPI.auth.current();
         const userId = String(current?.user?.id || current?.user?.user_id || '');
@@ -45,10 +47,18 @@ export const openUserPastFirstLaunch = async ({ browser, server, report = {}, wr
         const loaded = await api.loadUserProfile(userId);
         const profile = loaded?.profile || {};
         const prefs = profile.preferences || {};
+        // A second device of the account: its first launch was already marked done by the first one.
+        if (prefs.first_launch?.step === 'complete') return { ok: true, saved: 'already_complete' };
         const next = { ...profile, preferences: { ...prefs, first_launch: { ...(prefs.first_launch || {}), version: 1, step: 'complete' } } };
         const saved = await api.upsertUserProfile(next, { userId, allowCreate: false, eventSource: 'probe' });
         return { ok: saved?.ok === true, saved: JSON.stringify(saved).slice(0, 200) };
-    });
+    }).catch(error => ({ ok: false, saved: String(error?.message || error).slice(0, 200) }));
+    await page.waitForTimeout(3000);
+    let skipped = await markFirstLaunchDone();
+    for (let attempt = 0; !skipped.ok && /commit_unavailable|context was destroyed|navigation/i.test(skipped.saved) && attempt < 3; attempt += 1) {
+        await page.waitForTimeout(2000);
+        skipped = await markFirstLaunchDone();
+    }
     report.login.skipped = skipped;
     write();
     if (!skipped.ok) throw new Error(`first_launch_skip_failed:${skipped.saved}`);

@@ -107,6 +107,13 @@ extension AppNativeAudioController {
         releaseAudioSessionConsumer("wake")
     }
 
+    /// Whether a capture could start now, without reading one that runs: its PCM stays its owner's
+    /// (the voice session's pump, the page's stream). A capture that failed is already stopped, so
+    /// its `failed` (reported to its reader by `readWakeCapture`) never makes the next one unavailable.
+    func wakeCaptureState() -> [String: Any] {
+        return ["busy": wakeCaptureActive || activeRecordingSessionId != nil || wakeCaptureInterrupted || wakeCaptureBackground]
+    }
+
     func readWakeCapture() -> [String: Any] {
         let samples = wakeCaptureSamples
         wakeCaptureSamples.removeAll(keepingCapacity: true)

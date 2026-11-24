@@ -8,7 +8,6 @@
 
 export const COACH_QUALITIES = Object.freeze(['coach', 'trainer', 'health']);
 export const COACH_DAYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
-export const COACH_BOOKING_STATES = Object.freeze(['requested', 'accepted', 'refused', 'cancelled']);
 // A booking still holding its slot.
 export const COACH_HOLDING_STATES = Object.freeze(['requested', 'accepted']);
 // AGENTS.md rule 19: a session of 45 min, a cancellation up to 24 h before, three weeks of slots offered.

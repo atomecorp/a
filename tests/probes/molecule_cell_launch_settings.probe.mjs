@@ -72,18 +72,67 @@ test('ADSR: the envelope carries the decay from the attack\'s end and the sustai
     assert.equal(envelope.releaseSeconds, 0.03);
 });
 
-test('a cell launched again hands over: the one playing ends exactly where the new one starts', async () => {
+test('a cell launched again hands over: the one playing fades out from where the new one starts, crossed with it', async () => {
     const session = fakeSession(track);
     const player = createCellPlayer(session);
     await player.launch({ key: 'k', from: 0.5, until: 1.5, trackIds: ['a'], passes: null });
     await wait(80);
     const again = await player.launch({ key: 'k', from: 0.5, until: 1.5, trackIds: ['a'], passes: null, quantumSeconds: 0.25 });
     const first = session.calls[0];
-    assert.ok(session.ends.some((end) => end.voiceId === first.voiceId && end.endFrame === again.start_frame - first.startRenderFrame && end.releaseFrames > 0),
+    const ramp = Math.round(0.005 * RATE);
+    assert.ok(session.ends.some((end) => end.voiceId === first.voiceId && end.endFrame === again.start_frame + ramp - first.startRenderFrame && end.releaseFrames === ramp),
         JSON.stringify(session.ends));
     assert.equal(player.read().length, 1, 'one cell listed');
     assert.ok(player.isPlaying('k'));
+    // A cell with a fade-out crosses over it.
+    const third = await player.launch({ key: 'k', from: 0.5, until: 1.5, trackIds: ['a'], passes: null, crossfadeSeconds: 0.03, startFrame: again.start_frame + 0.1 * RATE });
+    const second = session.calls.find((voice) => voice.startRenderFrame === again.start_frame);
+    const crossfade = Math.round(0.03 * RATE);
+    assert.ok(session.ends.some((end) => end.voiceId === second.voiceId && end.endFrame === third.start_frame + crossfade - second.startRenderFrame && end.releaseFrames === crossfade),
+        JSON.stringify(session.ends));
     await player.stopAll();
+});
+
+// A touch on a cell sounds at once (user, 24 Nov. 2026: « comme une mitrailleuse »): the clock is read once, for the
+// anchor; every launch after starts one render block after what the engine has rendered, without a round trip.
+test('a touch launches at once: one clock read, then each start a block after the rendered frames', async () => {
+    const session = fakeSession(track);
+    const player = createCellPlayer(session);
+    for (let shot = 0; shot < 8; shot += 1) {
+        const rendered = session.frames();
+        const launched = await player.launch({ key: 'k', from: 0.5, until: 0.6, trackIds: ['a'], passes: 1 });
+        // A block (128 frames here) after the engine's frames, never LEAD_BLOCKS (6) later; the wall clock of a busy machine adds a little.
+        assert.ok(launched.start_frame - rendered < 6 * 128, `shot ${shot}: ${launched.start_frame - rendered} frames ahead`);
+        assert.ok(launched.start_frame >= rendered, `shot ${shot}: never before what is rendered`);
+        await wait(15);
+    }
+    assert.equal(session.clockReads, 1, 'the clock is read once');
+    await player.stopAll();
+});
+
+// Momentary (« maintien »), off the grid, with a fade-out: a touch landing while the last one fades out launches the cell
+// again from its start, crossed with it — never a stop. Fired like a machine gun, every touch is heard.
+test('runtime: a Momentary cell fired like a machine gun launches on every touch, crossfaded', async () => {
+    const timeline = setCellSettings(cellsTimeline(), {
+        scene_id: 'A', track_id: 't', settings: { trigger: 'momentary', quantize_start: 'off', quantize_end: 'off', fade_out_ms: 21 }
+    });
+    const { cells, session } = runtime({ current: timeline });
+    const launches = [];
+    for (let shot = 0; shot < 12; shot += 1) {
+        const pressed = await cells.trigger({ groupId: 'g', timeline, cells: [{ scene_id: 'A', track_id: 't' }], gesture: 'press' });
+        launches.push(pressed.cells[0]);
+        await cells.trigger({ groupId: 'g', timeline, cells: [{ scene_id: 'A', track_id: 't' }], gesture: 'release' });
+        await wait(8);
+    }
+    assert.ok(launches.every((launched) => Number.isFinite(launched.start_frame) && launched.stopped === undefined), JSON.stringify(launches));
+    const starts = launches.map((launched) => launched.start_frame);
+    assert.ok(starts.every((frame, index) => index === 0 || frame > starts[index - 1]), 'each touch a new launch, in order');
+    // Each launch's first pass (a looped cell schedules its next pass ahead too).
+    const voices = session.calls.filter((voice) => voice.assetId === 'c' && voice.voiceId.endsWith(':0'));
+    assert.equal(voices.length, 12, 'one voice per touch');
+    assert.ok(voices.every((voice) => Math.abs(voice.startSeconds) < 1e-9), 'each from the start of the cell');
+    assert.equal(session.clockReads, 1, 'no clock read after the first touch');
+    await cells.dispose?.();
 });
 
 const cellsTimeline = () => {

@@ -2,12 +2,19 @@ use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnec
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 const MIDI_RUNTIME: &str = "midir";
+// midir tells no device plugged or unplugged: the watcher lists the ports this often (R-286, user 24 Nov. 2026: a MIDI
+// device connected while the app runs must join the list).
+const PORTS_WATCH_INTERVAL: Duration = Duration::from_secs(1);
+const PORTS_EVENT: &str = "eve:midi-native-ports";
+static PORTS_WATCHED: AtomicBool = AtomicBool::new(false);
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize)]
 pub struct NativeMidiPort {
     id: String,
     name: String,
@@ -30,6 +37,12 @@ pub struct NativeMidiSendStatus {
     destination_count: usize,
     output_id: String,
     runtime: &'static str,
+}
+
+#[derive(Clone, Serialize)]
+struct NativeMidiPortsEvent {
+    inputs: Vec<NativeMidiPort>,
+    outputs: Vec<NativeMidiPort>,
 }
 
 #[derive(Clone, Serialize)]
@@ -66,9 +79,17 @@ fn state() -> &'static Mutex<NativeMidiState> {
     MIDI_STATE.get_or_init(|| Mutex::new(NativeMidiState::empty()))
 }
 
-fn read_input_ports() -> Result<Vec<NativeMidiPort>, String> {
-    let input = MidiInput::new("Atome Desktop MIDI input list")
-        .map_err(|error| format!("native_midi_input_init_failed:{error}"))?;
+fn input_lister() -> Result<MidiInput, String> {
+    MidiInput::new("Atome Desktop MIDI input list")
+        .map_err(|error| format!("native_midi_input_init_failed:{error}"))
+}
+
+fn output_lister() -> Result<MidiOutput, String> {
+    MidiOutput::new("Atome Desktop MIDI output list")
+        .map_err(|error| format!("native_midi_output_init_failed:{error}"))
+}
+
+fn read_input_ports(input: &MidiInput) -> Result<Vec<NativeMidiPort>, String> {
     input
         .ports()
         .into_iter()
@@ -86,9 +107,7 @@ fn read_input_ports() -> Result<Vec<NativeMidiPort>, String> {
         .collect()
 }
 
-fn read_output_ports() -> Result<Vec<NativeMidiPort>, String> {
-    let output = MidiOutput::new("Atome Desktop MIDI output list")
-        .map_err(|error| format!("native_midi_output_init_failed:{error}"))?;
+fn read_output_ports(output: &MidiOutput) -> Result<Vec<NativeMidiPort>, String> {
     output
         .ports()
         .into_iter()
@@ -142,18 +161,95 @@ fn connect_inputs(
         .collect()
 }
 
-#[tauri::command]
-pub fn start_native_midi(app: AppHandle) -> Result<NativeMidiStatus, String> {
-    let inputs = read_input_ports()?;
-    let outputs = read_output_ports()?;
-    let connections = connect_inputs(&app, &inputs)?;
+// The ports listed now take the state's place: the inputs connected again, an output's connection kept while its port
+// remains.
+fn apply_ports(
+    app: &AppHandle,
+    inputs: &[NativeMidiPort],
+    outputs: &[NativeMidiPort],
+) -> Result<(), String> {
+    let connections = connect_inputs(app, inputs)?;
     let mut locked = state()
         .lock()
         .map_err(|_| "native_midi_state_poisoned".to_string())?;
     locked.input_connections = connections;
-    locked.output_connections.clear();
-    locked.inputs = inputs.clone();
-    locked.outputs = outputs.clone();
+    locked
+        .output_connections
+        .retain(|id, _| outputs.iter().any(|port| &port.id == id));
+    locked.inputs = inputs.to_vec();
+    locked.outputs = outputs.to_vec();
+    Ok(())
+}
+
+/// The ports listed when they differ from `known` (inputs, outputs).
+fn changed_ports(
+    input: &MidiInput,
+    output: &MidiOutput,
+    known: (&[NativeMidiPort], &[NativeMidiPort]),
+) -> Result<Option<(Vec<NativeMidiPort>, Vec<NativeMidiPort>)>, String> {
+    let inputs = read_input_ports(input)?;
+    let outputs = read_output_ports(output)?;
+    Ok((inputs != known.0 || outputs != known.1).then_some((inputs, outputs)))
+}
+
+// One watcher for the process: each change of the ports connects them and hands the page their list.
+fn watch_ports(app: AppHandle) {
+    if PORTS_WATCHED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("atome-midi-ports".to_string())
+        .spawn(move || {
+            let listers = input_lister().and_then(|input| Ok((input, output_lister()?)));
+            let (input, output) = match listers {
+                Ok(listers) => listers,
+                Err(error) => {
+                    eprintln!("[native_midi] ports watcher not started: {error}");
+                    return;
+                }
+            };
+            loop {
+                std::thread::sleep(PORTS_WATCH_INTERVAL);
+                let known = match state().lock() {
+                    Ok(locked) => (locked.inputs.clone(), locked.outputs.clone()),
+                    Err(_) => {
+                        eprintln!("[native_midi] state poisoned: ports watcher stopped");
+                        return;
+                    }
+                };
+                let changed =
+                    changed_ports(&input, &output, (&known.0, &known.1)).and_then(|changed| {
+                        match changed {
+                            Some((inputs, outputs)) => {
+                                apply_ports(&app, &inputs, &outputs)?;
+                                Ok(Some(NativeMidiPortsEvent { inputs, outputs }))
+                            }
+                            None => Ok(None),
+                        }
+                    });
+                match changed {
+                    Ok(Some(event)) => {
+                        if let Err(error) = app.emit(PORTS_EVENT, event) {
+                            eprintln!("[native_midi] ports not published: {error}");
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => eprintln!("[native_midi] ports not read: {error}"),
+                }
+            }
+        });
+    if let Err(error) = spawned {
+        PORTS_WATCHED.store(false, Ordering::SeqCst);
+        eprintln!("[native_midi] ports watcher not spawned: {error}");
+    }
+}
+
+#[tauri::command]
+pub fn start_native_midi(app: AppHandle) -> Result<NativeMidiStatus, String> {
+    let inputs = read_input_ports(&input_lister()?)?;
+    let outputs = read_output_ports(&output_lister()?)?;
+    apply_ports(&app, &inputs, &outputs)?;
+    watch_ports(app);
     Ok(NativeMidiStatus {
         ok: true,
         source_count: inputs.len(),
@@ -211,4 +307,35 @@ pub fn send_native_midi(
         output_id: resolved_id,
         runtime: MIDI_RUNTIME,
     })
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+    use midir::os::unix::VirtualOutput;
+
+    // A source appearing while the listers live (a virtual one, as a device plugged in) changes the ports listed.
+    #[test]
+    fn a_source_plugged_in_changes_the_ports_listed() {
+        let input = input_lister().expect("input lister");
+        let output = output_lister().expect("output lister");
+        let inputs = read_input_ports(&input).expect("inputs");
+        let outputs = read_output_ports(&output).expect("outputs");
+        assert!(changed_ports(&input, &output, (&inputs, &outputs))
+            .expect("listed")
+            .is_none());
+        let plugged = MidiOutput::new("Atome hot-plug test")
+            .expect("output client")
+            .create_virtual("Atome hot-plug source")
+            .expect("virtual source");
+        let changed = (0..30).find_map(|_| {
+            std::thread::sleep(Duration::from_millis(100));
+            changed_ports(&input, &output, (&inputs, &outputs)).expect("listed")
+        });
+        let (listed, _) = changed.expect("the source plugged in was not listed");
+        assert!(listed
+            .iter()
+            .any(|port| port.name.contains("Atome hot-plug source")));
+        drop(plugged);
+    }
 }

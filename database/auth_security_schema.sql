@@ -85,10 +85,11 @@ CREATE INDEX IF NOT EXISTS idx_billing_credit_ledger_principal ON billing_credit
 -- `tester` tries what is not open to everyone yet (the CB sociale's video bottles) and is
 -- the real-spending allow-list; `owner` is the principal administrator, who confirms a new
 -- admin. `owner` is given only on the server (scripts/account_roles_admin.mjs), never by a
--- commit: not an Atome property.
+-- commit: not an Atome property. `blocked` (R-342) is the block list of atome's AI, set by an
+-- administrator in Réglages › Admin.
 CREATE TABLE IF NOT EXISTS auth_account_roles (
     principal_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('admin', 'tester', 'owner')),
+    role TEXT NOT NULL CHECK(role IN ('admin', 'tester', 'owner', 'blocked')),
     granted_ms INTEGER NOT NULL,
     granted_by TEXT NOT NULL,
     PRIMARY KEY (principal_id, role)

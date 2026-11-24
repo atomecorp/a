@@ -37,6 +37,7 @@ pub mod pitch;
 pub mod resample;
 pub mod reverb;
 pub mod saturator;
+pub mod scope;
 pub mod spectrum;
 pub mod split;
 pub mod stft;

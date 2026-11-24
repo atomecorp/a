@@ -86,10 +86,11 @@ pub fn module_state(module_id: &str) -> Result<Option<u8>, String> {
 pub fn arm_record(
     strip_id: &str,
     device_id: Option<&str>,
+    channels: &[u16],
 ) -> Result<(std::sync::Arc<atome_mix_graph::record_tap::RecordTap>, u32), String> {
     with_engine(|engine| {
         let graph = engine.mix.graph_mut();
-        let tap = graph.arm_record(strip_id, device_id)?;
+        let tap = graph.arm_record(strip_id, device_id, channels)?;
         Ok((tap, graph.sample_rate()))
     })
 }

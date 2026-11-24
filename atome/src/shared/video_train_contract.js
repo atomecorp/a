@@ -6,7 +6,6 @@
 // votes; ties go to the older, then to the id. Shared by the server (atome/servers/atome-server/src/social/news/thread.rs) and the
 // client (eVe/domains/video_train/).
 
-export const VIDEO_TRAIN_KINDS = Object.freeze(['video', 'audio', 'image', 'text']);
 export const VIDEO_TRAIN_TEXT_MAX = 2000;
 export const VIDEO_TRAIN_ANCHOR_MAX_MS = 24 * 3600 * 1000;
 export const VIDEO_TRAIN_REPORT_REASON_MAX = 300;

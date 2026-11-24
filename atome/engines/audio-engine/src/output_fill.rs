@@ -4,7 +4,9 @@
 
 use super::aux_outputs::{self, SharedAuxConsumers};
 use super::direct::{self, SharedDirect};
-use super::scheduled_backend::{CHANNELS, FIFO_FRAMES, SharedConsumer, note_output_quantum};
+use super::scheduled_backend::{
+    CHANNELS, FIFO_FRAMES, SharedConsumer, generation, note_output_quantum_of,
+};
 use ringbuf::traits::Consumer;
 
 pub(crate) struct OutputFill {
@@ -13,6 +15,8 @@ pub(crate) struct OutputFill {
     direct: SharedDirect,
     scratch: Vec<f32>,
     aux_scratch: Vec<f32>,
+    // The engine start this output plays for (scheduled_backend.rs#note_output_quantum_of).
+    generation: u64,
 }
 
 impl OutputFill {
@@ -27,6 +31,7 @@ impl OutputFill {
             direct,
             scratch: vec![0.0; FIFO_FRAMES * CHANNELS],
             aux_scratch: vec![0.0; FIFO_FRAMES * CHANNELS],
+            generation: generation(),
         }
     }
 
@@ -70,6 +75,6 @@ impl OutputFill {
             frames.min(FIFO_FRAMES),
             &mut self.aux_scratch,
         );
-        note_output_quantum(host_ns, frames, popped);
+        note_output_quantum_of(self.generation, host_ns, frames, popped);
     }
 }

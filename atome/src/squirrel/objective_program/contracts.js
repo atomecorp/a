@@ -1,15 +1,5 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
 
-// The `objective_program` commands (R-104 D7; Health cahier P007–P021, P034, P056): a health objective composed brick by
-// brick (Garder · Après · Ôter), the programme of all objectives previewed together (load, conflicts, « Moins »), planned,
-// launched into the calendar, adapted, paused and resumed; the brick library and sheets; the screens MC1–MC4 opened.
-// The person's composition, programme and planning are health data: CLOSED to AI and MCP by default — the executor
-// answers only the person acting in the app (source `ui`, health access open; eVe/domains/programs/objective_program_commands.js),
-// whatever capability a caller declares. The library, a brick's sheet and the scenarios are editorial, open to all;
-// opening and closing a screen holds no data. Launching, adapting and the reduction write the calendar: confirmed.
-export const OBJECTIVE_PROGRAM_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'health_access_denied_for_actor',
-    'objective_program_objective_required', 'objective_brick_refused', 'objective_brick_unavailable', 'objective_brick_unknown',
-    'objective_sleep_preferences_required', 'free_objective_required', 'free_objective_invalid', 'free_objective_step_invalid', 'OBJECTIVE_PROGRAM_FAILED']);
 const id = { type: 'string', minLength: 1, maxLength: 300 };
 const brick = { type: 'string', pattern: '^BR-[A-Z0-9-]{2,12}$' };
 const object = (properties, required = []) => ({ type: 'object', additionalProperties: false, properties, required });

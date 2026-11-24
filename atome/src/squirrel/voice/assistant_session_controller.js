@@ -329,12 +329,12 @@ export const createVoiceAssistantSessionController = ({
         return openPromise;
     };
 
-    const respond = async () => {
+    const sayThenListen = async (text) => {
         if (!state.active || !state.sessionId) throw new Error('voice_assistant_session_not_ready');
         const generation = ++state.generation;
         await stopActiveChannels('assistant_touch_response');
         if (!state.active || state.generation !== generation) return cloneState(state);
-        await speak(touchResponse);
+        await speak(text);
         if (!state.active || state.generation !== generation) return cloneState(state);
         startListenLoop(generation);
         return cloneState(state);
@@ -385,7 +385,10 @@ export const createVoiceAssistantSessionController = ({
         if (state.active && generation === state.generation) startListenLoop(generation);
         return cloneState(state);
     };
-    return Object.freeze({ close, getState: () => cloneState(state), open, respond, pause, resume, subscribe });
+    const respond = () => sayThenListen(touchResponse);
+    // Something the app needs from the person (an AirPlay receiver's pairing code): `line` said, then she listens.
+    const prompt = async ({ line }) => { await sayThenListen(line); return true; };
+    return Object.freeze({ close, getState: () => cloneState(state), open, respond, prompt, pause, resume, subscribe });
 };
 
 // Provider choice shares the assistant lifecycle contract. The local speech

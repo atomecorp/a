@@ -3,7 +3,6 @@ import { OPENAI_MODALITY_MODELS } from '../ai/model_catalog_registry.js';
 import { createVoiceSessionRuntime, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { createVoiceOrchestrator } from './orchestrator.js';
 import { createVoiceLatencyTelemetry } from './telemetry.js';
-import { createVoiceActivityDetector } from './vad.js';
 import { createVoiceAiPlanner } from './ai_planner.js';
 import {
     buildStartupBriefing,
@@ -231,16 +230,18 @@ export const createVoiceService = ({
             const session = ensureSession(options);
             sessionRuntime.startSpeaking(session.session_id, { text, voice_id: openai ? 'marin' : 'fr_FR-siwis-medium' });
             const started = await (openai ? openaiTts : localTts).speak(session.session_id, text);
+            // A phrase stopped settles its playback too: only a phrase played to its end finishes the turn; a stop
+            // leaves the session speaking for the interruption that follows, so « reprends » can resume it.
             started.promise.then(
-                () => sessionRuntime.finishSpeaking(session.session_id, { reason: 'done' }),
+                (end) => { if (!end?.stopped) sessionRuntime.finishSpeaking(session.session_id, { reason: 'done' }); },
                 (error) => sessionRuntime.interrupt(session.session_id, { reason: `tts_error:${error?.message || error}` })
             );
             return started;
         },
         // Stopping the voice stops the turn it speaks for (processing included).
         async stop(sessionId, { reason = 'tts_stop' } = {}) {
-            const stopped = await stopSpeech(sessionId, reason);
             sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', { source: 'tts' });
+            const stopped = await stopSpeech(sessionId, reason);
             sessionRuntime.interrupt(sessionId, { reason });
             return stopped || { session_id: sessionId, provider: providers.tts.selected, stopped: true };
         },
@@ -255,15 +256,6 @@ export const createVoiceService = ({
         orchestrator,
         providers,
         telemetry,
-        vad: {
-            create(sessionId, options = {}) {
-                return createVoiceActivityDetector({
-                    ...options,
-                    sessionRuntime,
-                    session_id: sessionId
-                });
-            }
-        },
         capture,
         stt,
         tts,
@@ -395,9 +387,6 @@ export const createVoiceService = ({
         async executeUtterance(utterance, options = {}) {
             const response = await orchestrator.executeUtterance(utterance, options);
             return maybeSpeakResponse(response, options);
-        },
-        planFollowup(sessionId, options = {}) {
-            return orchestrator.planSessionFollowup(sessionId, options);
         },
         async executeFollowup(sessionId, options = {}) {
             const response = await orchestrator.executeSessionFollowup(sessionId, options);

@@ -6,8 +6,6 @@ const contract = createOnlineVideoContract({ key: 'youtube', label: 'YouTube', r
     refSchema: { type: 'string', pattern: YOUTUBE_VIDEO_ID_PATTERN },
     searchErrors: ['not_configured', 'unavailable', 'rate_limited', 'quota_guard', 'quota_or_permission'] });
 
-export const YOUTUBE_ERRORS = contract.errors;
-export const YOUTUBE_OUTPUT_SCHEMA = contract.outputSchema;
 export const YOUTUBE_COMMANDS = contract.commands;
 export const validateYoutubeInput = contract.validate;
 export const normalizeYoutubeError = contract.normalizeError;

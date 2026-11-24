@@ -34,6 +34,10 @@ struct Seat {
     program_id: Option<String>,
     announced_at: String,
     last_seen_at: String,
+    // R-248 « à proximité »: the opaque name this seat's app announces on the local network
+    // (Bonjour `_atome._tcp`), and who may find the seat by it.
+    nearby_token: String,
+    discoverable: &'static str,
 }
 
 // account -> its seats, in the order they were first announced.
@@ -51,6 +55,15 @@ const PLATFORMS: [&str; 6] = [
     "unknown",
 ];
 const CAPABILITIES: [&str; 5] = ["render", "pointer_input", "audio", "video", "fullscreen"];
+/// Who may find a seat by its nearby token: the owner's accepted contacts (the default), or anyone.
+pub(super) const DISCOVERABLE: [&str; 2] = ["contacts", "everyone"];
+
+// 16 lowercase hex characters from the system's generator, never derived from the seat or account.
+fn nearby_token() -> String {
+    let mut bytes = [0u8; 8];
+    rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
 
 pub(super) fn now() -> String {
     js::iso(atome_js_values::dates::now_ms())
@@ -108,6 +121,14 @@ pub(super) struct Announced<'a> {
     pub platform: Option<&'a JsonValue>,
     pub capabilities: Option<&'a JsonValue>,
     pub program_id: Option<String>,
+    /// One of `DISCOVERABLE`, none to keep the seat's (`contacts` for a new one).
+    pub discoverable: Option<&'static str>,
+}
+
+/// An announced seat: its public descriptor and the nearby token its app announces.
+pub(super) struct Attached {
+    pub surface: JsonValue,
+    pub nearby_token: String,
 }
 
 /// `attachWsApiSurface`: a connection carries exactly one seat; the newest connection
@@ -117,7 +138,7 @@ pub(super) fn attach(
     user: &str,
     surface_id: &str,
     announced: Announced<'_>,
-) -> JsonValue {
+) -> Attached {
     if connection
         .seat
         .get()
@@ -159,13 +180,22 @@ pub(super) fn attach(
         program_id: announced.program_id.filter(|id| !id.is_empty()),
         announced_at: previous.map_or_else(|| at.clone(), |p| p.announced_at.clone()),
         last_seen_at: at,
+        // The token lives as long as the seat: re-announcing keeps it.
+        nearby_token: previous.map_or_else(nearby_token, |p| p.nearby_token.clone()),
+        discoverable: announced
+            .discoverable
+            .or_else(|| previous.map(|p| p.discoverable))
+            .unwrap_or(DISCOVERABLE[0]),
     };
-    let descriptor = public(surface_id, user, &seat);
+    let attached = Attached {
+        surface: public(surface_id, user, &seat),
+        nearby_token: seat.nearby_token.clone(),
+    };
     surfaces.insert(surface_id.to_string(), seat);
     connection
         .seat
         .set(Some((user.to_string(), surface_id.to_string())));
-    descriptor
+    attached
 }
 
 /// `detachWsApiSurface`: only the connection that holds a seat retires it.
@@ -218,6 +248,35 @@ pub(super) fn list(user: &str, exclude: &str) -> Vec<JsonValue> {
         .filter(|(surface_id, _)| excluded.is_empty() || **surface_id != excluded)
         .map(|(surface_id, seat)| public(surface_id, user, seat))
         .collect()
+}
+
+/// A seat of another account found by its nearby token: its owner, who may find it, its descriptor.
+pub(super) struct Found {
+    pub owner: String,
+    pub discoverable: &'static str,
+    pub surface: JsonValue,
+}
+
+/// The seats whose nearby token is among `tokens`, in the order the tokens were heard, the
+/// account `user`'s own left out (they are listed whole by `list`). Tokens never leave this registry.
+pub(super) fn by_tokens(user: &str, tokens: &[String]) -> Vec<Found> {
+    let seats = SEATS.lock().expect("seats");
+    let mut found: Vec<Found> = Vec::new();
+    for token in tokens {
+        for (owner, surfaces) in seats.iter().filter(|(owner, _)| owner.as_str() != user) {
+            for (surface_id, seat) in surfaces.iter().filter(|(_, s)| &s.nearby_token == token) {
+                let known = |f: &Found| f.owner == *owner && f.surface["surface_id"] == *surface_id;
+                if !found.iter().any(known) {
+                    found.push(Found {
+                        owner: owner.clone(),
+                        discoverable: seat.discoverable,
+                        surface: public(surface_id, owner, seat),
+                    });
+                }
+            }
+        }
+    }
+    found
 }
 
 /// `wsSendJsonToSurface`: whether the seat's connection took the frame.

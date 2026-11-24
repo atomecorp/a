@@ -6,11 +6,14 @@ enum AppNativeKiraEngine {
     /// Commands that make sound: they need the playback audio session.
     static let soundingCommands: Set<String> = [
         "audio_load_clip", "audio_load_clip_from_bytes", "audio_play", "audio_play_instance", "audio_schedule_instances",
-        "audio_render_clock", "audio_mix_apply", "audio_direct_apply"
+        "audio_render_clock", "audio_output_hold", "audio_mix_apply", "audio_direct_apply"
     ]
     /// The device buffer the direct path asks for (`atome-audio-engine` `direct::BUFFER_FRAMES`):
     /// on iOS it is the session's IO buffer duration, not a stream setting.
     static let directBufferFrames = 64.0
+    /// The device buffer the engine's scheduled output asks for: a cell touched sounds within a few
+    /// milliseconds instead of behind iOS's default ~1024-frame buffer (R-307).
+    static let scheduledBufferFrames = 256.0
     /// The session's own duration, put back when the direct path stops.
     static var sessionBufferDuration: TimeInterval?
 }
@@ -23,6 +26,7 @@ extension AppNativeAudioController {
         do {
             if AppNativeKiraEngine.soundingCommands.contains(command) {
                 try acquirePlaybackAudioSessionConsumer()
+                applyScheduledBuffer()
             }
             var arguments = payload
             if command == "audio_load_clip" {
@@ -42,8 +46,12 @@ extension AppNativeAudioController {
                 applyMixProgram(command, arguments, completion: completion)
                 return
             }
+            // A take on a strip that hears a session port (R-286): that port is the route it records.
+            if command == "audio_record_strip_start", let deviceId = payload["deviceId"] as? String {
+                try routeSessionInput(sessionPortsNamed(by: ["strips": [["input": ["kind": "live_audio", "device_id": deviceId]]]]))
+            }
             let (result, error) = NativeKiraEngine.run(command, arguments)
-            complete(completion, payload: result, error: error)
+            complete(completion, payload: command == "audio_mix_devices" && error == nil ? try withSessionInputs(result) : result, error: error)
         } catch {
             complete(completion, payload: ["success": false], error: error.localizedDescription)
         }
@@ -55,8 +63,10 @@ extension AppNativeAudioController {
     private func applyMixProgram(_ command: String,
                                  _ arguments: [String: Any],
                                  completion: @escaping ([String: Any], String?) -> Void) {
-        let strips = ((arguments["program"] as? [String: Any])?["strips"] as? [[String: Any]]) ?? []
-        let wantsInput = strips.contains { ($0["input"] as? [String: Any])?["kind"] as? String == "live_audio" }
+        let program = (arguments["program"] as? [String: Any]) ?? [:]
+        let strips = (program["strips"] as? [[String: Any]]) ?? []
+        // A live input anywhere in the program (a strip's IN, an IN module such as a track's input meter) opens the microphone.
+        let wantsInput = !Self.liveAudioSources(of: program).isEmpty
         let consumerId = command == "audio_direct_apply" ? "direct.live_input" : "mix.live_input"
         if command == "audio_direct_apply" { applyDirectBuffer(playing: !strips.isEmpty) }
         guard wantsInput else {
@@ -73,7 +83,10 @@ extension AppNativeAudioController {
                 }
                 do {
                     try self.acquireAudioSessionConsumer(consumerId, kind: .musicCapture, prefersBluetoothMicrophone: false)
+                    // The session port the program's live inputs name is routed before the engine opens it (R-286).
+                    try self.routeSessionInput(self.sessionPortsNamed(by: program))
                 } catch {
+                    self.releaseAudioSessionConsumer(consumerId)
                     self.complete(completion, payload: ["success": false], error: error.localizedDescription)
                     return
                 }
@@ -82,6 +95,16 @@ extension AppNativeAudioController {
                 self.complete(completion, payload: result, error: error)
             }
         }
+    }
+
+    /// The engine's short IO buffer, asked once; the direct path's shorter one takes over while it plays.
+    private func applyScheduledBuffer() {
+        let session = AVAudioSession.sharedInstance()
+        let duration = AppNativeKiraEngine.scheduledBufferFrames / max(session.sampleRate, 1)
+        guard AppNativeKiraEngine.sessionBufferDuration == nil,
+              session.preferredIOBufferDuration > duration * 1.01 else { return }
+        try? session.setPreferredIOBufferDuration(duration)
+        AppNativeAudioDiagnostics.log("scheduled buffer io=\(session.ioBufferDuration)")
     }
 
     /// The session's IO buffer: the direct path's while it plays, the session's own after.

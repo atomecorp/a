@@ -72,3 +72,7 @@ mod replay_pages;
 #[cfg(test)]
 #[path = "../../../../tests/atome_vault/conversations.rs"]
 mod conversations;
+
+#[cfg(test)]
+#[path = "../../../../tests/atome_vault/history_restore.rs"]
+mod history_restore;

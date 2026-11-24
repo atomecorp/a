@@ -137,6 +137,7 @@ object ExternalDisplay {
         when (message.optString("type")) {
             "screen" -> tellScreen()
             "trackpad" -> if (message.optBoolean("open")) openTrackpad(holes(message.optJSONArray("holes"))) else closeTrackpad(tellPage = false)
+            "screen-edge" -> ExternalDisplayPointer.extendRight(message.optString("edge") == "right")
         }
     }
 

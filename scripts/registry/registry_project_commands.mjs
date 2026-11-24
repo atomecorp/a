@@ -92,23 +92,28 @@ export async function projectAgentTools(toolIds) {
     return { owner, entries, relations, findings: [] };
 }
 
-// Runtime UI actions whose ids are computed (`ui.timeline.${verb}`) cannot be declared by name: the owner module is
-// imported and the tools it registers are read from the runtime tool registry (registration persists nothing in Node:
-// tool_persistence.js defers it until a login). The assistant's twins (timeline_tool_ids.js) run these tools.
+// Runtime UI actions registered by their owner module (some ids computed, `ui.timeline.${verb}`, `text_selection.search.${key}`),
+// so they cannot be declared by name: each owner is imported and the tools it registers are read from the runtime tool
+// registry (registration persists nothing in Node: tool_persistence.js defers it until a login). The assistant's twins
+// (timeline_tool_ids.js) run the Timeline's.
 const TIMELINE_ACTIONS_FILE = 'eVe/intuition/tools/timeline_actions.js';
+const RUNTIME_ACTION_FILES = Object.freeze([TIMELINE_ACTIONS_FILE, 'eVe/intuition/tools/text_selection_tools.js']);
 export async function projectRuntimeUiActions() {
     const { TOOL_REGISTRY } = await at('eVe/intuition/runtime/tool_state.js');
-    const before = new Set(TOOL_REGISTRY.keys());
-    await at(TIMELINE_ACTIONS_FILE);
-    const added = [...TOOL_REGISTRY.values()].filter(tool => !before.has(tool.tool_id));
-    if (!added.length) throw new Error(`registry_runtime_owner_registered_nothing:${TIMELINE_ACTIONS_FILE}`);
-    const entries = added.map(tool => ({ id: entryId('tool_definition', tool.tool_id), kind: 'tool_definition', native_id: tool.tool_id,
-        origin: 'projected', owner: TIMELINE_ACTIONS_FILE, registry: 'runtime_ui_action', visibility: tool.finder_visible ? 'visible' : 'hidden',
-        label: tool.tool_name, capabilities: [...tool.capabilities].sort(), risk_level: tool.risk_level }));
+    const entries = [];
+    for (const owner of RUNTIME_ACTION_FILES) {
+        const before = new Set(TOOL_REGISTRY.keys());
+        await at(owner);
+        const added = [...TOOL_REGISTRY.values()].filter(tool => !before.has(tool.tool_id));
+        if (!added.length) throw new Error(`registry_runtime_owner_registered_nothing:${owner}`);
+        entries.push(...added.map(tool => ({ id: entryId('tool_definition', tool.tool_id), kind: 'tool_definition', native_id: tool.tool_id,
+            origin: 'projected', owner, registry: 'runtime_ui_action', visibility: tool.finder_visible ? 'visible' : 'hidden',
+            label: tool.tool_name, capabilities: [...tool.capabilities].sort(), risk_level: tool.risk_level })));
+    }
     const { TIMELINE_AI_RUNTIME_TOOL_IDS } = await at('atome/src/squirrel/ai/timeline_tool_ids.js');
     const relations = Object.entries(TIMELINE_AI_RUNTIME_TOOL_IDS)
         .map(([aiName, toolId]) => ({ from: entryId('tool_definition', `ai_tool:${aiName}`), type: 'executes', to: entryId('tool_definition', toolId) }));
-    return { owner: TIMELINE_ACTIONS_FILE, entries, relations, findings: [] };
+    return { owner: RUNTIME_ACTION_FILES.join(' '), entries, relations, findings: [] };
 }
 
 // One runtime tool per activity of the person (activities_runtime.js#registerActivityTool, ids from

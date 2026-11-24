@@ -30,8 +30,8 @@ const settleWake = (engine, resumed) => {
     return Promise.resolve(resumed).then(() => contextRunningPast(context, from));
 };
 
-// `readEngine`: the Web engine once its audio manager runs, else null.
-export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm, readEngine }) => ({
+// `readEngine`: the Web engine once its audio manager runs, else null; `native`: whether the native engine plays.
+export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm, readEngine, native }) => ({
     // A demand on the Web engine before reading its clock or playing on its context.
     wake() {
         const engine = readEngine();
@@ -39,10 +39,12 @@ export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm, rea
     },
 
     // { owner, on }: an owner playing on the Web engine's context itself (the direct
-    // path, a live input, a recording) holds it awake until it lets go.
+    // path, a live input, a recording) holds it awake until it lets go. The native engine's
+    // output is held the same way (a surface played by touch, R-307: its first touch sounds at once).
     hold(arg) {
         const owner = String((arg && arg.owner) || '');
         if (!owner) return Promise.reject(new Error('audio_engine_hold_needs_an_owner'));
+        if (native()) return invoke('audio_output_hold', { owner: owner, on: arg.on === true }).then(function () { return true; });
         const wasm = readWasm();
         const resumed = wasm ? wasm.audio_hold(owner, arg.on === true) : null;
         return arg.on === true ? settleWake(readEngine(), resumed) : Promise.resolve(true);

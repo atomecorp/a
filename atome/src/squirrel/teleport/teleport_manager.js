@@ -76,22 +76,6 @@ export const acceptTeleport = async (sessionId) => {
     return { ok: result?.success === true, error: result?.error || null, surfaceId: result?.surfaceId || null };
 };
 
-export const declineTeleport = async (sessionId) => {
-    const id = String(sessionId || '').trim();
-    if (!id) return { ok: false, error: 'teleport_session_required' };
-    const result = await send('decline', { session_id: id });
-    if (result?.success === true) state.incomingOffers.delete(id);
-    return { ok: result?.success === true, error: result?.error || null };
-};
-
-/** Abort an offer this surface sent. Only the source surface may do this. */
-export const cancelTeleport = async (sessionId) => {
-    const id = String(sessionId || '').trim();
-    if (!id) return { ok: false, error: 'teleport_session_required' };
-    const result = await send('cancel', { session_id: id });
-    return { ok: result?.success === true, error: result?.error || null };
-};
-
 /** "Rapatrier" — bring the object back to its origin, or to an explicit surface. */
 export const returnObject = async (atomeId, toSurfaceId = '') => {
     const id = String(atomeId || '').trim();
@@ -125,17 +109,6 @@ export const readRemoteTeleportState = async (atomeId) => {
         teleport: result?.teleport || null,
         surfaces: Array.isArray(result?.surfaces) ? result.surfaces : []
     };
-};
-
-export const listPendingIncomingOffers = () => [...state.incomingOffers.values()];
-
-/** Devices of the same account are trusted by default (§11.1): an object pushed
- *  from your own phone must land on your own Mac without a confirmation dialog.
- *  Cross-user offers do not reach this path — the server refuses them until the
- *  permission model of lot 8 exists. */
-export const setTeleportAutoAccept = (enabled) => {
-    state.autoAccept = enabled !== false;
-    return state.autoAccept;
 };
 
 // The renderer decides what to paint from teleport properties, but it must know

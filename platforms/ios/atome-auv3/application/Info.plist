@@ -106,6 +106,7 @@
 	<array>
 		<string>_googlecast._tcp</string>
 		<string>_airplay._tcp</string>
+		<string>_atome._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>

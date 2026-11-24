@@ -43,7 +43,9 @@ const MIX_COMMANDS = Object.freeze({
     'mix.input.set': stripCommand({ input: { type: 'object', properties: { kind: { type: 'string', enum: ['track', 'live_audio', 'instrument'] }, device_id: { type: 'string' },
         instrument_id: { type: 'string', description: 'For an instrument: the instrument atome (Mes instruments) whose notes the strip plays.' }, output } } }, ['input']),
     'mix.record.set': stripCommand({ device_id: { type: ['string', 'null'], description: 'The input a take of this track opens: a microphone on its audio strip, a camera on its video strip (an id of media inputs); null for the input in use.' },
-        monitoring: { type: 'boolean', description: 'On the audio strip: whether the take is heard while it records (false: recorded, not heard).' } }),
+        monitoring: { type: 'boolean', description: 'On the audio strip: whether the take is heard while it records (false: recorded, not heard).' },
+        format: { type: ['string', 'null'], enum: ['mono', 'stereo', null], description: 'On the audio strip, with channels: one physical channel (mono) or a pair (stereo); null with channels null for the input\'s first two.' },
+        channels: { type: ['array', 'null'], items: { type: 'integer', minimum: 1 }, description: 'The input\'s physical channels, counted from 1: one in mono (17), a pair of neighbours in stereo (23, 24 = left, right).' } }),
     'mix.group.create': { type: 'object', required: ['group_id', 'master_strip_id', 'member_strip_ids'], properties: { group_id: { type: 'string' }, master_strip_id: { type: 'string' }, member_strip_ids: { type: 'array', items: { type: 'string' } } } },
     'mix.group.join': stripCommand({ group_id: { type: 'string' } }, ['group_id']),
     'mix.group.leave': stripCommand({}),
@@ -53,7 +55,7 @@ const MIX_COMMANDS = Object.freeze({
 const EDIT_VERBS = [
     'clip.move', 'clip.trim', 'clip.crop', 'clip.loop', 'clip.view', 'clip.mode', 'clip.fades', 'clip.stretch', 'clip.warp', 'clip.split', 'clip.join', 'clip.take',
     'clip.cut', 'clip.copy', 'clip.paste', 'clip.erase', 'clip.duplicate', 'clip.sound.split', 'clip.sound.unlink',
-    'scene.add', 'scene.update', 'scene.remove', 'scene.move', 'cell.set', 'cell.clear', 'cell.place',
+    'scene.add', 'scene.update', 'scene.remove', 'scene.move', 'cell.set', 'cell.clear', 'cell.carve', 'cell.restore', 'cell.roll', 'cell.offset', 'cell.remove', 'cell.insert', 'cell.trim', 'cell.place', 'cell.group', 'cell.ungroup',
     'track.add', 'track.remove', 'track.update', 'track.reorder', 'track.loop', 'track.quantization', 'track.mute', 'track.solo',
     'transport.seek', 'transport.scrub', 'transport.loop', 'transport.tempo', 'quantization.set', 'metronome.set',
     'section.add', 'section.update', 'section.remove', 'record_region.add', 'record_region.update', 'record_region.remove',
@@ -71,7 +73,8 @@ export const timelineWriteVerbSchema = verb => closed({
 const record = closed({
     group_id: groupId, track_id: id, capture_id: id,
     duration_ms: { type: 'integer', minimum: 100, maximum: 600000 },
-    record_region_id: id, source_kind: { type: 'string', enum: ['audio', 'video', 'screen', 'photo'] }
+    // `midi` and `action` (Geste, user 23 Nov. 2026) take the page clock, as their timeline takes do.
+    record_region_id: id, source_kind: { type: 'string', enum: ['audio', 'video', 'screen', 'photo', 'midi', 'action'] }
 }, ['group_id']);
 
 /** Input contract of every other timeline tool, by verb. */
@@ -96,9 +99,11 @@ export const TIMELINE_TOOL_SCHEMAS = Object.freeze({
     'transport.play': closed({ group_id: id, project_id: id, start_seconds: { type: 'number', minimum: 0 } }, ['group_id']),
     'transport.list.toggle': closed({ group_ids: { type: 'array', items: { type: 'string' } } }),
     'transport.list.stop': closed(),
+    // Also run by a MIDI binding (R-293), which hands every action its message's value.
     'cells.trigger': closed({
         group_id: id, gesture: { type: 'string', enum: ['press', 'release'] },
-        cells: { type: 'array', items: closed({ scene_id: id, track_id: id }) }
+        cells: { type: 'array', items: closed({ scene_id: id, track_id: id }) },
+        midi_value: { type: 'number' }, midi_logical_value: { type: 'number' }, target_atome_id: { type: 'string' }
     }, ['group_id', 'cells']),
     'cells.stop': closed({ group_id: id }, ['group_id']),
     activity: closed({ project_id: id }),
@@ -114,5 +119,16 @@ export const TIMELINE_TOOL_SCHEMAS = Object.freeze({
     'history.redo': closed({ group_id: groupId }),
     'performance.delete': closed({ group_id: groupId }),
     // « Réalig »: a project's timeline laid again in its List order (the current project when omitted).
-    realign: closed({ project_id: id })
+    realign: closed({ project_id: id }),
+    // A MIDI clip's own .mid file handed to the system's export, and Figer: the clip rendered as sound by its eVe instrument.
+    'midi.export': closed({ group_id: groupId, clip_id: id }, ['clip_id']),
+    'midi.freeze': closed({ group_id: groupId, clip_id: id }, ['clip_id']),
+    'audio.export': closed({ group_id: groupId, clip_id: id }, ['clip_id']),
+    // A console strip's presets (mix_strip_presets.js), kept in the person's account: listed, saved under a name, laid on a strip.
+    'mix.preset.list': closed({ lane: { type: 'string', enum: ['audio', 'video', 'midi'] } }),
+    'mix.preset.save': closed({ group_id: groupId, strip_id: id, name: id }, ['strip_id']),
+    'mix.preset.load': closed({ group_id: groupId, strip_id: id, preset_id: id }, ['strip_id', 'preset_id']),
+    // The « Importer » plate of a track's empty part (R-344) by command: the person's media atomes laid end to end from start_seconds.
+    'track.import': closed({ project_id: id, track_id: id, start_seconds: { type: 'number', minimum: 0 },
+        media_atome_ids: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } } }, ['track_id', 'media_atome_ids'])
 });

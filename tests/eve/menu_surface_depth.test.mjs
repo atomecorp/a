@@ -17,9 +17,11 @@ vi.mock('../../eVe/domains/rendering/project_scene_runtime.js', async importOrig
         for (const patch of records) Object.assign(PROJECT_SCENES.get(projectId).records.get(patch.id).properties, patch.properties);
         return { ok: true };
     }),
-    reconcileProjectSceneRecordsByPrefix: vi.fn(async ({ projectId, prefix }) => {
+    // The prefix's records are replaced by the ones given (a menu ground is laid as a diff under its own id).
+    reconcileProjectSceneRecordsByPrefix: vi.fn(async ({ projectId, prefix, records: laid = [] }) => {
         const records = PROJECT_SCENES.get(projectId).records;
         for (const id of records.keys()) if (id.startsWith(prefix)) records.delete(id);
+        for (const record of laid) records.set(record.id, normalizeWorkspaceSceneRecord(record));
         return { ok: true };
     })
 }));

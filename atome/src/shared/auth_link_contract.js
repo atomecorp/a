@@ -1,13 +1,6 @@
 // Versioned, domain-separated signing input shared by clients and the verifier.
 export const AUTH_LINK_ORIGIN = 'https://atome.one';
 export const AUTH_LINK_PROTOCOL = 'atome.phone-link.v1';
-export const AUTH_LINK_TTL_MS = 5 * 60 * 1000;
-export const AUTH_ACCESS_TTL_SECONDS = 15 * 60;
-export const AUTH_SESSION_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
-export const AUTH_SESSION_MAX_MS = 90 * 24 * 60 * 60 * 1000;
-// A shared device keeps no long session: each opening is approved again (V1 §6.4).
-export const AUTH_SHARED_SESSION_IDLE_MS = 2 * 60 * 60 * 1000;
-export const AUTH_SHARED_SESSION_MAX_MS = 12 * 60 * 60 * 1000;
 
 async function sha256Hex(text, subtle = globalThis.crypto.subtle) {
     const digest = await subtle.digest('SHA-256', new TextEncoder().encode(text));

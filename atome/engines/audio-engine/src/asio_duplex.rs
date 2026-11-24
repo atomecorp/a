@@ -118,7 +118,9 @@ fn with_listeners(change: impl FnOnce(&mut Listeners)) -> Result<(), String> {
 // Every strip listens to the driver's input, whatever input it named.
 pub(crate) fn listen(device: &str, live: Vec<Arc<LiveInput>>) -> Result<(), String> {
     if !live.is_empty() {
-        input_format()?;
+        let (_, width) = input_format()?;
+        live.iter()
+            .try_for_each(|input| input.fits(usize::from(width)))?;
     }
     with_listeners(|listeners| {
         if live.is_empty() {
@@ -163,15 +165,16 @@ fn feed(samples: &[f32], channels: usize, frames: &mut Vec<Frame>) {
     if listeners.live.is_empty() {
         return;
     }
-    frames.clear();
-    frames.extend(
-        samples
-            .chunks(channels)
-            .take(frames.capacity())
-            .map(|frame| Frame::new(frame[0], frame.get(1).copied().unwrap_or(frame[0]))),
-    );
-    direct::note_input_quantum(frames.len());
+    direct::note_input_quantum(samples.len() / channels.max(1));
+    // Each listener takes its own channels of the driver's inputs (R-286).
     listeners.live.values().flatten().for_each(|input| {
+        frames.clear();
+        frames.extend(
+            samples
+                .chunks(channels.max(1))
+                .take(frames.capacity())
+                .map(|frame| input.frame_of(frame)),
+        );
         input.push_at(frames, host_ns as f64);
     });
 }

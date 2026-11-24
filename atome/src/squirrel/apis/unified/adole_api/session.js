@@ -241,3 +241,6 @@ export const updateWindowProject = (project) => {
     }
     window.__currentProject = project;
 };
+
+// The current project's id as `updateWindowProject` wrote it (null when there is none): its only reader in atome.
+export const readWindowProjectId = () => (typeof window !== 'undefined' && window.__currentProject?.id ? String(window.__currentProject.id) : null);

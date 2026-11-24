@@ -9,7 +9,7 @@ enum NativeKiraEngine {
     /// Commands the engine answers, by the names the JS backend sends.
     static let commands: Set<String> = [
         "audio_load_clip", "audio_load_clip_from_bytes", "audio_probe_duration_from_bytes", "audio_has_clip", "audio_play", "audio_play_instance",
-        "audio_schedule_instances", "audio_render_clock", "audio_measure_input_latency",
+        "audio_schedule_instances", "audio_render_clock", "audio_output_hold", "audio_measure_input_latency",
         "audio_mix_apply", "audio_mix_levels", "audio_mix_readings", "audio_mix_devices", "audio_mix_cut_tail", "audio_mix_asset_load", "audio_mix_asset_unload", "audio_mix_module_state",
         "audio_instrument_sample_load", "audio_instrument",
         "audio_direct_apply", "audio_direct_levels", "audio_direct_readings", "audio_direct_cut_tail", "audio_direct_module_state", "audio_direct_measure_latency",

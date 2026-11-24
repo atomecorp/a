@@ -78,9 +78,15 @@ fn ensure_audio_manager(
         .ok_or_else(|| JsValue::from_str("Audio manager not initialized"))
 }
 
-fn is_explicit_symphonia_container(bytes: &[u8]) -> bool {
-    (bytes.len() >= 12 && &bytes[4..8] == b"ftyp")
-        || atome_mix_graph::clip_decode::is_aiff_container(bytes)
+/// A sound's bytes decoded as the engine plays them: MP4/M4A, AIFF and CAF by the
+/// mix graph's decoder, the others (WAV, MP3, OGG, FLAC) by Kira's. The waveform
+/// a sound shows is read here too (kernels.rs `waveformOfSound`): what shows plays.
+pub(crate) fn decode_sound(data: &[u8]) -> Result<StaticSoundData, String> {
+    if atome_mix_graph::clip_decode::is_symphonia_container(data) {
+        return atome_mix_graph::clip_decode::decode_clip(data.to_vec(), None);
+    }
+    StaticSoundData::from_cursor(Cursor::new(data.to_vec()))
+        .map_err(|error| format!("Failed to decode audio: {error}"))
 }
 
 #[wasm_bindgen]
@@ -94,7 +100,7 @@ pub fn audio_init() -> Result<(), JsValue> {
     Ok(())
 }
 
-/// Load an audio clip from raw bytes (WAV, MP3, OGG).
+/// Load an audio clip from raw bytes (WAV, MP3, OGG, FLAC; MP4/M4A, AIFF and CAF by the mix graph's decoder).
 /// In WASM, we cannot read files from disk so JS must pass the bytes.
 #[wasm_bindgen]
 pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<f64, JsValue> {
@@ -103,14 +109,7 @@ pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<f64, JsValue>
         .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
     let engine = ensure_engine(&mut guard);
 
-    let sound_data = if is_explicit_symphonia_container(data) {
-        atome_mix_graph::clip_decode::decode_clip(data.to_vec(), None)
-            .map_err(|error| JsValue::from_str(&error))?
-    } else {
-        let cursor = Cursor::new(data.to_vec());
-        StaticSoundData::from_cursor(cursor)
-            .map_err(|e| JsValue::from_str(&format!("Failed to decode audio: {e}")))?
-    };
+    let sound_data = decode_sound(data).map_err(|error| JsValue::from_str(&error))?;
 
     let duration_seconds = sound_data.duration().as_secs_f64();
     engine

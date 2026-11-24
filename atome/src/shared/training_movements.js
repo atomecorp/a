@@ -76,12 +76,3 @@ export const trainingMovementOf = (exerciseId) => {
     return { movement, variant: movement.variants.find(variant => variant.exercise_id === exerciseId) };
 };
 export const trainingMovementsOfGroup = group => TRAINING_MOVEMENTS.filter(movement => movement.group === group);
-/** A variant's input kept to what it is measured by: an incompatible field (a load on a body-weight variant or a posture,
- * repetitions on a hold, a side or a position it has not) is dropped, never sent. */
-export const trainingVariantInput = (exerciseId, input = {}) => {
-    const { variant } = trainingMovementOf(exerciseId);
-    const allowed = new Set([variant.param, 'sets', 'rest_s', ...(variant.load ? [variant.load] : []), ...(variant.side ? ['side'] : []),
-        ...(variant.positions.length ? ['position'] : []), ...(variant.personal_machine ? ['machine_id'] : [])]);
-    return Object.fromEntries(Object.entries(input).filter(([key, value]) => allowed.has(key)
-        && (key !== 'position' || variant.positions.includes(value)) && (key !== 'side' || ['left', 'right'].includes(value))));
-};

@@ -50,13 +50,21 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
         if (!durable) return undefined;
         return remoteAuthority ? { ...durable, authority: remoteAuthority.bound() } : durable;
     }
+    // No remote session under this server (a device signed in locally only): known until a record is written — a
+    // sign-in, a pairing, a local unlock (`local-grant`) — or the server changes, so the services that ask for one
+    // every few seconds do not each cross to the native store (R-295: 21 native reads in 35 s).
+    let sessionAbsentFor = null;
+    const authorityKey = () => (remoteAuthority ? remoteAuthority.current() : '');
     async function read(key) {
+        if (key === 'session' && nativeSession && sessionAbsentFor === authorityKey()) return undefined;
         const record = await readRecord(key);
+        if (key === 'session' && nativeSession) sessionAbsentFor = record ? null : authorityKey();
         if (!record || !remoteAuthority || !isRemoteRecord(key)) return record;
         const issuer = record.authority || remoteAuthority.legacy();
         return issuer === remoteAuthority.current() ? record : undefined;
     }
     async function put(key, value) {
+        sessionAbsentFor = null;
         if (remoteAuthority && isRemoteRecord(key)) value = { ...value, authority: remoteAuthority.current() };
         try { return await cachePut(key, value); } catch (error) {
             if (key !== 'session' || !nativeSession) throw error;
@@ -64,6 +72,7 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
         }
     }
     async function remove(key) {
+        sessionAbsentFor = null;
         if (key === 'session' && nativeSession && (!remoteAuthority
             || remoteAuthority.current() === remoteAuthority.bound())) await nativeSession.clear();
         if (remoteAuthority && isRemoteRecord(key)) {

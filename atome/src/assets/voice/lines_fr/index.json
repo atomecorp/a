@@ -159,11 +159,35 @@
    "phonemes": "^la kɔ̃vɛʁsasjɔ̃ depas la kapasite dy modɛl .$",
    "sha256": "217a1ac861b3abf16c12f3a77b9e762e7c3d8712cdca929077455b5f08c05be8"
   },
-  "Aucune clé API OpenAI n’est configurée pour ce compte.": {
-   "file": "32f22d4212471534.wav",
-   "samples": 64768,
-   "phonemes": "^okyn kle apei opɛnai nɛ kɔ̃fiɡyʁe puʁ sə kɔ̃t .$",
-   "sha256": "be9940ca5c5a7b7ba68db658f8c301ef9cf64bdc07811ef3327fb85bc41e9dd2"
+  "L’IA d’atome n’est pas ouverte pour ce compte.": {
+   "file": "9851cb78a67f0595.wav",
+   "samples": 56320,
+   "phonemes": "^lia datom nɛ pa uvɛʁt puʁ sə kɔ̃t .$",
+   "sha256": "9e9c7f5a1e56f3b4a988c223709edb1a8d04b3ed58ac2d88fd3e427624305f01"
+  },
+  "L’IA d’atome est fermée pour le moment. Un administrateur l’ouvre dans Réglages, Budget, Réels.": {
+   "file": "af710b2f362b5dac.wav",
+   "samples": 123136,
+   "phonemes": "^lia datom ɛ fɛʁme puʁ lə momɑ̃ . œ̃ nadministʁatœʁ luvʁ dɑ̃ ʁeɡlaʒ , bydʒɛ , ʁeɛl .$",
+   "sha256": "72d844d1a41a40ab9920a0b23589c57ef597d87d72b939fb8644e018cceda5fe"
+  },
+  "L’IA d’atome n’est pas encore ouverte pour ce compte. Un administrateur l’ajoute dans Réglages, Budget.": {
+   "file": "b83916419bc60cc7.wav",
+   "samples": 133888,
+   "phonemes": "^lia datom nɛ pa ɑ̃koʁ uvɛʁt puʁ sə kɔ̃t . œ̃ nadministʁatœʁ laʒut dɑ̃ ʁeɡlaʒ , bydʒɛ .$",
+   "sha256": "f89d319e2daedb5b6ad544e02eb999f1b2cbf65e3211ded9e6fe63e91fda04f9"
+  },
+  "Le budget d’essai de l’IA est atteint.": {
+   "file": "c99664b90546a4b2.wav",
+   "samples": 43008,
+   "phonemes": "^lə bydʒɛ dɛsɛ də lia ɛ tatɛ̃ .$",
+   "sha256": "b0dbb9d01520bf2e1852d74b73d4117f6c31496c3e55867a10165bb290ce7ce7"
+  },
+  "Ton solde ne suffit plus pour l’IA : recharge ton compte.": {
+   "file": "1885071c03c11abc.wav",
+   "samples": 81152,
+   "phonemes": "^tɔ̃ sold nə syfi ply puʁ lia : ʁəʃaʁʒ tɔ̃ kɔ̃t .$",
+   "sha256": "3362a9aa5a2ad6e6141c70514b0b4fb9246237a0c2e77c4faf453113e54bef6e"
   },
   "Connecte-toi pour activer l’assistant.": {
    "file": "bd3915d35036e388.wav",
@@ -411,11 +435,11 @@
    "phonemes": "^ɛʁœʁ də lasistɑ̃ ( kod ) .$",
    "sha256": "098362c343e4026527dadd07d7ac72595dbbcc1c20605d31b3747b0075631ff9"
   },
-  "Le crédit partagé d’eVe est épuisé. Ta propre clé OpenAI, dans Réglages, permet de continuer.": {
-   "file": "9c1b1cca23ccb88c.wav",
-   "samples": 126464,
-   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ tepɥize . ta pʁopʁ kle opɛnai , dɑ̃ ʁeɡlaʒ , pɛʁmɛ də kɔ̃tinye .$",
-   "sha256": "9dd16a5b3b109b338a60431cd00e370fc404875b9e07e1ba0a9a87945d9efd02"
+  "Le crédit d’IA d’atome est épuisé pour aujourd’hui.": {
+   "file": "c5ba6048d44b881b.wav",
+   "samples": 68864,
+   "phonemes": "^lə kʁedi dia datom ɛ tepɥize puʁ oʒuʁ ɥi .$",
+   "sha256": "7d9c0c39decbc405ca8f33e8788f6a4df62c76e7a8b52e2f312b83c162140f72"
   },
   "Crédit ou plafond de dépenses OpenAI atteint.": {
    "file": "e5943a7fb5a6de38.wav",
@@ -447,11 +471,11 @@
    "phonemes": "^la ʁepɔ̃s dopɛnai sɛ taʁɛte avɑ̃ la fɛ̃ . ʁeesɛ .$",
    "sha256": "23a391bcb0dac3ba555a7f2c896c7a7f7a4efa4f3c078e096983da5f10b266e1"
   },
-  "Toutes les places du crédit partagé d’eVe sont prises. Ta propre clé OpenAI, dans Réglages, permet de continuer.": {
-   "file": "96b363c5114c57cb.wav",
-   "samples": 133120,
-   "phonemes": "^tut le plas dy kʁedi paʁtaʒe dəv sɔ̃ pʁiz . ta pʁopʁ kle opɛnai , dɑ̃ ʁeɡlaʒ , pɛʁmɛ də kɔ̃tinye .$",
-   "sha256": "01e5afcb4bfa57b89e424e4e5b088304aa1f3008d20a9912b0e41825e7939ca6"
+  "Toutes les places de l’IA d’atome sont prises.": {
+   "file": "2c6856f9840ddd88.wav",
+   "samples": 46592,
+   "phonemes": "^tut le plas də lia datom sɔ̃ pʁiz .$",
+   "sha256": "b554d7d7ae0c7fb985e404fd7a56d39acaed886f305bfcdee726f1db2ea21340"
   },
   "Le crédit partagé d’eVe est indisponible sur ce serveur.": {
    "file": "b36ad95ca10c79b5.wav",

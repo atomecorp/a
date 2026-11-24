@@ -156,6 +156,17 @@ export const createRealtimeSession = ({
         armIdle(token); await ownSentence(token, announceTouch);
         return snapshot();
     };
+    // Something the app needs from the person (an AirPlay receiver's pairing code): `note` tells her, she asks in her own
+    // voice and listens on.
+    const prompt = async ({ note }) => {
+        if (!peer || !listening || !remoteId) return false;
+        armIdle(generation);
+        await request('realtime-send', { session_id: remoteId, events: [
+            { type: 'conversation.item.create', item: { type: 'message', role: 'system', content: [{ type: 'input_text', text: String(note) }] } },
+            { type: 'response.create' }
+        ] }, { signal: abort.signal });
+        return true;
+    };
     const stopCapture = () => {
         listening = false;
         stream?.getTracks().forEach(track => track.stop());
@@ -371,7 +382,7 @@ export const createRealtimeSession = ({
     };
     // A hang-up releases the transport at once, in silence.
     return Object.freeze({
-        open, close, pause, respond,
+        open, close, pause, respond, prompt,
         async configure(options = {}) {
             const nextDevice = options.deviceId === undefined ? deviceId : String(options.deviceId);
             await pause(); deviceId = nextDevice;

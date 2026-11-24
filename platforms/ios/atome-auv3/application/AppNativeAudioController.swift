@@ -202,8 +202,12 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     }
 
     @objc private func handleAudioSessionRouteChange(_ notification: Notification) {
+        let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+        let reason = AVAudioSession.RouteChangeReason(rawValue: raw) ?? .unknown
         queue.async {
             self.keepOutputOffReceiver()
+            // A card unplugged or plugged back (R-286): the inputs listed again, the engine's port routed again.
+            self.followSessionInputRoute(reason)
             guard !self.audioSessionConsumers.captureConsumerIds.isEmpty else { return }
             AppNativeAudioDiagnostics.log(
                 "session route_changed \(self.audioSessionDiagnosticSnapshot())"

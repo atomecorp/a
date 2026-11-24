@@ -4,7 +4,7 @@ import { getSessionState } from './session.js';
 import { isTauriRuntime } from './runtime.js';
 import { getFastifyHttpBaseUrl } from '../adole_backend.js';
 import { commitWorkspaceEvents, createWorkspaceSnapshot, getGuestAtome, listGuestAtomes, listWorkspaceEvents,
-    oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile,
+    oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, logAcknowledgedWorkspaceEvents, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile,
     parkRefusedWorkspaceFile, requeueRefusedWorkspaceFiles } from './guest_workspace_store.js';
 
 const owns = message => ['events', 'state-current', 'atome'].includes(message?.type)
@@ -77,6 +77,18 @@ export async function browserWorkspaceRequest(message) {
     return { ok: true, success: true, ...result };
 }
 
+// An undo or a redo runs on the server's history (`atome_commit.js#executeHistoryCommand`): what it committed joins
+// this device's journal and its projections the device's states, so the next undo reads it and walks one step further.
+export async function recordServerHistoryEvents(events) {
+    if (isTauriRuntime()) return { ok: true, skipped: true };
+    const owner = getSessionState().user?.id;
+    if (!owner) throw new Error('local_authorization_required');
+    if (!Array.isArray(events) || !events.length) return { ok: true, count: 0 };
+    await logAcknowledgedWorkspaceEvents(String(owner), events);
+    await importWorkspaceStates(String(owner), events.map(event => event.projection).filter(Boolean));
+    return { ok: true, count: events.length };
+}
+
 // A row is parked only on the server's verdict about that row. No response, a
 // lost socket or a timeout (status 0) and an authentication refusal say
 // nothing about the row: the pass stops and the row keeps its place.
@@ -116,11 +128,20 @@ const pullOf = options => {
     throw new Error('workspace_sync_pull_invalid');
 };
 let requestedPull = null;
+// `untilSent`: the promise settles once the outbox (what was committed before the call) has left, not at the end of
+// the pass — an undo waits for its transaction to reach the server, never for a whole workspace walk under way
+// (18 s measured on a new account). Waiters are armed when an outbox round starts and settled when it ends.
+let sendWaiters = [], armedWaiters = [];
+const settleWaiters = (waiters, error, result) => waiters.forEach(waiter => (error ? waiter.reject(error) : waiter.resolve(result)));
 export function synchronizeBrowserWorkspace(transport, options = {}) {
     if (isTauriRuntime()) return Promise.resolve({ ok: true });
     const pull = pullOf(options);
     requestedPull = requestedPull ? mergePull(requestedPull, pull) : pull;
-    if (synchronization) return synchronization;
+    const sent = options.untilSent === true ? new Promise((resolve, reject) => sendWaiters.push({ resolve, reject })) : null;
+    const pass = synchronization || runSynchronization(transport);
+    return sent || pass;
+}
+function runSynchronization(transport) {
     synchronization = (async () => {
         let result;
         do {
@@ -135,11 +156,18 @@ export function synchronizeBrowserWorkspace(transport, options = {}) {
                 // What this pass did not read stays asked: the next request (the retry) reads it too.
                 requestedPull = requestedPull ? mergePull(next, requestedPull) : next;
                 publishProgress(owner, fingerprint, 'error', String(error?.message || 'workspace_sync_failed'));
+                settleWaiters([...armedWaiters, ...sendWaiters], error);
+                armedWaiters = []; sendWaiters = [];
                 throw error;
             }
         } while (requestedPull && result?.ok === true);
+        // A pass that never reached its outbox (no session) answers its waiters with its result, as before.
+        settleWaiters([...armedWaiters, ...sendWaiters], null, result);
+        armedWaiters = []; sendWaiters = [];
         return result;
     })().finally(() => { synchronization = null; });
+    // An `untilSent` caller holds its waiter, not the pass: its failure reaches that waiter (above), never unhandled.
+    synchronization.catch(() => {});
     return synchronization;
 }
 
@@ -165,6 +193,7 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
         if (!result?.success || result.file_name !== file.file_name || result.owner_id !== owner) throw new Error(result?.error || 'workspace_media_sync_failed');
         await acknowledgeWorkspaceFile(owner, file.file_id);
     }
+    armedWaiters.push(...sendWaiters); sendWaiters = [];
     // Oldest first, one row at a time, rows committed during the pass included.
     // A row the server refuses is parked (kept, reported) so it cannot hold
     // back every later change; any other failure stops the pass in place.
@@ -184,6 +213,7 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
         await parkRefusedWorkspaceEvent(owner, entry, response.error);
         refused.push({ id: entry.payload.id, atome_id: entry.payload.atome_id, error: String(response.error || 'workspace_sync_refused') });
     }
+    settleWaiters(armedWaiters, null, { ok: true }); armedWaiters = [];
     if (refused.length) {
         globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-sync-refused', { detail: { userId: owner, refused } }));
     }

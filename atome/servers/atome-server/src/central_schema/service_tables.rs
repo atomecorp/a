@@ -91,6 +91,7 @@ pub(super) const IDENTITY: [&str; 12] = [
         decided_at TEXT,
         revoked_at TEXT,
         expires_at TEXT,
+        once INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY(owner_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
         FOREIGN KEY(grantee_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
         CHECK(status IN ('pending', 'granted', 'denied', 'revoked'))
@@ -543,6 +544,12 @@ pub(crate) const CB: [&str; 17] = [
         at_ms INTEGER NOT NULL
     )"#,
 ];
+
+/// R-248: a grant given for one use (`once`), spent by its first use; an older table gains it.
+pub(crate) const SURFACE_GRANT_COLUMNS: [(&str, &str); 1] = [(
+    "once",
+    "ALTER TABLE surface_grants ADD COLUMN once INTEGER NOT NULL DEFAULT 0",
+)];
 
 /// The columns lot L2b added to the bottles (lieu et traduction): an older table gains them, in this order
 /// (database/adole_cb_social_schema.js `CB_BOTTLE_COLUMNS`). The country a bottle was thrown to is the only one kept.

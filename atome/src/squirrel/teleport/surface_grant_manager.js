@@ -67,12 +67,15 @@ export const requestSurfaceAccess = async ({ ownerId, surfaceId, capabilities = 
 
 /** Approve a request. `capabilities` may narrow it — the owner is never forced to
  *  grant everything that was asked for (§11.3). */
-export const acceptSurfaceGrant = async (grantId, capabilities = null) => {
+/** `expiresAt` (ISO): the grant ends then (« for the session », R-248: 3 h at most); `once`: it is spent by its first use. */
+export const acceptSurfaceGrant = async (grantId, capabilities = null, { expiresAt = '', once = false } = {}) => {
     const id = String(grantId || '').trim();
     if (!id) return { ok: false, error: 'surface_grant_id_required' };
     const result = await send('accept', {
         grant_id: id,
-        ...(Array.isArray(capabilities) ? { capabilities } : {})
+        ...(Array.isArray(capabilities) ? { capabilities } : {}),
+        ...(expiresAt ? { expires_at: String(expiresAt) } : {}),
+        ...(once ? { once: true } : {})
     });
     if (result?.success === true) state.incoming.delete(id);
     return { ok: result?.success === true, error: result?.error || null, grant: result?.grant || null };
@@ -94,19 +97,6 @@ export const revokeSurfaceGrant = async (grantId) => {
     state.outgoing.delete(id);
     return { ok: result?.success === true, error: result?.error || null, grant: result?.grant || null };
 };
-
-export const listSurfaceGrants = async () => {
-    const result = await send('list');
-    return {
-        ok: result?.success === true,
-        error: result?.error || null,
-        incoming: result?.grants?.incoming || [],
-        outgoing: result?.grants?.outgoing || []
-    };
-};
-
-export const pendingIncomingGrants = () => [...state.incoming.values()];
-export const pendingOutgoingGrants = () => [...state.outgoing.values()];
 
 export const installSurfaceGrantLifecycle = () => {
     if (typeof window === 'undefined' || state.lifecycleInstalled) return false;

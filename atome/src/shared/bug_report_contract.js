@@ -18,7 +18,6 @@ export const BUG_REPORT_STATUS_MAX = 50;
 export const BUG_REPORT_KINDS = Object.freeze(['bug', 'request']);
 export const FEATURE_REQUEST_ADMIN = 'feature-request-admin';
 export const FEATURE_REQUEST_ROADMAP = 'feature-request-roadmap';
-export const FEATURE_REQUEST_REVIEWS = Object.freeze(['validated', 'refused']);
 export const ROADMAP_STATES = Object.freeze(['planned', 'in_progress', 'done']);
 export const FEATURE_REQUEST_REASON_MAX = 1000;
 
@@ -83,5 +82,3 @@ export const normalizeBugReportRefs = (refs) => {
 // A report's kind; every report filed before requests existed is a bug.
 export const bugReportKindOf = report => (report?.kind === undefined ? 'bug' : report.kind);
 
-// An admin's refusal reason, bounded (may be empty).
-export const normalizeRefusalReason = value => text(value, FEATURE_REQUEST_REASON_MAX);

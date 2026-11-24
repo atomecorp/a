@@ -19,7 +19,7 @@ type Reply = Sender<Result<(), String>>;
 enum Control {
     Phrases(Vec<String>, Reply),
     Speaking(bool),
-    Listening(Listening),
+    Listening(Listening, Reply),
     Verifier(Option<String>, Reply),
     Stop,
 }
@@ -50,25 +50,16 @@ fn locked<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
 }
 
 /// Model files under the shipped voice assets (atome/src/assets/voice).
-fn load_engine(root: &Path) -> Result<VoiceEngine, String> {
+fn load_engine(root: &Path, listening: Listening) -> Result<VoiceEngine, String> {
     let path = |relative: &str| root.join(relative).to_string_lossy().into_owned();
-    let (vosk_dir, silero) = (
-        path("vosk/vosk-model-small-fr-0.22"),
-        path("vad/silero_vad.onnx"),
-    );
-    let (wake_mel, wake_embedding, wake_classifier) = (
-        path("wake/melspectrogram.onnx"),
-        path("wake/embedding_model.onnx"),
-        path("wake/eve_ecoute_moi.json"),
-    );
-    VoiceEngine::load(&VoiceModels {
-        vosk_dir: &vosk_dir,
-        silero: &silero,
-        wake_mel: &wake_mel,
-        wake_embedding: &wake_embedding,
-        wake_classifier: &wake_classifier,
-    })
-    .map_err(|error| error.to_string())
+    let models = VoiceModels {
+        vosk_dir: path("vosk/vosk-model-small-fr-0.22"),
+        silero: path("vad/silero_vad.onnx"),
+        wake_mel: path("wake/melspectrogram.onnx"),
+        wake_embedding: path("wake/embedding_model.onnx"),
+        wake_classifier: path("wake/eve_ecoute_moi.json"),
+    };
+    VoiceEngine::load(models, listening).map_err(|error| error.to_string())
 }
 
 /// The audio gathered since the last pump, in [-1, 1].
@@ -96,7 +87,13 @@ fn apply(engine: &mut VoiceEngine, control: Control) {
             );
         }
         Control::Speaking(speaking) => engine.set_speaking(speaking),
-        Control::Listening(listening) => engine.set_listening(listening),
+        Control::Listening(listening, reply) => {
+            let _ = reply.send(
+                engine
+                    .set_listening(listening)
+                    .map_err(|error| error.to_string()),
+            );
+        }
         Control::Verifier(json, reply) => {
             let _ = reply.send(
                 engine
@@ -140,8 +137,10 @@ fn run(
     }
 }
 
-/// Starts the session; `own_capture` opens the engine's microphone capture.
-pub fn start(models_root: &Path, own_capture: bool) -> Result<Value, String> {
+/// Starts the session; `own_capture` opens the engine's microphone capture. `listening` is the
+/// first mode: standby and enrollment start without the conversation's models.
+pub fn start(models_root: &Path, own_capture: bool, listening: &str) -> Result<Value, String> {
+    let listening = Listening::parse(listening)?;
     let mut owner = locked(&SESSION)?;
     if owner.is_some() {
         return Err("voice_session_busy".into());
@@ -151,7 +150,7 @@ pub fn start(models_root: &Path, own_capture: bool) -> Result<Value, String> {
     let (ready, loaded) = channel();
     let (root, shared) = (models_root.to_path_buf(), outbox.clone());
     let thread = crate::engine_thread::spawn(move || {
-        let engine = match load_engine(&root) {
+        let engine = match load_engine(&root, listening) {
             Ok(engine) => engine,
             Err(error) => {
                 let _ = ready.send(Err(error));
@@ -230,12 +229,8 @@ pub fn set_speaking(speaking: bool) -> Result<Value, String> {
 }
 
 pub fn set_listening(listening: &str) -> Result<Value, String> {
-    let mode = match listening {
-        "conversation" => Listening::Conversation,
-        "wake" => Listening::Wake,
-        other => return Err(format!("voice_listening_invalid:{other}")),
-    };
-    send(Control::Listening(mode)).map(|()| json!({ "ok": true }))
+    let mode = Listening::parse(listening)?;
+    ask(|reply| Control::Listening(mode, reply))
 }
 
 /// PCM from a host that owns the microphone (iOS), 16 kHz mono in [-1, 1].

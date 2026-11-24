@@ -1,0 +1,5 @@
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!-- Enr. › Geste (user, 24 Nov. 2026): the record point in the middle, the move rising from it. -->
+  <path stroke="none" fill="rgb(0, 0, 0)" d="M 64,6 L 92,38 L 72,38 L 72,58 L 56,58 L 56,38 L 36,38 Z" />
+  <circle stroke="none" fill="rgb(255, 45, 45)" cx="64" cy="84" r="24" />
+</svg>

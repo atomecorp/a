@@ -112,11 +112,10 @@ describe('User tool canonical command', () => {
         h.window.__eveProfilePreferences = { visual: { masteryLevel: 'advanced' } };
         try {
             await h.runtime.showFully();
-            // No Find since R-264; the project's Lecture (`transport`) lies right after rec. in the Timeline, Cells, Mix and
-            // Natural views, never in the List nor the Matrix (rule 13, R-273); the List adds « Réalig » last (R-010).
-            const expected = ['capture', 'create', 'communicate', 'calendar'];
-            const laid = (view, keys) => (['natural', 'mix', 'timeline'].includes(view) ? [keys[0], 'transport', ...keys.slice(1)]
-                : view === 'list' ? [...keys, 'realign'] : keys);
+            // No Find since R-264; the band is Enr., Créer, Activité, Vue in every view, with no Lecture, Commu. nor Calendrier
+            // (rule 13, user 23 Nov. 2026); the List adds « Réalig » last (R-010).
+            const expected = ['capture', 'create', 'activity', 'view'];
+            const laid = (view, keys) => (view === 'list' ? [...keys, 'realign'] : keys);
             // In a project the band keeps Organize beside the Atom (its way back to the Dashboard, rule 13).
             expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(expect.arrayContaining(expected));
             expect(h.runtime.measure().treeMounted).toBe(true);
@@ -138,8 +137,8 @@ describe('User tool canonical command', () => {
                         h.window.dispatchEvent(new h.window.CustomEvent('eve:profile-preferences-updated', {
                             detail: { preferences }
                         }));
-                        // A beginner keeps every root of context_menus.json `main` except Calendar (intermediate).
-                        const keys = ['atome', 'organize', ...laid(view, expected.filter(key => level !== 'beginner' || key !== 'calendar'))];
+                        // A beginner keeps every root of context_menus.json `main` (all four are beginner's).
+                        const keys = ['atome', 'organize', ...laid(view, expected)];
                         expect(h.runtime.state.lastTree.items.map(item => item.key), `${view}/${mode}/${level}`).toEqual(keys);
                         expect(h.runtime.measure().itemCount).toBe(keys.length);
                         expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);

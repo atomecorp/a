@@ -1,7 +1,4 @@
-import {
-    DEFAULT_ECHO_COOLDOWN_MS,
-    toText
-} from './home_surface_transcript.js';
+import { DEFAULT_ECHO_COOLDOWN_MS } from './home_surface_transcript.js';
 
 const HISTORY_STORAGE_KEY = 'eve_voice_history_v1';
 const LEGACY_HISTORY_STORAGE_KEY = 'eve_dilas_voice_history_v1';
@@ -22,8 +19,6 @@ const DEFAULTS = {
     interruptSttSilenceMs: 2600,
     interruptSttFinalSilenceMs: 1800
 };
-
-export const debugVoice = () => {};
 
 export const resolveVoiceApi = (env, explicitApi = null) => (
     explicitApi || env?.Squirrel?.voice || env?.AtomeVoice || env?.atome?.voice || null
@@ -78,69 +73,3 @@ export const saveHomeVoiceHistory = (env, history) => {
     }
 };
 
-export const createHomeVoiceState = (env, api) => ({
-    api,
-    active: false,
-    listening: false,
-    processing: false,
-    speaking: false,
-    sessionId: null,
-    history: loadHomeVoiceHistory(env),
-    transcriptDraft: '',
-    errorMessage: '',
-    infoMessage: '',
-    unsubscribe: () => {},
-    listeningPromise: null,
-    voiceMeter: null,
-    meterRunning: false,
-    suppressAutoRestartOnce: false,
-    lastAssistantReply: '',
-    lastAssistantSpokenAt: 0,
-    restartTimer: null,
-    bargeInDetector: null,
-    bargeInPending: false,
-    bargeInArmAt: 0,
-    pendingTranscriptPrefix: '',
-    lastFailureNotice: '',
-    activationPromise: null,
-    pendingReadyAnnouncement: false,
-    readyAnnouncementTask: null,
-    transcriptFastCommitTimer: null,
-    transcriptPauseCommitTimer: null,
-    transcriptForceCommitTimer: null,
-    commitRequested: false,
-    interruptListening: false,
-    interruptListeningPromise: null,
-    interruptRestartTimer: null,
-    interruptCommandPending: false
-});
-
-export const cloneControllerState = (state, textOnly) => {
-    const snapshot = {
-        active: state.active,
-        listening: state.listening,
-        interruptListening: state.interruptListening,
-        processing: state.processing,
-        speaking: state.speaking,
-        textOnly,
-        errorMessage: state.errorMessage,
-        sessionId: state.sessionId,
-        history: state.history,
-        meterRunning: state.meterRunning
-    };
-    if (typeof structuredClone === 'function') return structuredClone(snapshot);
-    return JSON.parse(JSON.stringify(snapshot));
-};
-
-export const pushHistoryEntry = ({ env, state, renderHistory }, role, text) => {
-    const normalized = toText(text);
-    if (!normalized) return;
-    state.history.push({
-        role,
-        text: normalized,
-        ts: Date.now()
-    });
-    state.history = state.history.slice(-MAX_HISTORY_ITEMS);
-    saveHomeVoiceHistory(env, state.history);
-    renderHistory();
-};

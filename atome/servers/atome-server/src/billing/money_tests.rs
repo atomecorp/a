@@ -3,7 +3,7 @@
 // counting down, the TestFlight lock, the administrators' controls, withdrawal, a balanced ledger.
 use super::{admin, guard, money, usage, wallet};
 use rusqlite::Connection;
-use serde_json::json;
+use serde_json::{Value as JsonValue, json};
 
 const DAY: i64 = 86_400_000;
 const NOW: i64 = 1_800_000_000_000;
@@ -467,4 +467,168 @@ fn administrators_are_proposed_then_confirmed_by_the_owner() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn a_server_with_no_settings_answers_every_field() {
+    let (_dir, db) = db();
+    role(&db, "owner", "owner");
+    role(&db, "alice", "tester");
+    let shown = admin::frame(&db, "admin.money", &json!({}), "owner", NOW).unwrap();
+    assert_eq!(shown["global"]["realSpending"], false);
+    assert_eq!(shown["global"]["testBudgetMonthCents"], 0);
+    assert_eq!(shown["global"]["categoryMonthCents"]["ai"], 0);
+    assert_eq!(shown["global"]["categoryMonthCents"]["services"], 0);
+    let alice = &shown["accounts"][0]["controls"];
+    assert_eq!(alice["allowed"], false);
+    assert_eq!(alice["categories"], json!([]));
+    assert_eq!(alice["aiPromptsPerDay"], 0);
+    let set = admin::frame(
+        &db,
+        "admin.money.set",
+        &json!({ "settings": { "categoryMonthCents": { "ai": 2100 } } }),
+        "owner",
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(set["global"]["categoryMonthCents"]["ai"], 2100);
+    assert_eq!(set["global"]["categoryMonthCents"]["shop"], 0);
+    assert_eq!(set["global"]["realSpending"], false);
+}
+
+#[test]
+fn everyone_spends_on_its_ceilings_and_the_block_list_is_refused() {
+    let (_dir, db) = db();
+    role(&db, "owner", "owner");
+    switch_on(&db);
+    // The white list by default: an account not on it is refused.
+    assert_eq!(
+        guard::reserve(&db, "bob", "ai", 5, "e1", NOW).unwrap_err(),
+        guard::TESTFLIGHT_REFUSED
+    );
+    let set = |settings: JsonValue| {
+        admin::frame(
+            &db,
+            "admin.money.set",
+            &json!({ "settings": settings }),
+            "owner",
+            NOW,
+        )
+        .unwrap()
+    };
+    set(json!({ "accessMode": "all", "everyone": { "perDayCents": 13, "aiPromptsPerDay": 2 } }));
+    // A month's ceiling still at zero refuses.
+    assert_eq!(
+        guard::reserve(&db, "bob", "ai", 5, "e2", NOW).unwrap_err(),
+        "money_budget_exceeded"
+    );
+    let shown = set(json!({ "everyone": { "perMonthCents": 21 } }));
+    assert_eq!(shown["global"]["everyone"]["perDayCents"], 13);
+    assert_eq!(shown["global"]["accessMode"], "all");
+    assert_eq!(
+        guard::reserve(&db, "bob", "ai", 5, "e3", NOW).unwrap()["payer"],
+        "test_budget"
+    );
+    // Everyone is on the AI alone.
+    assert_eq!(
+        guard::reserve(&db, "bob", "domains", 5, "e4", NOW).unwrap_err(),
+        guard::TESTFLIGHT_REFUSED
+    );
+    assert_eq!(
+        admin::frame(
+            &db,
+            "admin.money.set",
+            &json!({ "settings": { "accessMode": "some" } }),
+            "owner",
+            NOW
+        )
+        .unwrap_err(),
+        "money_value_invalid:accessMode:\"some\""
+    );
+    // On the block list: refused, then back.
+    let blocked = admin::frame(
+        &db,
+        "admin.account.set",
+        &json!({ "principal": "bob", "settings": { "blocked": true } }),
+        "owner",
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(blocked["blocked"][0]["principal_id"], "bob");
+    assert_eq!(
+        guard::reserve(&db, "bob", "ai", 5, "e5", NOW).unwrap_err(),
+        guard::TESTFLIGHT_REFUSED
+    );
+    admin::frame(
+        &db,
+        "admin.account.set",
+        &json!({ "principal": "bob", "settings": { "blocked": false } }),
+        "owner",
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        guard::reserve(&db, "bob", "ai", 5, "e6", NOW).unwrap()["payer"],
+        "test_budget"
+    );
+}
+
+#[test]
+fn an_account_is_found_by_its_phone() {
+    let (_dir, db) = db();
+    role(&db, "owner", "owner");
+    db.execute(
+        "INSERT INTO principal_phone_credentials (principal_id, normalized_phone, verified_at) VALUES ('bob', '+33612345678', '2026-11-24')",
+        [],
+    )
+    .unwrap();
+    let found = admin::frame(
+        &db,
+        "admin.account.find",
+        &json!({ "phone": "+33 6 12 34 56 78" }),
+        "owner",
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(found["account"]["principal_id"], "bob");
+    assert_eq!(found["account"]["phone"], "+33612345678");
+    assert_eq!(found["account"]["listed"], false);
+    assert_eq!(
+        admin::frame(
+            &db,
+            "admin.account.find",
+            &json!({ "phone": "+33 7 00" }),
+            "owner",
+            NOW
+        )
+        .unwrap_err(),
+        "money_account_not_found"
+    );
+}
+
+#[test]
+fn a_roles_table_made_before_the_block_list_takes_it_and_keeps_its_rows() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("central.db");
+    Connection::open(&path)
+        .unwrap()
+        .execute_batch(
+            "CREATE TABLE auth_account_roles (principal_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('admin', 'tester', 'owner')),
+                granted_ms INTEGER NOT NULL, granted_by TEXT NOT NULL, PRIMARY KEY (principal_id, role));
+             INSERT INTO auth_account_roles VALUES ('boss', 'owner', 1, 'root');",
+        )
+        .unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    crate::central_schema::prepare(&path, &root).unwrap();
+    let db = Connection::open(&path).unwrap();
+    role(&db, "bob", "blocked");
+    let held: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM auth_account_roles WHERE (principal_id, role) IN (VALUES ('boss', 'owner'), ('bob', 'blocked'))",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(held, 2);
 }

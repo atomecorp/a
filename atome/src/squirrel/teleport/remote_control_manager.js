@@ -49,10 +49,12 @@ const dispatch = (type, detail) => {
 /** Take control of another surface. Same-account surfaces are granted immediately
  *  (§11.1); another user's device is refused by the server until the permission
  *  model exists. */
-export const requestControl = async (targetSurfaceId, capabilities = ['remote_pointer']) => {
+// `targetUserId`: the seat of another account, driven under the grant its owner gave (R-248).
+export const requestControl = async (targetSurfaceId, capabilities = ['remote_pointer'], { targetUserId } = {}) => {
     const target = String(targetSurfaceId || '').trim();
     if (!target) return { ok: false, error: 'remote_control_target_required' };
-    const result = await send('request', { target_surface_id: target, capabilities });
+    const owner = String(targetUserId || '').trim();
+    const result = await send('request', { target_surface_id: target, capabilities, ...(owner ? { target_user_id: owner } : {}) });
     if (result?.success !== true) {
         return { ok: false, error: result?.error || 'remote_control_request_failed' };
     }
@@ -68,15 +70,6 @@ export const releaseControl = async (sessionId) => {
     const result = await send('revoke', { session_id: id });
     state.controlling.delete(id);
     if (state.pending.sessionId === id) state.pending = { dx: 0, dy: 0, sessionId: '' };
-    return { ok: result?.success === true, error: result?.error || null };
-};
-
-/** Stop being driven. The controlled surface may always do this (§11.2). */
-export const revokeIncomingControl = async (sessionId) => {
-    const id = String(sessionId || '').trim();
-    if (!id) return { ok: false, error: 'remote_control_session_required' };
-    const result = await send('revoke', { session_id: id });
-    state.controlledBy.delete(id);
     return { ok: result?.success === true, error: result?.error || null };
 };
 
@@ -107,19 +100,6 @@ export const sendPointerDelta = (sessionId, dx, dy) => {
     }
     return true;
 };
-
-export const sendGesture = (sessionId, payload = {}) => {
-    const id = String(sessionId || '').trim();
-    if (!id || !state.controlling.has(id)) return Promise.resolve({ ok: false, error: 'remote_control_not_active' });
-    return send('gesture', { session_id: id, payload }).then((result) => ({
-        ok: result?.success === true, error: result?.error || null
-    }));
-};
-
-export const listControlSessions = () => ({
-    controlling: [...state.controlling.values()],
-    controlledBy: [...state.controlledBy.values()]
-});
 
 export const installRemoteControlLifecycle = () => {
     if (typeof window === 'undefined' || state.lifecycleInstalled) return false;

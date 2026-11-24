@@ -326,6 +326,7 @@ async fn a_media_is_played_until_it_ends() {
         mime: "video/mp4".into(),
         title: String::new(),
         start_seconds: 0.0,
+        live: false,
     };
     let playback = super::play(address, LOOPBACK, &credentials, &media)
         .await
@@ -357,6 +358,7 @@ fn a_start_is_queued_as_a_cm_time() {
         mime: "video/mp4".into(),
         title: String::new(),
         start_seconds: 4.25,
+        live: false,
     };
     let first = &super::queue::commands(&media)[0];
     let outer: Value = plist::from_bytes(first).unwrap();

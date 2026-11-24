@@ -74,6 +74,10 @@ object ExternalDisplayPointer {
     }
 
     // The Trackpad open: the pointer works on the screen only, from its middle.
+    // Extended (R-212, eVe/domains/rendering/external_display_mode.js): the screen goes on past the phone's right edge, so
+    // that edge leads to it; mirror leaves the side to the first push.
+    fun extendRight(on: Boolean) { if (on) edge = RIGHT }
+
     fun openTrackpad() {
         val area = area(display) ?: return
         trackpad = true

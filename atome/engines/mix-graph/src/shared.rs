@@ -73,6 +73,9 @@ pub struct LiveInput {
     // context frame on the Web.
     pulled_from: AtomicUsize,
     anchor: Mutex<Option<(usize, f64)>>,
+    // The physical channels it takes from its interface's interleaved capture (R-286), counted from 0: one (mono, heard
+    // on both sides) or two (left, right); none takes the first two, the first doubled on a one-channel device.
+    channels: Box<[u16]>,
 }
 
 // Where a strip's input stood when a take's first frame was rendered.
@@ -84,6 +87,10 @@ pub struct InputPosition {
 
 impl LiveInput {
     pub fn new(capacity: usize) -> Arc<Self> {
+        Self::with_channels(capacity, &[])
+    }
+
+    pub fn with_channels(capacity: usize, channels: &[u16]) -> Arc<Self> {
         let frames = capacity.max(2).next_power_of_two();
         Arc::new(Self {
             samples: (0..frames * 2).map(|_| AtomicU32::new(0)).collect(),
@@ -92,7 +99,42 @@ impl LiveInput {
             read: AtomicUsize::new(0),
             pulled_from: AtomicUsize::new(0),
             anchor: Mutex::new(None),
+            channels: channels.into(),
         })
+    }
+
+    pub fn channels(&self) -> &[u16] {
+        &self.channels
+    }
+
+    // Whether a capture of `width` interleaved channels holds every channel this input takes: an interface exposing
+    // fewer is an error where its stream opens, never another channel in its place.
+    pub fn fits(&self, width: usize) -> Result<(), String> {
+        match self
+            .channels
+            .iter()
+            .find(|channel| usize::from(**channel) >= width)
+        {
+            Some(channel) => Err(format!(
+                "live_input_channel_unavailable: {} of {width}",
+                channel + 1
+            )),
+            None => Ok(()),
+        }
+    }
+
+    // One frame of an interleaved capture (`frame`, every channel of the interface at one instant), as this input takes
+    // it. Its channels were checked against the capture's width (`fits`) when the stream opened.
+    pub fn frame_of(&self, frame: &[f32]) -> Frame {
+        let at = |channel: u16| frame.get(usize::from(channel)).copied().unwrap_or(0.0);
+        match *self.channels {
+            [] => {
+                let left = frame.first().copied().unwrap_or(0.0);
+                Frame::new(left, frame.get(1).copied().unwrap_or(left))
+            }
+            [mono] => Frame::from_mono(at(mono)),
+            [left, right, ..] => Frame::new(at(left), at(right)),
+        }
     }
 
     // A push whose first frame was captured at `clock` (never waits: a busy
@@ -173,25 +215,42 @@ impl LiveInput {
 
 #[derive(Debug, Default)]
 pub struct StripMeter {
-    peak: AtomicU32,
+    left: AtomicU32,
+    right: AtomicU32,
     rms: AtomicU32,
+}
+
+// What a strip's meter read: the loudest sample of each channel since the last read, and the last block's RMS.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MeterReading {
+    pub left: f32,
+    pub right: f32,
+    pub rms: f32,
+}
+
+// Keeps the loudest block until the control thread reads it.
+fn hold_peak(slot: &AtomicU32, peak: f32) {
+    if peak > f32::from_bits(slot.load(Ordering::Relaxed)) {
+        slot.store(peak.to_bits(), Ordering::Relaxed);
+    }
 }
 
 impl StripMeter {
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }
-    pub fn record(&self, peak: f32, rms: f32) {
-        // Keep the loudest block until the control thread reads it.
-        let current = f32::from_bits(self.peak.load(Ordering::Relaxed));
-        if peak > current {
-            self.peak.store(peak.to_bits(), Ordering::Relaxed);
-        }
+    pub fn record(&self, (left, right): (f32, f32), rms: f32) {
+        hold_peak(&self.left, left);
+        hold_peak(&self.right, right);
         self.rms.store(rms.to_bits(), Ordering::Relaxed);
     }
-    pub fn read(&self) -> (f32, f32) {
-        let peak = f32::from_bits(self.peak.swap(0f32.to_bits(), Ordering::Relaxed));
-        (peak, f32::from_bits(self.rms.load(Ordering::Relaxed)))
+    pub fn read(&self) -> MeterReading {
+        let take = |slot: &AtomicU32| f32::from_bits(slot.swap(0f32.to_bits(), Ordering::Relaxed));
+        MeterReading {
+            left: take(&self.left),
+            right: take(&self.right),
+            rms: f32::from_bits(self.rms.load(Ordering::Relaxed)),
+        }
     }
 }
 

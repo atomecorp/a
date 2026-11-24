@@ -1,4 +1,3 @@
-import { VOICE_LOCAL_COMMANDS, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { toText } from '../shared/scalars.js';
 // Re-exported: the local duplicate now lives in the shared scalars module.
 export { toText };
@@ -63,10 +62,6 @@ const QUESTION_START_TOKENS = new Set([
     'dois',
     'peux',
     'peut'
-]);
-const INTERRUPT_COMMANDS = new Set([
-    VOICE_LOCAL_COMMANDS.STOP,
-    VOICE_LOCAL_COMMANDS.CANCEL
 ]);
 
 export const normalizeComparisonText = (value = '') => toText(value)
@@ -134,17 +129,3 @@ export const isClearlyCompleteCommand = (value = '') => {
     return false;
 };
 
-export const detectInterruptCommand = (value = '') => {
-    const normalized = normalizeComparisonText(value);
-    if (!normalized) return null;
-    const words = normalized.split(' ').filter(Boolean);
-    if (words.length > 4) return null;
-    const parsed = normalizeLocalVoiceCommand(value);
-    if (!parsed || !INTERRUPT_COMMANDS.has(parsed.command)) return null;
-    const matchedAlias = normalizeComparisonText(parsed.matched_alias || '');
-    if (!matchedAlias) return null;
-    if (normalized === matchedAlias || normalized.startsWith(`${matchedAlias} `)) {
-        return parsed;
-    }
-    return null;
-};

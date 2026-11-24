@@ -29,7 +29,9 @@ const fakeMoleculeApi = ({ append = async () => ({ ok: true }) } = {}) => {
         cues: [],
         scrubs: [],
         async cueGroupTimelineTransport({ group_id, seconds }) { this.cues.push({ group_id, seconds }); return { ok: true }; },
-        async scrubGroupTimelineTransport({ group_id, seconds }) { this.scrubs.push({ group_id, seconds }); return { ok: true }; }
+        async scrubGroupTimelineTransport({ group_id, seconds }) { this.scrubs.push({ group_id, seconds }); return { ok: true }; },
+        readGroupTimelineTransport: () => ({ ok: true, playing: false, position: 0 }),
+        prepareGroupTimelineCells: async () => ({ ok: true, prepared: true })
     };
 };
 
@@ -38,6 +40,7 @@ const projectRecords = [
     { id: 'take_b', atome_id: 'take_b', type: 'sound', project_id: 'project_tl', properties: { name: 'guitare', duration_seconds: 4 } }
 ];
 
+const outputHolds = [];
 const withWindow = async (api, run) => {
     const previous = globalThis.window;
     const project = { atome_id: 'project_tl', id: 'project_tl', type: 'project', properties: { name: 'tl', playback_mode: 'simultaneous' } };
@@ -48,9 +51,12 @@ const withWindow = async (api, run) => {
             listStateCurrent: async (_project, options) => { assert.equal(options.atomeType, 'instrument'); return []; },
             commit: async () => { throw new Error('unexpected_instrument_fixture_write'); }
         },
+        // The engine's output is held awake while the Timeline or Cells show (R-307).
+        Squirrel: { av: { audio: { __call_backend_method: async (name, arg) => { outputHolds.push({ name, ...arg }); return true; } } } },
         addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true
     };
-    try { return await run(); } finally { globalThis.window = previous; }
+    // The work a run leaves queued (a stopped transport's cue at the playhead) settles before its window goes.
+    try { return await run(); } finally { await new Promise((resolve) => { setTimeout(resolve, 0); }); globalThis.window = previous; }
 };
 
 test('the Timeline view owns the project-view tree like every structured view', () => {
@@ -173,9 +179,9 @@ test('Mute and Solo answer the touch and are stored in the order of the touches'
     });
 });
 
-// A touch on a header selects its track without opening it; a double touch opens its keys; a touch then folds them,
-// the track staying chosen; a hold widens the header to its whole name (user, 22 Nov. 2026). Only that header opens.
-test('a header touch selects its track, a double touch opens its keys', async () => {
+// A touch on a header selects its track without opening it; a hold opens its keys; a touch then folds them, the track
+// staying chosen; a double touch widens the header to its whole name (user, 24 Nov. 2026). Only that header opens.
+test('a header touch selects its track, a hold opens its keys, a double touch shows its whole name', async () => {
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
@@ -189,7 +195,7 @@ test('a header touch selects its track, a double touch opens its keys', async ()
         header.on.double_click();
         header.on.long_press();
         assert.deepEqual(emitted.map((intent) => intent.type),
-            ['project_view.timeline.header.tap', 'project_view.timeline.header.open', 'project_view.timeline.header.widen']);
+            ['project_view.timeline.header.tap', 'project_view.timeline.header.widen', 'project_view.timeline.header.open']);
         const keysShown = () => {
             let found = false;
             const look = (node) => { if (!node) return; if (node.id.endsWith(`${trackId}_mute`)) found = true; (node.children || []).forEach(look); };
@@ -201,20 +207,37 @@ test('a header touch selects its track, a double touch opens its keys', async ()
         assert.equal(keysShown(), false, 'a touch does not open its keys');
         await content.handleEvent(emitted[0]);
         assert.equal(content.readState().selectedTrackId, trackId, 'a touch again keeps it selected');
-        await content.handleEvent(emitted[1]);
-        assert.equal(keysShown(), true, 'a double touch opens its keys');
+        await content.handleEvent(emitted[2]);
+        assert.equal(keysShown(), true, 'a hold opens its keys');
         await content.handleEvent(emitted[0]);
         assert.equal(keysShown(), false, 'a touch folds them');
         assert.equal(content.readState().selectedTrackId, trackId, 'the track stays chosen');
-        // A hold widens the header itself to two tools, nothing beside it; a touch on it edits the name in place.
+        // A double touch widens the header itself to two tools, nothing beside it; a touch on it edits the name in place.
         const headerOf = () => { let found = null; const look = (node) => { if (!node) return; if (node.id === header.id) found = node; else (node.children || []).forEach(look); };
             content.build({ width: 900, height: 420, emit: () => {} }).forEach(look); return found; };
         const width = headerOf().style.size[0];
-        await content.handleEvent(emitted[2]);
-        assert.ok(headerOf().style.size[0] > width + 30, 'a hold widens the header');
+        await content.handleEvent(emitted[1]);
+        assert.ok(headerOf().style.size[0] > width + 30, 'a double touch widens the header');
         assert.ok(!JSON.stringify(content.build({ width: 900, height: 420, emit: () => {} })).includes('name_bubble'), 'no name beside it');
         // The touch goes to the track's own field (here, with no document, the hidden text service refuses to mount).
         await assert.rejects(() => content.handleEvent(emitted[0]), /hidden_text_document_required/, 'a touch on the widened header opens its field');
+    });
+});
+
+// R-307: while the Timeline or Cells show, the engine's output is held awake, so a cell's first touch after a
+// silence sounds at once; the view gone, it is let go.
+test('the timeline view holds the engine output while it shows', async () => {
+    const api = fakeMoleculeApi();
+    await withWindow(api, async () => {
+        outputHolds.length = 0;
+        const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
+        content.reset();
+        assert.deepEqual(outputHolds, [], 'a view reset before it ever held lets nothing go');
+        await content.load({ projectId: 'project_tl', readList: async () => ({ records: projectRecords, totalCount: 2 }) });
+        assert.deepEqual(outputHolds, [{ name: 'hold', owner: 'project_timeline_surface', on: true }]);
+        content.reset();
+        content.reset();
+        assert.deepEqual(outputHolds.slice(1), [{ name: 'hold', owner: 'project_timeline_surface', on: false }], 'let go once');
     });
 });
 

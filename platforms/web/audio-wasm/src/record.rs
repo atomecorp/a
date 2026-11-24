@@ -23,12 +23,13 @@ fn tap(strip_id: &str) -> Result<Arc<RecordTap>, JsValue> {
         .ok_or_else(|| JsValue::from_str(&format!("mix_record_not_armed: {strip_id}")))
 }
 
-// Arms `strip_id`'s REC point, the strip hearing `device_id`; returns the graph's rate.
+// Arms `strip_id`'s REC point, the strip hearing `device_id`; returns the graph's rate. A browser hands its input down
+// as one mono stream, so a Web take never takes an interface's own channels (R-286: refused by the page first).
 #[wasm_bindgen]
 pub fn audio_mix_record_start(strip_id: &str, device_id: Option<String>) -> Result<f64, JsValue> {
     let (tap, rate) = with_engine(|engine| {
         let graph = engine.mix.graph_mut();
-        let tap = graph.arm_record(strip_id, device_id.as_deref())?;
+        let tap = graph.arm_record(strip_id, device_id.as_deref(), &[])?;
         Ok((tap, graph.sample_rate()))
     })?;
     TAPS.lock()

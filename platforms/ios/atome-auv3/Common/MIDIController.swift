@@ -35,10 +35,15 @@ public class MIDIController: NSObject {
         }
     )
 
-    // Source connections and the published list are only touched on this queue.
+    // Every field below is only touched on this queue (the CoreMIDI receive thread reads `portLiterals` alone).
     private let midiQueue = DispatchQueue(label: "com.atomecorp.atome.midi.queue")
+
     private var connectedSources: [MIDIEndpointRef: MIDIUniqueID] = [:]
     private var publishedInputs: [[String: String]]?
+    // Non-nil while the CoreMIDI client is being created: the callers waiting for that start.
+    private var pendingStarts: [(Result<[[String: String]], Error>) -> Void]?
+    // Bumped by every stop, so a client created for a start that was stopped meanwhile is disposed, not kept.
+    private var startGeneration = 0
 
     // Read by the CoreMIDI receive thread: the JSON port literal of each connected source.
     private let portLiteralLock = NSLock()
@@ -51,35 +56,51 @@ public class MIDIController: NSObject {
     }
 
     deinit {
-        cleanup()
+        // Nothing else holds the controller any more (every callback captures it weakly): its resources are
+        // released here directly. Going through `midiQueue` would deadlock when the last release happens on it.
+        disposeResources()
     }
 
     // MARK: - Setup
 
-    private func setupMIDI() -> Bool {
-        if inputPort != 0 { return true }
-
-        let clientStatus = MIDIClientCreateWithBlock("AtomeMIDIClient" as CFString, &midiClient) { [weak self] notification in
-            self?.handleMIDINotification(notification)
+    /// Second half of a start, on `midiQueue`: the client was created on the notification thread.
+    private func finishStart(client: MIDIClientRef, status: OSStatus, generation: Int) {
+        guard generation == startGeneration else {
+            if status == noErr { MIDIClientDispose(client) }
+            return
         }
+        let waiting = pendingStarts ?? []
+        pendingStarts = nil
+        guard createPorts(client: client, status: status) else {
+            let error = NSError(domain: "MIDIController", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "ios_midi_input_port_unavailable"
+            ])
+            waiting.forEach { $0(.failure(error)) }
+            return
+        }
+        let inputs = connectSources()
+        waiting.forEach { $0(.success(inputs)) }
+    }
+
+    private func createPorts(client: MIDIClientRef, status clientStatus: OSStatus) -> Bool {
         guard clientStatus == noErr else {
             logger.error("Failed to create MIDI client: \(clientStatus)")
             return false
         }
-
+        midiClient = client
         // MIDI 1.0 protocol: each message arrives as a 32-bit Universal MIDI Packet word.
         let inputStatus = MIDIInputPortCreateWithProtocol(midiClient, "AtomeMIDIInput" as CFString, ._1_0, &inputPort) { [weak self] eventList, srcConnRefCon in
             self?.receive(eventList, srcConnRefCon: srcConnRefCon)
         }
         guard inputStatus == noErr else {
             logger.error("Failed to create MIDI input port: \(inputStatus)")
-            inputPort = 0
+            disposeResources()
             return false
         }
         let outputStatus = MIDIOutputPortCreate(midiClient, "AtomeMIDIOutput" as CFString, &outputPort)
         guard outputStatus == noErr else {
             logger.error("Failed to create MIDI output port: \(outputStatus)")
-            outputPort = 0
+            disposeResources()
             return false
         }
         logger.info("MIDI input and output ports created")
@@ -152,49 +173,54 @@ public class MIDIController: NSObject {
 
     // MARK: - Sources
 
-    /// Connects new sources, disconnects vanished ones and publishes the list to
-    /// the page when it changed. `completion` receives the current list.
-    private func refreshSources(completion: (([[String: String]]) -> Void)? = nil) {
+    /// Refreshes the sources after a MIDI setup change (hot-plug, a virtual source, a rename).
+    private func refreshSources() {
         midiQueue.async { [weak self] in
             guard let self, self.inputPort != 0 else { return }
-            var current: [MIDIEndpointRef: MIDIUniqueID] = [:]
-            var inputs: [[String: String]] = self.includesHostInput ? [Self.hostInputPort] : []
-            var literals: [MIDIUniqueID: String] = [:]
-            for index in 0..<MIDIGetNumberOfSources() {
-                let source = MIDIGetSource(index)
-                guard source != 0 else { continue }
-                var uniqueID: MIDIUniqueID = 0
-                let idStatus = MIDIObjectGetIntegerProperty(source, kMIDIPropertyUniqueID, &uniqueID)
-                guard idStatus == noErr else {
-                    self.logger.error("MIDI source \(index) has no unique id: \(idStatus)")
+            _ = self.connectSources()
+        }
+    }
+
+    /// On `midiQueue`, with the input port open: connects new sources, disconnects vanished
+    /// ones, publishes the list to the page when it changed and returns it.
+    private func connectSources() -> [[String: String]] {
+        var current: [MIDIEndpointRef: MIDIUniqueID] = [:]
+        var inputs: [[String: String]] = includesHostInput ? [Self.hostInputPort] : []
+        var literals: [MIDIUniqueID: String] = [:]
+        for index in 0..<MIDIGetNumberOfSources() {
+            let source = MIDIGetSource(index)
+            guard source != 0 else { continue }
+            var uniqueID: MIDIUniqueID = 0
+            let idStatus = MIDIObjectGetIntegerProperty(source, kMIDIPropertyUniqueID, &uniqueID)
+            guard idStatus == noErr else {
+                logger.error("MIDI source \(index) has no unique id: \(idStatus)")
+                continue
+            }
+            if connectedSources[source] != uniqueID {
+                let status = MIDIPortConnectSource(inputPort, source, Self.connectionRefCon(uniqueID))
+                guard status == noErr else {
+                    logger.error("Failed to connect MIDI source \(index): \(status)")
                     continue
                 }
-                if self.connectedSources[source] != uniqueID {
-                    let status = MIDIPortConnectSource(self.inputPort, source, Self.connectionRefCon(uniqueID))
-                    guard status == noErr else {
-                        self.logger.error("Failed to connect MIDI source \(index): \(status)")
-                        continue
-                    }
-                }
-                let port = ["id": "coremidi-\(UInt32(bitPattern: uniqueID))", "name": self.getMIDIObjectName(source, property: kMIDIPropertyDisplayName) ?? ""]
-                current[source] = uniqueID
-                inputs.append(port)
-                literals[uniqueID] = Self.portLiteral(port)
             }
-            for source in self.connectedSources.keys where current[source] == nil {
-                MIDIPortDisconnectSource(self.inputPort, source)
-            }
-            self.connectedSources = current
-            self.portLiteralLock.lock()
-            self.portLiterals = literals
-            self.portLiteralLock.unlock()
-            if self.publishedInputs != inputs {
-                self.publishedInputs = inputs
-                self.logger.info("MIDI inputs: \(inputs.count)")
-                WebViewManager.publishMIDIInputsToJS(inputs)
-            }
-            completion?(inputs)
+            let port = ["id": "coremidi-\(UInt32(bitPattern: uniqueID))", "name": getMIDIObjectName(source, property: kMIDIPropertyDisplayName) ?? ""]
+            current[source] = uniqueID
+            inputs.append(port)
+            literals[uniqueID] = Self.portLiteral(port)
         }
+        for source in connectedSources.keys where current[source] == nil {
+            MIDIPortDisconnectSource(inputPort, source)
+        }
+        connectedSources = current
+        portLiteralLock.lock()
+        portLiterals = literals
+        portLiteralLock.unlock()
+        if publishedInputs != inputs {
+            publishedInputs = inputs
+            logger.info("MIDI inputs: \(inputs.count)")
+            WebViewManager.publishMIDIInputsToJS(inputs)
+        }
+        return inputs
     }
 
     private static func portLiteral(_ port: [String: String]) -> String {
@@ -226,7 +252,8 @@ public class MIDIController: NSObject {
 
     // MARK: - Cleanup
 
-    private func cleanup() {
+    /// Releases the client, the ports and the connection state. Called on `midiQueue`, or from `deinit`.
+    private func disposeResources() {
         if inputPort != 0 {
             MIDIPortDispose(inputPort)
             inputPort = 0
@@ -239,39 +266,67 @@ public class MIDIController: NSObject {
             MIDIClientDispose(midiClient)
             midiClient = 0
         }
-        midiQueue.sync {
-            connectedSources.removeAll()
-            publishedInputs = nil
-        }
+        connectedSources.removeAll()
+        publishedInputs = nil
         portLiteralLock.lock()
         portLiterals.removeAll()
         portLiteralLock.unlock()
-        logger.info("MIDI Controller cleaned up")
     }
 
     // MARK: - Public Interface
 
     /// Starts MIDI input (idempotent). `completion` receives the input list, or an
-    /// error when CoreMIDI refused the client or the input port.
+    /// error when CoreMIDI refused the client or the input port, or when the start
+    /// was stopped before it finished.
     /// CoreMIDI client creation starts the MIDI server and takes hundreds of
-    /// milliseconds on first use: it runs on the MIDI queue, never on the caller's
-    /// (main) thread — on the iPad it froze the first project opening ~0.8 s.
+    /// milliseconds on first use: it runs on the notification thread, never on the
+    /// caller's (main) thread — on the iPad it froze the first project opening ~0.8 s.
+    /// No thread ever waits for another here (a wait on the notification thread was
+    /// a priority inversion): each step hands the next one over asynchronously.
     public func startMIDIMonitoring(completion: ((Result<[[String: String]], Error>) -> Void)? = nil) {
+        let finish: (Result<[[String: String]], Error>) -> Void = { completion?($0) }
         midiQueue.async { [weak self] in
             guard let self else { return }
-            guard self.setupMIDI() else {
-                completion?(.failure(NSError(domain: "MIDIController", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "ios_midi_input_port_unavailable"
-                ])))
+            if self.inputPort != 0 {
+                finish(.success(self.connectSources()))
                 return
             }
-            self.refreshSources { inputs in completion?(.success(inputs)) }
+            if self.pendingStarts != nil {
+                self.pendingStarts?.append(finish)
+                return
+            }
+            self.pendingStarts = [finish]
+            let generation = self.startGeneration
+            MIDINotificationThread.shared.perform { [weak self] in
+                var client: MIDIClientRef = 0
+                let status = MIDIClientCreateWithBlock("AtomeMIDIClient" as CFString, &client) { [weak self] notification in
+                    self?.handleMIDINotification(notification)
+                }
+                guard let self else {
+                    if status == noErr { MIDIClientDispose(client) }
+                    return
+                }
+                self.midiQueue.async {
+                    self.finishStart(client: client, status: status, generation: generation)
+                }
+            }
         }
     }
 
-    /// Stop MIDI monitoring
+    /// Stops MIDI input: the client and its ports are released, a start under way is cancelled.
     public func stopMIDIMonitoring() {
-        cleanup()
+        midiQueue.async { [weak self] in
+            guard let self else { return }
+            self.startGeneration += 1
+            let cancelled = self.pendingStarts ?? []
+            self.pendingStarts = nil
+            self.disposeResources()
+            let error = NSError(domain: "MIDIController", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "ios_midi_stopped"
+            ])
+            cancelled.forEach { $0(.failure(error)) }
+            self.logger.info("MIDI Controller cleaned up")
+        }
     }
 
     // MARK: - MIDI Output Methods (JS->MIDI routing)
@@ -293,5 +348,47 @@ public class MIDIController: NSObject {
 
     public func sendRaw(bytes: [UInt8]) {
         outputSender.sendRaw(bytes: bytes, port: outputPort)
+    }
+}
+
+/// The thread whose run loop hosts the CoreMIDI client's notifications. CoreMIDI calls a client's notify block on the
+/// run loop current when the client was created; a GCD queue runs none, so a client made on a queue never heard a
+/// device plugged in (R-286, user 24 Nov. 2026: a MIDI device connected while the app runs did not join the list).
+/// Work is handed to it asynchronously: nobody ever waits for this thread, so its QoS can never invert a caller's.
+private final class MIDINotificationThread: Thread {
+    static let shared: MIDINotificationThread = {
+        let thread = MIDINotificationThread()
+        thread.name = "com.atomecorp.atome.midi.notifications"
+        thread.start()
+        return thread
+    }()
+
+    private let lock = NSLock()
+    private var runLoop: CFRunLoop?
+    // Work handed over before the run loop was known; run as soon as the thread starts.
+    private var pending: [() -> Void] = []
+
+    override func main() {
+        // A run loop with no source returns at once: a port keeps it running for the life of the process.
+        RunLoop.current.add(Port(), forMode: .default)
+        lock.lock()
+        runLoop = CFRunLoopGetCurrent()
+        let early = pending
+        pending.removeAll()
+        lock.unlock()
+        early.forEach { $0() }
+        RunLoop.current.run()
+    }
+
+    func perform(_ work: @escaping () -> Void) {
+        lock.lock()
+        guard let runLoop else {
+            pending.append(work)
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue, work)
+        CFRunLoopWakeUp(runLoop)
     }
 }

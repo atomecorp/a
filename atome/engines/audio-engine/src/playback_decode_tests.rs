@@ -65,3 +65,39 @@ fn aiff_and_aiff_c_route_to_symphonia_whatever_the_extension() {
         );
     }
 }
+
+#[test]
+fn routes_caf_to_symphonia_whatever_its_extension() {
+    let mut bytes = b"caff\x00\x01\x00\x00desc".to_vec();
+    bytes.resize(64, 0);
+    for extension in [Some("caf"), Some("wav"), None] {
+        assert_eq!(
+            resolve_native_decode_route(extension, &bytes, "clip").unwrap(),
+            NativeDecodeRoute::Symphonia
+        );
+    }
+}
+
+#[test]
+fn routes_opus_to_symphonia_and_leaves_vorbis_to_kira() {
+    let mut ogg_opus = b"OggS\x00\x02".to_vec();
+    ogg_opus.resize(28, 0);
+    ogg_opus.extend_from_slice(b"OpusHead");
+    let mut webm = vec![0x1a, 0x45, 0xdf, 0xa3];
+    webm.resize(64, 0);
+    for bytes in [&ogg_opus, &webm] {
+        for extension in [Some("opus"), Some("weba"), Some("ogg"), None] {
+            assert_eq!(
+                resolve_native_decode_route(extension, bytes, "clip").unwrap(),
+                NativeDecodeRoute::Symphonia
+            );
+        }
+    }
+    let mut ogg_vorbis = b"OggS\x00\x02".to_vec();
+    ogg_vorbis.resize(28, 0);
+    ogg_vorbis.extend_from_slice(b"\x01vorbis");
+    assert_ne!(
+        resolve_native_decode_route(Some("ogg"), &ogg_vorbis, "clip").unwrap(),
+        NativeDecodeRoute::Symphonia
+    );
+}

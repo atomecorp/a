@@ -169,11 +169,13 @@ impl MixGraph {
     }
 
     // Arms the REC point of `strip_id`; `device_id` names the live input the
-    // strip hears during the take (its clock places the take).
+    // strip hears during the take (its clock places the take), `channels` the
+    // ones it takes from it (R-286, none: its first two).
     pub fn arm_record(
         &mut self,
         strip_id: &str,
         device_id: Option<&str>,
+        channels: &[u16],
     ) -> Result<Arc<RecordTap>, String> {
         let tap = self
             .record_taps
@@ -183,7 +185,7 @@ impl MixGraph {
         let source = match device_id {
             Some(device) => Some(
                 self.live_inputs
-                    .get(device)
+                    .get(&(device.to_string(), channels.to_vec()))
                     .cloned()
                     .ok_or_else(|| format!("mix_record_input_missing: {device}"))?,
             ),

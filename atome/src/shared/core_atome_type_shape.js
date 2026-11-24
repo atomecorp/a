@@ -61,6 +61,10 @@ export const ATOME_MEDIA_SCHEMA = Object.freeze({
     }
 });
 
+// The Natural Geste take of an atome seen or heard (natural_action_capture.js): the moves recorded on it and on what it holds,
+// replayed in Natural and laid in the Timeline as a Geste clip (project_view_capture_to_timeline.js).
+const ATOME_ACTION_TAKE_SCHEMA = Object.freeze({ action_recording: { type: 'object' } });
+
 const capability = (key, effects = ['read']) => ({ key, effects,
     risk_level: effects.includes('write') || effects.includes('persistent') ? 'MEDIUM' : 'LOW' });
 
@@ -78,7 +82,8 @@ export const defineType = (definition) => Object.freeze({
     ],
     ...definition,
     schema: Object.freeze({
-        ...(definition.traits?.some((trait) => ['visual', 'audible', 'container'].includes(trait)) ? ATOME_MIX_PROPERTY_SCHEMA : {}),
+        ...(definition.traits?.some((trait) => ['visual', 'audible', 'container'].includes(trait))
+            ? { ...ATOME_MIX_PROPERTY_SCHEMA, ...ATOME_ACTION_TAKE_SCHEMA } : {}),
         // Any item may belong to life profiles (life_profile_contract.js), has a name and a bin trail; then what its real writers write.
         ...LIFE_PROFILES_PROPERTY_SCHEMA, ...ATOME_COMMON_PROPERTY_SCHEMA, ...ATOME_WRITTEN_PROPERTIES[definition.type],
         ...definition.schema

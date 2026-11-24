@@ -151,6 +151,15 @@ pub fn measure_input_latency(device_name: Option<&str>) -> Result<Value, String>
     Ok(json!({ "success": true, "calibration": calibration::measure_input_latency(device_name)? }))
 }
 
+// An owner holds the output awake while it shows a surface played by touch (R-307).
+pub fn output_hold(owner: &str, on: bool) -> Result<Value, String> {
+    if owner.is_empty() {
+        return Err("audio_output_hold_needs_an_owner".to_string());
+    }
+    crate::output_idle::hold(owner, on);
+    Ok(json!({ "success": true, "held": on }))
+}
+
 pub fn render_clock() -> Result<Value, String> {
     Ok(json!({ "success": true, "clock": playback_schedule::render_clock() }))
 }
@@ -164,7 +173,7 @@ pub fn mix_apply(program: Value) -> Result<Value, String> {
 pub fn mix_levels() -> Result<Value, String> {
     let levels: Vec<Value> = mix::levels()?
         .into_iter()
-        .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
+        .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "peak_left": level.peak_left, "peak_right": level.peak_right, "rms": level.rms }))
         .collect();
     Ok(json!({ "success": true, "levels": levels }))
 }
@@ -264,7 +273,7 @@ pub fn direct_measure_latency(device_name: Option<&str>) -> Result<Value, String
 pub fn direct_levels() -> Result<Value, String> {
     let levels: Vec<Value> = direct::levels()?
         .into_iter()
-        .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
+        .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "peak_left": level.peak_left, "peak_right": level.peak_right, "rms": level.rms }))
         .collect();
     Ok(json!({ "success": true, "levels": levels }))
 }
@@ -390,6 +399,8 @@ struct Args {
     voice_id: String,
     strip_id: Option<String>,
     device_id: Option<String>,
+    // A strip take's physical channels, counted from 1 (R-286).
+    input_channels: Vec<u16>,
     voices: Vec<ScheduledVoice>,
     device_name: Option<String>,
     program: Value,
@@ -413,6 +424,8 @@ struct Args {
     record: bool,
     sample_id: String,
     command: Value,
+    owner: String,
+    on: bool,
 }
 
 // Every command by name, with the JSON arguments the JS side sends.
@@ -438,6 +451,7 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "schedule_instances" => schedule_instances(&parsed.voices),
         "measure_input_latency" => measure_input_latency(parsed.device_name.as_deref()),
         "render_clock" => render_clock(),
+        "output_hold" => output_hold(&parsed.owner, parsed.on),
         "mix_apply" => mix_apply(parsed.program),
         "mix_levels" => mix_levels(),
         "mix_readings" => mix_readings(),
@@ -478,17 +492,21 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
             &parsed.file_path,
             parsed.strip_id.as_deref(),
             parsed.device_id.as_deref(),
+            &parsed.input_channels,
         ),
         "get_levels" => get_levels(),
         "get_scope" => get_scope(),
         "shutdown" => shutdown(),
         "wake_start" => wake_capture::start(parsed.sample_rate),
+        "input_routed" => super::session_input::set_routed(parsed.device_id.clone()),
         "wake_stop" => wake_capture::stop(),
         "wake_read" => wake_capture::read(),
+        "wake_state" => wake_capture::state(),
         #[cfg(feature = "voice")]
         "voice_start" => crate::voice::session::start(
             &resolve_path(project_root, &parsed.models_root)?,
             parsed.own_capture,
+            &parsed.listening,
         ),
         #[cfg(feature = "voice")]
         "voice_stop" => crate::voice::session::stop(),

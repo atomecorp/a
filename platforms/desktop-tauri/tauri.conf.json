@@ -39,7 +39,7 @@
     ],
     "resources": {
       "../../atome/version.txt": "project/version.txt",
-      "../../atome/src": "project/atome/src",
+      "../../temp/desktop-tauri-runtime/src": "project/atome/src",
       "../../atome/security": "project/atome/security",
       "../../temp/desktop-tauri-runtime/engines": "project/atome/engines",
       "../../atome/documentations": "project/atome/documentations",

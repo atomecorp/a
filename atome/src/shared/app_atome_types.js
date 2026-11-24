@@ -34,5 +34,7 @@ export const APP_ATOME_TYPES = Object.freeze([
     declare('shop_listing', 'data_model', 'eVe/domains/shop/shop_runtime.js'),
     declare('share_request', 'policy', 'atome/servers/atome-server/src/social/sharing/mod.rs'),
     declare('share_policy', 'policy', 'atome/servers/atome-server/src/social/sharing/mod.rs'),
-    declare('generic', 'generic', 'atome/engines/atome-store/src/canonical.rs')
+    declare('generic', 'generic', 'atome/engines/atome-store/src/canonical.rs'),
+    // A Geste take recorded in the Timeline or the Cells: its journal of moves, played by its `action` clip.
+    declare('action_take', 'data_model', 'eVe/intuition/tools/molecule/recording/action_take.js')
 ]);

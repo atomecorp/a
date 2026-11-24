@@ -124,6 +124,15 @@ pub fn peak(buffer: &[Frame]) -> f32 {
     })
 }
 
+// The loudest sample of each channel, (left, right).
+pub fn channel_peaks(buffer: &[Frame]) -> (f32, f32) {
+    buffer
+        .iter()
+        .fold((0.0f32, 0.0f32), |(left, right), frame| {
+            (left.max(frame.left.abs()), right.max(frame.right.abs()))
+        })
+}
+
 // Fixed delay used for latency compensation of parallel routes.
 pub struct DelayLine {
     ring: Vec<Frame>,

@@ -28,13 +28,52 @@ fn lines(content: &str) -> Vec<&str> {
         .collect()
 }
 
-/// `readEnvValue(content, key)`: the value of the first `KEY=` line, trimmed, else empty.
+/// `readEnvValue(content, key)`: the value of the first `KEY=` line, trimmed and unquoted, else empty.
 pub fn read_env_value(content: &str, key: &str) -> String {
     let head = format!("{key}=");
     lines(content)
         .into_iter()
         .find_map(|line| line.strip_prefix(&head))
-        .map_or_else(String::new, |value| value.trim().to_string())
+        .map_or_else(String::new, |value| unquoted(value.trim()))
+}
+
+// A value as the shell and systemd's `EnvironmentFile=` both read it: bare when it is one plain
+// word, else double-quoted with `\`, `"`, `$` and `` ` `` escaped (`SERVER_NAME=Squirrel Server`
+// made `. squirrel.env` run `Server` as a command).
+fn quoted(value: &str) -> String {
+    let plain = |c: char| c.is_ascii_alphanumeric() || "_./:@+=,-".contains(c);
+    if value.chars().all(plain) {
+        return value.to_string();
+    }
+    let mut text = String::from('"');
+    for c in value.chars() {
+        if matches!(c, '\\' | '"' | '$' | '`') {
+            text.push('\\');
+        }
+        text.push(c);
+    }
+    text.push('"');
+    text
+}
+
+// `quoted`'s reverse: a double-quoted value loses its quotes and escapes, a bare one is kept.
+fn unquoted(value: &str) -> String {
+    let Some(inner) = value
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+    else {
+        return value.to_string();
+    };
+    let mut text = String::new();
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        text.push(if c == '\\' {
+            chars.next().unwrap_or(c)
+        } else {
+            c
+        });
+    }
+    text
 }
 
 /// `upsertEnvValue(content, key, value)`: every `KEY=` line replaced, else the pair appended
@@ -47,7 +86,7 @@ pub fn upsert_env_value(content: &str, key: &str, value: &str) -> String {
         .map(|line| {
             if line.starts_with(&head) {
                 replaced = true;
-                format!("{key}={value}")
+                format!("{key}={}", quoted(value))
             } else {
                 line.to_string()
             }
@@ -57,7 +96,7 @@ pub fn upsert_env_value(content: &str, key: &str, value: &str) -> String {
         if next.last().is_some_and(|last| !last.is_empty()) {
             next.push(String::new());
         }
-        next.push(format!("{key}={value}"));
+        next.push(format!("{key}={}", quoted(value)));
     }
     format!("{}\n", next.join("\n").trim_end_matches('\n'))
 }
@@ -288,4 +327,43 @@ pub fn backup_server_identity(
         chmod(&copy, mode)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{read_env_value, upsert_env_value};
+
+    #[test]
+    fn a_value_with_a_space_is_written_quoted_and_read_back_whole() {
+        let content = upsert_env_value("PORT=3001\n", "SERVER_NAME", "Squirrel Server");
+        assert_eq!(content, "PORT=3001\n\nSERVER_NAME=\"Squirrel Server\"\n");
+        assert_eq!(read_env_value(&content, "SERVER_NAME"), "Squirrel Server");
+        let again = upsert_env_value(
+            &content,
+            "SERVER_NAME",
+            &read_env_value(&content, "SERVER_NAME"),
+        );
+        assert_eq!(again, content);
+    }
+
+    #[test]
+    fn a_bare_line_left_by_an_older_server_is_quoted_when_rewritten() {
+        let old = "SERVER_NAME=Squirrel Server\n";
+        let name = read_env_value(old, "SERVER_NAME");
+        assert_eq!(
+            upsert_env_value(old, "SERVER_NAME", &name),
+            "SERVER_NAME=\"Squirrel Server\"\n"
+        );
+    }
+
+    #[test]
+    fn plain_words_stay_bare_and_shell_characters_are_escaped() {
+        assert_eq!(
+            upsert_env_value("PORT=3001", "JWT_SECRET", "ab12cd"),
+            "PORT=3001\n\nJWT_SECRET=ab12cd\n"
+        );
+        let content = upsert_env_value("NAME=old\n", "NAME", "a \"b\" $c `d` \\e");
+        assert_eq!(content, "NAME=\"a \\\"b\\\" \\$c \\`d\\` \\\\e\"\n");
+        assert_eq!(read_env_value(&content, "NAME"), "a \"b\" $c `d` \\e");
+    }
 }

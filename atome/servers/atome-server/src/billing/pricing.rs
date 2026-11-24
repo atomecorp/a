@@ -34,10 +34,17 @@ pub fn hold_cents(category: &str) -> Result<i64, String> {
         .ok_or_else(|| format!("money_category_unknown:{category}"))
 }
 
-pub fn category_known(category: &str) -> bool {
+/// The money categories (`BILLING_MONEY.categories`), in the catalog's order.
+pub fn categories() -> impl Iterator<Item = &'static str> {
     money()["categories"]
         .as_array()
-        .is_some_and(|list| list.iter().any(|known| known == category))
+        .into_iter()
+        .flatten()
+        .filter_map(JsonValue::as_str)
+}
+
+pub fn category_known(category: &str) -> bool {
+    categories().any(|known| known == category)
 }
 
 /// `billingCommissionCents`: the 3 % on top, half rounded up (10,00 € → 0,30 €; 0,50 € → 0,02 €).

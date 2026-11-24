@@ -57,7 +57,8 @@ impl StripSource {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum FeedKey {
-    Live(String),
+    // An interface and the channels taken from it: two strips on two channels of one card read two inputs (R-286).
+    Live(String, Vec<u16>),
     Instrument(String),
 }
 
@@ -73,7 +74,7 @@ impl Feeds {
     // inputs and slots, which outlive the graph.
     pub fn plan(
         program: &Program,
-        live: &mut dyn FnMut(&str) -> Arc<LiveInput>,
+        live: &mut dyn FnMut(&str, &[u16]) -> Arc<LiveInput>,
         instruments: &mut Instruments,
         sample_rate: u32,
     ) -> Result<Self, String> {
@@ -87,7 +88,10 @@ impl Feeds {
         };
         for strip in &program.strips {
             match &strip.input {
-                InputSpec::LiveAudio { device_id } => want(FeedKey::Live(device_id.clone()), 0),
+                InputSpec::LiveAudio {
+                    device_id,
+                    channels,
+                } => want(FeedKey::Live(device_id.clone(), channels.clone()), 0),
                 InputSpec::Instrument {
                     instrument_id,
                     output,
@@ -96,9 +100,10 @@ impl Feeds {
             }
             for module in &strip.chain {
                 match &module.source {
-                    Some(MixSource::LiveAudio { device_id }) => {
-                        want(FeedKey::Live(device_id.clone()), 0)
-                    }
+                    Some(MixSource::LiveAudio {
+                        device_id,
+                        channels,
+                    }) => want(FeedKey::Live(device_id.clone(), channels.clone()), 0),
                     Some(MixSource::Instrument {
                         instrument_id,
                         output,
@@ -111,7 +116,7 @@ impl Feeds {
         let mut buses = Vec::with_capacity(wanted.len());
         for (key, outputs) in wanted {
             let feed = match &key {
-                FeedKey::Live(device) => Feed::Live(live(device)),
+                FeedKey::Live(device, channels) => Feed::Live(live(device, channels)),
                 FeedKey::Instrument(id) => {
                     instruments.check_output(id, outputs - 1)?;
                     Feed::Instrument(instruments.slot(id, sample_rate)?)
@@ -132,14 +137,15 @@ impl Feeds {
             .iter()
             .filter_map(|(key, at)| match key {
                 FeedKey::Instrument(id) => Some((id.clone(), self.buses[*at].buses.len())),
-                FeedKey::Live(_) => None,
+                FeedKey::Live(..) => None,
             })
             .collect()
     }
 
-    pub fn devices(&self) -> impl Iterator<Item = &str> {
+    // The live inputs read, each an interface and its channels.
+    pub fn devices(&self) -> impl Iterator<Item = (&str, &[u16])> {
         self.index.keys().filter_map(|key| match key {
-            FeedKey::Live(device) => Some(device.as_str()),
+            FeedKey::Live(device, channels) => Some((device.as_str(), channels.as_slice())),
             FeedKey::Instrument(_) => None,
         })
     }
@@ -147,8 +153,11 @@ impl Feeds {
     pub fn strip_source(&self, input: &InputSpec) -> StripSource {
         match input {
             InputSpec::Track => StripSource::Track,
-            InputSpec::LiveAudio { device_id } => StripSource::Bus {
-                feed: self.index[&FeedKey::Live(device_id.clone())],
+            InputSpec::LiveAudio {
+                device_id,
+                channels,
+            } => StripSource::Bus {
+                feed: self.index[&FeedKey::Live(device_id.clone(), channels.clone())],
                 output: 0,
             },
             InputSpec::Instrument {
@@ -164,9 +173,13 @@ impl Feeds {
     // The bus an IN module reads; a strip source travels on a lane (graph.rs).
     pub fn module_bus(&self, source: &MixSource) -> Option<(usize, usize)> {
         match source {
-            MixSource::LiveAudio { device_id } => {
-                Some((self.index[&FeedKey::Live(device_id.clone())], 0))
-            }
+            MixSource::LiveAudio {
+                device_id,
+                channels,
+            } => Some((
+                self.index[&FeedKey::Live(device_id.clone(), channels.clone())],
+                0,
+            )),
             MixSource::Instrument {
                 instrument_id,
                 output,

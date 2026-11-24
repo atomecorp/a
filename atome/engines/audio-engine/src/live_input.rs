@@ -106,36 +106,50 @@ const CALLBACK_FRAMES: usize = 16_384;
 #[cfg(not(target_os = "windows"))]
 fn data_callback<T>(
     channels: usize,
-    mut resampler: LinearResampler,
+    (from, to): (u32, u32),
     inputs: Vec<Arc<LiveInput>>,
 ) -> impl FnMut(&[T], &cpal::InputCallbackInfo)
 where
     T: Sample + SizedSample,
     f32: FromSample<T>,
 {
-    let mut frames: Vec<Frame> = Vec::with_capacity(CALLBACK_FRAMES);
-    let mut resampled: Vec<Frame> = Vec::with_capacity(CALLBACK_FRAMES * 2);
+    // Each listener takes its own channels of the interface (R-286), so each has its frames and its resampler.
+    let mut listeners: Vec<(Arc<LiveInput>, LinearResampler, Vec<Frame>, Vec<Frame>)> = inputs
+        .into_iter()
+        .map(|input| {
+            (
+                input,
+                LinearResampler::new(from, to),
+                Vec::with_capacity(CALLBACK_FRAMES),
+                Vec::with_capacity(CALLBACK_FRAMES * 2),
+            )
+        })
+        .collect();
+    let width = channels.max(1);
+    let mut frame = vec![0.0f32; width];
     move |data: &[T], info: &cpal::InputCallbackInfo| {
         let host_ns = super::scheduled_backend::capture_host_ns(info) as f64;
-        frames.clear();
-        for chunk in data.chunks(channels.max(1)).take(frames.capacity()) {
-            let left = f32::from_sample(chunk[0]);
-            let right = chunk
-                .get(1)
-                .map(|sample| f32::from_sample(*sample))
-                .unwrap_or(left);
-            frames.push(Frame::new(left, right));
+        for (_, _, frames, _) in &mut listeners {
+            frames.clear();
         }
-        super::direct::note_input_quantum(frames.len());
-        let pushed = if resampler.is_identity() {
-            &frames
-        } else {
-            resampled.clear();
-            resampler.process(&frames, &mut resampled);
-            &resampled
-        };
+        for chunk in data.chunks(width).take(CALLBACK_FRAMES) {
+            for (slot, sample) in frame.iter_mut().zip(chunk) {
+                *slot = f32::from_sample(*sample);
+            }
+            for (input, _, frames, _) in &mut listeners {
+                frames.push(input.frame_of(&frame[..chunk.len()]));
+            }
+        }
+        super::direct::note_input_quantum(data.len() / width);
         // Each push carries its capture instant: a take's REC point is placed by it (R-183).
-        for input in &inputs {
+        for (input, resampler, frames, resampled) in &mut listeners {
+            let pushed = if resampler.is_identity() {
+                &*frames
+            } else {
+                resampled.clear();
+                resampler.process(frames, resampled);
+                &*resampled
+            };
             input.push_at(pushed, host_ns);
         }
     }
@@ -194,12 +208,14 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
                 super::scheduled_backend::render_clock().map(|clock| clock.sample_rate);
             let config = input_config(&device, output_rate)?;
             let channels = usize::from(config.channels());
-            let resampler = || {
-                LinearResampler::new(
-                    config.sample_rate(),
-                    output_rate.unwrap_or(config.sample_rate()),
-                )
-            };
+            // A listener taking a channel the interface does not expose is an error, never another channel (R-286).
+            for input in &stream_inputs {
+                input.fits(channels)?;
+            }
+            let rates = (
+                config.sample_rate(),
+                output_rate.unwrap_or(config.sample_rate()),
+            );
             let error = |error| eprintln!("[audio_engine::live_input] stream error: {error}");
             let mut stream_config = config.config();
             if small {
@@ -209,19 +225,19 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
             let stream = match config.sample_format() {
                 cpal::SampleFormat::F32 => device.build_input_stream(
                     stream_config,
-                    data_callback::<f32>(channels, resampler(), inputs),
+                    data_callback::<f32>(channels, rates, inputs),
                     error,
                     None,
                 ),
                 cpal::SampleFormat::I16 => device.build_input_stream(
                     stream_config,
-                    data_callback::<i16>(channels, resampler(), inputs),
+                    data_callback::<i16>(channels, rates, inputs),
                     error,
                     None,
                 ),
                 cpal::SampleFormat::U16 => device.build_input_stream(
                     stream_config,
-                    data_callback::<u16>(channels, resampler(), inputs),
+                    data_callback::<u16>(channels, rates, inputs),
                     error,
                     None,
                 ),
@@ -326,6 +342,16 @@ fn sync(update: impl FnOnce(&mut Wanted)) -> Result<(), String> {
     let wanted = guard.get_or_insert_with(Wanted::default);
     update(wanted);
     reconcile(wanted)
+}
+
+// The system's input route changed (an iPadOS port routed, its channels with it): every open input is opened again.
+pub fn reopen() -> Result<(), String> {
+    if let Ok(mut streams) = STREAMS.lock() {
+        for (_, stream) in streams.get_or_insert_with(HashMap::new).drain() {
+            stream.stop.store(true, Ordering::Release);
+        }
+    }
+    sync(|_| {})
 }
 
 pub fn sync_console(inputs: Vec<(String, Arc<LiveInput>)>) -> Result<(), String> {

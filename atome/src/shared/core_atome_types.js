@@ -21,6 +21,7 @@ import { AUDIO_EFFECT_TYPE, AUDIO_RACK_TYPE } from './audio_fx_contract.js';
 import { INSTRUMENT_TYPE } from './instrument_contract.js';
 import { AUDIO_SLICE_TYPE, SAMPLE_EDIT_TYPE } from './sample_edit_contract.js';
 import { HTML_PAGE_TYPE } from './html_page_contract.js';
+import { CONTROL_TYPE } from './control_contract.js';
 import { registerAtomeType } from './atome_universal_contract.js';
 import { CORE_ATOME_TYPE_VERSION, ATOME_MIX_PROPERTY_SCHEMA, defineType } from './core_atome_type_shape.js';
 import { ATOME_OBJECTIVE_IDS, CORE_SCENE_ATOME_TYPES } from './core_atome_scene_types.js';
@@ -36,6 +37,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(SAMPLE_EDIT_TYPE), defineType(AUDIO_SLICE_TYPE), ...PERSONAL_IMPORT_TYPES.map(defineType), ...APP_ATOME_TYPES.map(defineType),
     ...CORE_SCENE_ATOME_TYPES,
     defineType(HTML_PAGE_TYPE),
+    defineType(CONTROL_TYPE),
     ...CORE_DATA_ATOME_TYPES,
     ...HEALTH_PROTOCOL_ATOME_TYPES.map(defineType),
     ...TRAINING_ATOME_TYPES.map(defineType),

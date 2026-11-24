@@ -45,7 +45,7 @@ extension WebViewManager {
     // Scrub and playback fire these several times per frame, and wake-phrase standby
     // reads the microphone every 80 ms: three log lines each flood the console (and
     // slow the app while Xcode is attached); a Sport session asks every second whether music plays. Their failures are still logged.
-    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance", "audio_wake_read", "audio_other_playing"]
+    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance", "audio_wake_read", "audio_wake_state", "audio_other_playing", "audio_mix_levels", "audio_render_clock"]
 
     static func sendNativeInvokeResponse(requestId: String,
                                                  payload: [String: Any]? = nil,

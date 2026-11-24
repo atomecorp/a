@@ -35,19 +35,6 @@ const initialCursor = () => {
     return { x: Math.round(width / 2), y: Math.round(height / 2) };
 };
 
-export const setRemoteInputTargetResolver = (resolver) => {
-    state.targetResolver = typeof resolver === 'function' ? resolver : null;
-    return state.targetResolver;
-};
-
-/** A local escape hatch: the controlled surface can stop applying without waiting for
- *  the server round-trip of a revoke. Revoking remains the authoritative action. */
-export const setRemoteInputEnabled = (enabled) => {
-    state.enabled = enabled !== false;
-    if (!state.enabled) state.cursors.clear();
-    return state.enabled;
-};
-
 const resolveTarget = (point) => {
     if (state.targetResolver) {
         try {

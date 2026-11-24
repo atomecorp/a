@@ -282,7 +282,7 @@ impl Graph {
             for (pair, gain) in mute_gain.iter_mut().enumerate() {
                 gain.apply(pair_of(work, pair, frames), if *muted { 0.0 } else { 1.0 });
             }
-            meter.record(dsp::peak(work), dsp::rms(work));
+            meter.record(dsp::channel_peaks(work), dsp::rms(work));
             if *output_enabled && let Some(route) = output.as_mut() {
                 deliver(
                     route,

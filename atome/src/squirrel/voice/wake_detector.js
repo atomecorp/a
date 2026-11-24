@@ -1,10 +1,16 @@
 import { createGlobalSecurityApi } from '../security/bootstrap.js';
 import { loadRuntimeUserProfile } from '../ai/profile_loader.js';
 import { createWakeCapture, wakeCaptureAvailable } from './wake_capture.js';
+import { createNativeWakeEngine } from './wake_native_engine.js';
+import { getTauriInvoke } from '../../application/audio_runtime/runtime_audio_backend.js';
 import { checkConnection } from '../apis/unified/adole_connection.js';
 import { writeVoiceDiagnostic } from './telemetry.js';
 
 const verifierEntry = userId => 'voice.wake.verifier.' + encodeURIComponent(userId);
+
+// The engine hearing the phrase: the native voice engine on a device, the worker in a browser.
+const defaultEngine = ({ env, workerFactory }) => (getTauriInvoke(env)
+    ? createNativeWakeEngine({ env }) : createWorkerWakeEngine({ env, workerFactory }));
 
 // Local openWakeWord detection of "Ève, écoute-moi": no account, key or network.
 // The optional personal verifier lives in the account vault, so the user's enrollment
@@ -12,6 +18,7 @@ const verifierEntry = userId => 'voice.wake.verifier.' + encodeURIComponent(user
 // anyway).
 export const createWakeDetectorBackend = ({ env = globalThis,
     workerFactory = () => new env.Worker('/src/squirrel/voice/wake_detector_worker.js', { type: 'module' }),
+    engine = defaultEngine({ env, workerFactory }),
     loadProfile = () => loadRuntimeUserProfile({ env }),
     security = createGlobalSecurityApi({ env }),
     isOnline = () => checkConnection('fastify')
@@ -40,9 +47,25 @@ export const createWakeDetectorBackend = ({ env = globalThis,
         return stored?.ok ? stored.value : null;
     };
 
-    // The single engine: one worker, hence one ONNX Runtime instance, initialized once and
-    // reused by every session (a second instance runs out of memory on iPhone). A fatal
-    // engine error or `release()` terminates it; the next session starts a new one.
+    return {
+        captureAvailable: () => wakeCaptureAvailable(env),
+        // Frees the engine's memory once voice activation is off.
+        release: () => engine.release(),
+        async create({ onDetection, onError }) { return engine.open({ onDetection, onError, verifier: await readVerifier() }); },
+        // Enrollment scores windows with the base model only.
+        openCollector: ({ onWindow, onError }) => engine.open({ onWindow, onError, collect: true, verifier: null }),
+        async hasVerifier() { return Boolean(await readVerifier()); },
+        async storeVerifier(model) {
+            const userId = await unlockedPrincipal();
+            await security.storeToken(verifierEntry(userId), model, { provider: 'openwakeword' });
+        }
+    };
+};
+
+// The browser's engine: one worker, hence one ONNX Runtime instance, initialized once and reused
+// by every session (a second instance runs out of memory on iPhone). A fatal engine error or
+// `release()` terminates it; the next session starts a new one.
+const createWorkerWakeEngine = ({ env, workerFactory }) => {
     let engine = null;
     const drop = (current) => { if (engine === current) engine = null; current.worker.terminate(); };
     const acquire = () => {
@@ -101,18 +124,5 @@ export const createWakeDetectorBackend = ({ env = globalThis,
             }
         };
     };
-
-    return {
-        captureAvailable: () => wakeCaptureAvailable(env),
-        // Frees the engine's memory once voice activation is off.
-        release() { if (engine) drop(engine); },
-        async create({ onDetection, onError }) { return open({ onDetection, onError, verifier: await readVerifier() }); },
-        // Enrollment scores windows with the base model only.
-        openCollector: ({ onWindow, onError }) => open({ onWindow, onError, collect: true, verifier: null }),
-        async hasVerifier() { return Boolean(await readVerifier()); },
-        async storeVerifier(model) {
-            const userId = await unlockedPrincipal();
-            await security.storeToken(verifierEntry(userId), model, { provider: 'openwakeword' });
-        }
-    };
+    return { open, release() { if (engine) drop(engine); } };
 };

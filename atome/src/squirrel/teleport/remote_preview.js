@@ -47,11 +47,6 @@ const dispatch = (type, detail) => {
     } catch (_) { }
 };
 
-export const setRemotePreviewCaptureSource = (resolver) => {
-    state.captureSource = typeof resolver === 'function' ? resolver : null;
-    return state.captureSource;
-};
-
 const resolveCanvas = () => {
     if (state.captureSource) {
         try {
@@ -108,8 +103,6 @@ export const stopRemotePreview = async (sessionId) => {
     const result = await send('preview-stop', { session_id: id });
     return { ok: result?.success === true, error: result?.error || null };
 };
-
-export const readRemotePreviewFrame = (sessionId) => state.frames.get(String(sessionId || '')) || null;
 
 export const installRemotePreviewLifecycle = () => {
     if (typeof window === 'undefined' || state.lifecycleInstalled) return false;

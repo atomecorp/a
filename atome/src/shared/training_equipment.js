@@ -97,10 +97,6 @@ export const trainingMachineAsRead = (kept) => {
         movements: kept.movements || [], settings: kept.settings || [], photo: kept.photo || null, location: kept.location || null, archived: kept.archived === true });
 };
 
-/** What a figure set on a machine means (P042 3): a resistance is the load the person moves; an assistance helps them,
- * so a higher figure is an easier set. Neither is compared across machines nor converted. */
-export const trainingMachineFigure = (machine, figure) => ({ figure, unit: machine.unit, mode: machine.load_mode,
-    easier_when: machine.load_mode === 'assistance' ? 'higher' : 'lower', comparable_with: 'same_machine_only' });
 /** The figures kept once a machine's movements, unit, step or range change: a figure it can no longer show is forgotten. */
 export const trainingMachineKeptFigures = (machine, figures = {}) => Object.fromEntries(Object.entries(figures).filter(([id, figure]) => machine.movements.includes(id)
     && figure >= machine.lightest && figure <= machine.heaviest && onStep(figure - machine.lightest, machine.step)));

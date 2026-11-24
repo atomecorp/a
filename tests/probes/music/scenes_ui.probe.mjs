@@ -88,12 +88,12 @@ const RULER = 'project_view_timeline_ruler';
 const RAIL = 'eve_bevy_panel_atome_contextual_edit';
 const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance;
 const fast = (name, result) => check(`SC-26 ${name} answers in ≤ ${RESPONSE_MS} ms`, result.ok && result.ms <= RESPONSE_MS, result.ms);
-// A view: the rail's Multitrack palette (Timeline, Cells, Mix; R-258), opened, then its choice.
+// A view: the band's Vue (user 23 Nov. 2026), its choices laid in the rail (R-294), then its choice.
 const viewTool = async (key) => {
-    const palette = await node('atome_contextual_tool_container_multitrack', 3000);
+    const palette = await node('eve_bevy_ui_main_menu_tool_view', 3000);
     if (!palette) return false;
     await clickCanvasTarget(page, palette); await wait(800);
-    const t = await node(`atome_contextual_tool_container_multitrack_multitrack_${key}`, 3000);
+    const t = await node(`atome_contextual_tool_main_band_view_${key}`, 3000);
     if (t) { await clickCanvasTarget(page, t); await wait(1500); }
     return !!t;
 };

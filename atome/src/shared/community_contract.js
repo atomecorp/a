@@ -4,10 +4,6 @@
 // A host's opening posts carry a key, not words: each app shows them in its language
 // (`eve.sleep_routine.community.post.<key>.title|text`), with a picture shipped in the app.
 
-export const COMMUNITY_MEMBER_STATUSES = Object.freeze(['member', 'refused', 'banned']);
-// A refused person may join again after this delay; a banned one never.
-export const COMMUNITY_REFUSAL_DAYS = 30;
-
 export const COMMUNITIES = Object.freeze({
     sleep_circle: Object.freeze({
         id: 'sleep_circle',
@@ -23,5 +19,3 @@ export const COMMUNITIES = Object.freeze({
 });
 
 export const communityAudience = id => ({ community: String(id) });
-export const communityOfAudience = audience => (audience && typeof audience === 'object' && typeof audience.community === 'string'
-    && COMMUNITIES[audience.community] ? audience.community : '');

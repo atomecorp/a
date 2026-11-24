@@ -5,6 +5,7 @@
 // account: either the account already holds its original transaction, or the purchase
 // carries the account token of one of the account's device keys.
 pub mod admin;
+mod admin_overview;
 pub mod apple;
 pub mod catalog;
 pub mod google;

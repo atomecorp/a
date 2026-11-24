@@ -8,6 +8,8 @@ import {
     mcpOperations
 } from './mcp_core.js';
 import { listUnifiedMcpTools } from './mcp_discovery.js';
+import { isBricksUri, readBricks } from './mcp_bricks.js';
+import { priorResults, resolveStepRefs } from './mcp_toolchain_refs.js';
 import { readMcpResource, listMcpPromptEntries, listMcpResourceEntries, renderPrompt } from './mcp_resources.js';
 import { listProposals, listSecurityJournal, readProposal } from './mcp_security.js';
 import { listConfirmations, readConfirmation } from './mcp_confirmation_gate.js';
@@ -85,7 +87,9 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
         return {
             protocol: ATOME_MCP_PROTOCOL,
             uri: String(uri || '').trim() || null,
-            content: await readMcpResource(uri, params, getHandlers())
+            // The bricks are the caller's own listed tools, read as a tree (mcp_bricks.js).
+            content: isBricksUri(uri) ? readBricks(uri, await listUnifiedMcpTools(params.__mcp.actor, getHandlers()))
+                : await readMcpResource(uri, params, getHandlers())
         };
     },
     'mcp.prompts.list'() {
@@ -160,7 +164,8 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     },
     // Each step is a request of its own through the single entry (mcp.js `__mcp.dispatch`), with its own
     // policy and confirmation: a chain never carries a step past the person's yes. A held step stops the
-    // chain; the caller re-sends it from `resume_index` with that step's `confirmed` and `confirmation_id`.
+    // chain; the caller re-sends it from `resume_index` with that step's `confirmed` and `confirmation_id`,
+    // and the held answer's `prior_steps`, so `{ "$step", "path" }` references still reach the earlier results.
     async 'mcp.toolchains.execute'(params = {}) {
         const steps = Array.isArray(params?.steps) ? params.steps : [];
         if (!steps.length) throw new Error('Missing toolchain steps');
@@ -173,16 +178,23 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
             }
         });
         const results = [];
+        const reachable = priorResults(params.prior_steps);
         for (let index = start; index < steps.length; index += 1) {
             const method = String(steps[index].method).trim();
             const stepParams = steps[index].params && typeof steps[index].params === 'object' ? steps[index].params : {};
-            const response = await params.__mcp.dispatch(method, stepParams);
+            let resolved;
+            try { resolved = resolveStepRefs(stepParams, reachable); } catch (error) {
+                return { ok: false, mode: 'sequential', failed_index: index, error: error.message, steps: results };
+            }
+            const response = await params.__mcp.dispatch(method, resolved);
             if (response.error) return { ok: false, mode: 'sequential', failed_index: index, error: response.error, steps: results };
             const gate = response.result;
             if (gate?.confirmation_required === true || /^mcp_(confirmation|rate_limited)/.test(String(gate?.error || ''))) {
-                return { ok: false, mode: 'sequential', status: 'held', resume_index: index, gate, steps: results };
+                const prior_steps = [...reachable].map(([at, result]) => ({ index: at, result }));
+                return { ok: false, mode: 'sequential', status: 'held', resume_index: index, gate, steps: results, prior_steps };
             }
             results.push({ index, method, result: gate });
+            reachable.set(index, gate);
             params.__mcp.reportProgress({ ratio: (index + 1) / steps.length, phase: 'toolchain.step', detail: { index, method } });
         }
         return { ok: true, mode: 'sequential', count: results.length, steps: results };

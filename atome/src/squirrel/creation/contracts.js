@@ -35,7 +35,8 @@ const definitions = {
         'List the user\'s creations of one kind (texts, drawings, pictures retouched) in the current project, newest last: atome_id and title.', false, 'read'],
     read: [target, ['atome_id'], 'Describe one creation: a text\'s words, paragraphs (style, alignment, list, indent, spacing, blocks) and page; a drawing\'s items (kind, brush or shape, style) and erasing; a picture\'s retouch, framing and erasing.', false, 'read'],
     open: [{ kind: { type: 'string', enum: CREATION_KINDS }, atome_id: id, view: { type: 'string', enum: ['edit', 'list'] } }, ['kind'],
-        'Show Créer on the Dashboard (the user sees it): a creation\'s edit (`atome_id`; none: a new one), or its kind\'s list (`view: list`).', false, 'control'],
+        'Show Créer on the Dashboard (the user sees it): a creation\'s edit (`atome_id`; none: a new one), or its kind\'s list (`view: list`). '
+        + 'Asked inside a project (« montre-le »), it leaves the project for the Dashboard and opens Créer there.', false, 'control'],
     new_text: [{ text: { type: 'string', minLength: 1, maxLength: 20000 }, project_id: id }, ['text'],
         'Make a new text (Créer › Texte) in the current project; line breaks start paragraphs. Returns its atome_id.', true, 'write'],
     new_drawing: [{ items: { type: 'array', minItems: 1, maxItems: 500, items: drawingItem }, project_id: id }, ['items'],

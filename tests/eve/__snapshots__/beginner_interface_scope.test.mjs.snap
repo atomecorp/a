@@ -308,18 +308,19 @@ exports[`advanced preserves its existing toolbar, options and List projection > 
                               ],
                               "radius": 0,
                               "shadow": {
-                                "blur": 16,
+                                "blur": 11.28,
                                 "color": [
                                   0,
                                   0,
                                   0,
-                                  0.39,
+                                  0.34,
                                 ],
                                 "offset": [
                                   0,
                                   0,
                                 ],
-                                "spread": 0,
+                                "reach": 24,
+                                "spread": 12,
                               },
                               "size": [
                                 900,
@@ -399,15 +400,8 @@ exports[`advanced preserves its existing toolbar, options and List projection > 
           },
         ],
         "edgeFade": {
-          "color": [
-            0.16,
-            0.2,
-            0.345,
-            0.95,
-          ],
           "curve": 2.2,
           "heightPx": 60,
-          "stops": 9,
         },
         "id": "project_view_list_virtual_list",
         "kind": "scroll_area",
@@ -783,18 +777,19 @@ exports[`advanced preserves its existing toolbar, options and List projection > 
                               ],
                               "radius": 0,
                               "shadow": {
-                                "blur": 16,
+                                "blur": 11.28,
                                 "color": [
                                   0,
                                   0,
                                   0,
-                                  0.39,
+                                  0.34,
                                 ],
                                 "offset": [
                                   0,
                                   0,
                                 ],
-                                "spread": 0,
+                                "reach": 24,
+                                "spread": 12,
                               },
                               "size": [
                                 900,
@@ -874,15 +869,8 @@ exports[`advanced preserves its existing toolbar, options and List projection > 
           },
         ],
         "edgeFade": {
-          "color": [
-            0.16,
-            0.2,
-            0.345,
-            0.95,
-          ],
           "curve": 2.2,
           "heightPx": 60,
-          "stops": 9,
         },
         "id": "project_view_list_virtual_list",
         "kind": "scroll_area",
@@ -984,9 +972,8 @@ exports[`advanced preserves its existing toolbar, options and List projection 1`
     "roots": [
       "capture",
       "create",
-      "find",
-      "communicate",
-      "calendar",
+      "activity",
+      "view",
     ],
   },
 }
@@ -1300,18 +1287,19 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
                               ],
                               "radius": 0,
                               "shadow": {
-                                "blur": 16,
+                                "blur": 11.28,
                                 "color": [
                                   0,
                                   0,
                                   0,
-                                  0.39,
+                                  0.34,
                                 ],
                                 "offset": [
                                   0,
                                   0,
                                 ],
-                                "spread": 0,
+                                "reach": 24,
+                                "spread": 12,
                               },
                               "size": [
                                 900,
@@ -1391,15 +1379,8 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
           },
         ],
         "edgeFade": {
-          "color": [
-            0.16,
-            0.2,
-            0.345,
-            0.95,
-          ],
           "curve": 2.2,
           "heightPx": 60,
-          "stops": 9,
         },
         "id": "project_view_list_virtual_list",
         "kind": "scroll_area",
@@ -1775,18 +1756,19 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
                               ],
                               "radius": 0,
                               "shadow": {
-                                "blur": 16,
+                                "blur": 11.28,
                                 "color": [
                                   0,
                                   0,
                                   0,
-                                  0.39,
+                                  0.34,
                                 ],
                                 "offset": [
                                   0,
                                   0,
                                 ],
-                                "spread": 0,
+                                "reach": 24,
+                                "spread": 12,
                               },
                               "size": [
                                 900,
@@ -1866,15 +1848,8 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
           },
         ],
         "edgeFade": {
-          "color": [
-            0.16,
-            0.2,
-            0.345,
-            0.95,
-          ],
           "curve": 2.2,
           "heightPx": 60,
-          "stops": 9,
         },
         "id": "project_view_list_virtual_list",
         "kind": "scroll_area",
@@ -1976,9 +1951,8 @@ exports[`intermediate preserves its existing toolbar, options and List projectio
     "roots": [
       "capture",
       "create",
-      "find",
-      "communicate",
-      "calendar",
+      "activity",
+      "view",
     ],
   },
 }

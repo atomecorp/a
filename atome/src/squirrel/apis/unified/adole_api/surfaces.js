@@ -37,6 +37,10 @@ const state = {
     surfaceId: '',
     announcedGeneration: -1,
     announcing: null,
+    // Who may find this device nearby (R-248): 'contacts' (the default) or 'everyone'; its opaque token, the server's
+    // answer to the announce, is what the device says on the local network (`_atome._tcp`).
+    discoverable: 'contacts',
+    nearbyToken: '',
     // This device in the account registry ({ deviceId, label }), read once per session.
     device: null,
     readingDevice: null,
@@ -125,7 +129,8 @@ export const describeLocalSurface = async () => {
         surface_id: getLocalSurfaceId(),
         label: await readLocalSurfaceName(),
         platform,
-        capabilities: resolveCapabilities()
+        capabilities: resolveCapabilities(),
+        discoverable: state.discoverable
     };
 };
 
@@ -174,8 +179,31 @@ export const announceSurface = async () => {
     const result = await sendSurfaceMessage('announce', descriptor);
     if (result?.success === true) {
         state.announcedGeneration = generation;
+        state.nearbyToken = String(result.nearby_token || '');
     }
     return result;
+};
+
+/** This device's nearby token (announced on the local network), '' before the first announce. */
+export const readLocalNearbyToken = () => state.nearbyToken;
+
+/** Who may find this device nearby ('contacts' or 'everyone'); a change is announced again at once. */
+export const setLocalSurfaceDiscoverable = async (value) => {
+    const next = value === 'everyone' ? 'everyone' : 'contacts';
+    if (next === state.discoverable) return { ok: true, unchanged: true };
+    state.discoverable = next;
+    if (state.announcedGeneration < 0) return { ok: true };
+    state.announcedGeneration = -1;
+    return ensureSurfaceAnnounced();
+};
+
+/** The devices behind the nearby tokens heard on the local network (and this account's own, always), as the server
+ *  lets this person see them: `{ ok, surfaces: [{ surface_id, user_id, label, person_name, own }] }`. */
+export const listNearbySurfaces = async (tokens = []) => {
+    await ensureSurfaceAnnounced();
+    const result = await sendSurfaceMessage('nearby', { tokens: [...new Set(tokens.map(String).filter(Boolean))] });
+    return { ok: result?.success === true || result?.ok === true, error: result?.error || null,
+        surfaces: Array.isArray(result?.surfaces) ? result.surfaces : [] };
 };
 
 // Idempotent: announces once per socket generation. The transport bumps that

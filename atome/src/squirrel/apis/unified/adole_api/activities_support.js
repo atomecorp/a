@@ -1,4 +1,4 @@
-import { getSessionState } from './session.js';
+import { getSessionState, readWindowProjectId } from './session.js';
 
 const with_callback = (result, callback) => {
     if (typeof callback === 'function') callback(result);
@@ -62,14 +62,7 @@ const mergeById = (left = [], right = []) => {
 
 const resolveProjectId = (options = {}) => {
     const explicit = options.projectId || options.project_id || null;
-    if (explicit) return explicit;
-    if (typeof window !== 'undefined' && window.__currentProject?.id) {
-        return window.__currentProject.id;
-    }
-    if (typeof window !== 'undefined' && window.AdoleAPI?.projects?.getCurrentId) {
-        return window.AdoleAPI.projects.getCurrentId();
-    }
-    return null;
+    return explicit || readWindowProjectId();
 };
 
 const normalizeActivity = (record) => {

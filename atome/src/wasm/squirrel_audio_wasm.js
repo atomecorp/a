@@ -145,7 +145,7 @@ export function audio_instrument_sample_load(sample_id, left, right, sample_rate
 }
 
 /**
- * Load an audio clip from raw bytes (WAV, MP3, OGG).
+ * Load an audio clip from raw bytes (WAV, MP3, OGG, FLAC; MP4/M4A, AIFF and CAF by the mix graph's decoder).
  * In WASM, we cannot read files from disk so JS must pass the bytes.
  * @param {string} id
  * @param {Uint8Array} data
@@ -993,6 +993,24 @@ export function wavInfo(bytes) {
 }
 
 /**
+ * A sound file's waveform, decoded by the engine's own decoder (lib.rs
+ * `decode_sound`): `{ peaks: Float32Array, durationSeconds }`, or the decoder's
+ * refusal — a sound the engine cannot play shows no waveform either.
+ * @param {Uint8Array} data
+ * @param {number} max_peaks
+ * @returns {any}
+ */
+export function waveformOfSound(data, max_peaks) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.waveformOfSound(ptr0, len0, max_peaks);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * @param {Array<any>} channels
  * @param {number} max_peaks
  * @returns {Float32Array}
@@ -1467,7 +1485,7 @@ function __wbg_get_imports() {
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 263, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166);
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0) {
@@ -1507,8 +1525,8 @@ function __wbg_get_imports() {
 }
 
 const lAudioContext = (typeof AudioContext !== 'undefined' ? AudioContext : (typeof webkitAudioContext !== 'undefined' ? webkitAudioContext : undefined));
-function wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hbe1e69c1a21a7166(arg0, arg1);
+function wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d(arg0, arg1);
 }
 
 

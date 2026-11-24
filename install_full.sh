@@ -3,8 +3,8 @@
 # update_all_libraries.sh
 # ------------------------
 # Unified script to update frontend libraries plus Tauri CLI.
-# - "stable" mode pins vetted versions (GSAP, Tone, Leaflet, Wavesurfer + plugins, Three.js).
-# - "latest" mode pulls the most recent GSAP, Tone.js, Leaflet (+CSS), Wavesurfer (+plugins), and Three.js with backup/rollback and version tracking.
+# - "stable" mode pins vetted versions (GSAP, Opal).
+# - "latest" mode pulls the most recent GSAP (Opal stays pinned) with backup/rollback and version tracking.
 # - Always refreshes @tauri-apps/cli to the latest release (unless --skip-tauri).
 
 set -euo pipefail
@@ -99,7 +99,7 @@ Options:
 
 Examples:
   ./update_all_libraries.sh              # Stable/pinned versions + tauri update
-  ./update_all_libraries.sh --latest     # Only GSAP & Tone.js latest + tauri update
+  ./update_all_libraries.sh --latest     # GSAP latest + tauri update
   ./update_all_libraries.sh --skip-tauri # Update libs but keep current tauri-cli
 EOF
 }
@@ -534,22 +534,11 @@ reinstall_project_dependencies() {
 }
 
 # --- Stable mode -----------------------------------------------------------
-
-# --- Skia Stack Installation (Removed) -------------------------------------
-# Skia and BGFX references have been removed as per new architecture.
-# This function is kept empty or removed to prevent errors if called.
-
-
-# --- Stable mode -----------------------------------------------------------
 run_stable_updates() {
   log_info "🔄 Updating libraries to pinned stable versions"
 
   declare -a STABLE_LIBS=(
     "gsap.min.js|https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"
-    "tone.min.js|https://unpkg.com/tone@15.1.22/build/Tone.js"
-    "Tone.js.map|https://unpkg.com/tone@15.1.22/build/Tone.js.map"
-    "leaflet.min.js|https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
-    "leaflet.min.css|https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
     # Opal Ruby runtime
     "opal.min.js|https://cdn.opalrb.com/opal/1.8.2/opal.min.js"
     "opal-parser.min.js|https://cdn.opalrb.com/opal/1.8.2/opal-parser.min.js"
@@ -571,44 +560,17 @@ run_latest_updates() {
   log_info "🔍 Resolving latest versions from npm registry"
 
   local GSAP_VERSION
-  local TONE_VERSION
-  local LEAFLET_VERSION
 
   GSAP_VERSION=$(get_latest_version "gsap") || return 1
-  TONE_VERSION=$(get_latest_version "tone") || return 1
-  LEAFLET_VERSION=$(get_latest_version "leaflet") || return 1
 
   log_info "📦 Latest versions:"
   log_info "   • GSAP:        $GSAP_VERSION"
-  log_info "   • Tone.js:     $TONE_VERSION"
-  log_info "   • Leaflet:     $LEAFLET_VERSION"
 
   local success=0
   local total=0
 
   total=$((total + 1))
   if download_latest_asset "gsap.min.js" "https://unpkg.com/gsap@$GSAP_VERSION/dist/gsap.min.js" "gsap" "$GSAP_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  total=$((total + 1))
-  if download_latest_asset "tone.min.js" "https://unpkg.com/tone@$TONE_VERSION/build/Tone.js" "tone" "$TONE_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  # Download Tone.js map for latest version
-  total=$((total + 1))
-  if download_latest_asset "Tone.js.map" "https://unpkg.com/tone@$TONE_VERSION/build/Tone.js.map" "tone" "$TONE_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  total=$((total + 1))
-  if download_latest_asset "leaflet.min.js" "https://cdnjs.cloudflare.com/ajax/libs/leaflet/$LEAFLET_VERSION/leaflet.min.js" "leaflet" "$LEAFLET_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  total=$((total + 1))
-  if download_latest_asset "leaflet.min.css" "https://cdnjs.cloudflare.com/ajax/libs/leaflet/$LEAFLET_VERSION/leaflet.min.css" "leaflet" "$LEAFLET_VERSION" 64; then
     success=$((success + 1))
   fi
 

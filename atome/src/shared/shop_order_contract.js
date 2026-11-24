@@ -14,13 +14,6 @@ export const SHOP_CANCEL_NOTICE_MS = 48 * HOUR_MS;
 // A pre-order this late past its announced date may be cancelled and refunded.
 export const SHOP_PREORDER_LATE_MS = 30 * DAY_MS;
 
-// requested: a registration waiting for the organiser (nothing paid); held: paid, in escrow; shipped: sent with its
-// tracking; delivered: received (or handed over, or a digital good given); released: paid to the seller;
-// disputed: the buyer contests, the money stays held; refunded / cancelled: over, the buyer owes nothing.
-export const SHOP_ORDER_STATES = Object.freeze(['requested', 'held', 'shipped', 'delivered', 'released', 'disputed', 'refunded', 'cancelled']);
-export const SHOP_ORDER_FINAL_STATES = Object.freeze(['released', 'refunded', 'cancelled']);
-export const SHOP_ORDER_ACTIONS = Object.freeze(['validate', 'refuse', 'ship', 'handover', 'confirm', 'dispute', 'cancel', 'release', 'refund', 'expire']);
-
 // What the buyer receives at once once paid: a digital good is given on payment (a project copied, an access opened).
 const deliveredOnPayment = kind => SHOP_DIGITAL_KINDS.includes(kind) || kind === 'free_price';
 // What ends at a known time (`ends_at`: the event's end, the appointment's end): released then, never confirmed by hand.

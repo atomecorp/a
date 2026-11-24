@@ -28,6 +28,7 @@ use crate::oscillator::{Oscillator, Waveform};
 use crate::pitch::PitchShift;
 use crate::reverb::Reverb;
 use crate::saturator::Saturator;
+use crate::scope::Scope;
 use crate::split::{Split, Splitter};
 use crate::svf::Svf;
 use crate::transient::TransientShaper;
@@ -79,9 +80,11 @@ pub enum ModuleKind {
     Follower,
     Constant,
     Svf,
+    // R-290 (23 Nov. 2026): the console's Scope, the signal through, measured.
+    Scope,
 }
 
-pub const KINDS: [ModuleKind; 49] = [
+pub const KINDS: [ModuleKind; 50] = [
     ModuleKind::Volume,
     ModuleKind::Pan,
     ModuleKind::Filter(Shape::LowPass),
@@ -131,6 +134,7 @@ pub const KINDS: [ModuleKind; 49] = [
     ModuleKind::Follower,
     ModuleKind::Constant,
     ModuleKind::Svf,
+    ModuleKind::Scope,
 ];
 
 // What a kind needs beyond its parameters to exist.
@@ -214,6 +218,7 @@ impl ModuleKind {
             Self::Follower => "follower",
             Self::Constant => "constant",
             Self::Svf => "svf",
+            Self::Scope => "scope",
         }
     }
 
@@ -264,6 +269,7 @@ impl ModuleKind {
             Self::Imager => &crate::imager::READINGS,
             Self::Tuner => &crate::tuner::READINGS,
             Self::Denoise => &crate::denoise::READINGS,
+            Self::Scope => &crate::scope::READINGS,
             _ => &[],
         }
     }
@@ -319,6 +325,7 @@ impl ModuleKind {
             Self::Follower => &crate::control::FOLLOWER_PARAMS,
             Self::Constant => &crate::control::CONSTANT_PARAMS,
             Self::Svf => &crate::svf::PARAMS,
+            Self::Scope => &crate::scope::PARAMS,
         }
     }
 
@@ -380,6 +387,7 @@ impl ModuleKind {
             (Self::Follower, ModuleAsset::None) => Box::new(Follower::new()),
             (Self::Constant, ModuleAsset::None) => Box::new(Constant::new()),
             (Self::Svf, ModuleAsset::None) => Box::new(Svf::new()),
+            (Self::Scope, ModuleAsset::None) => Box::new(Scope::new()),
         };
         Ok(processor)
     }

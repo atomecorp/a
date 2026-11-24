@@ -39,5 +39,3 @@ export const readBootJson = async (url, key) => {
     }
 };
 
-/** Where each boot read of this page came from, by key (diagnostics, probes). */
-export const readBootReadSources = () => Object.fromEntries(sources);

@@ -120,7 +120,7 @@ test('navigation retains a protected wallpaper URL, including a fetch completing
 });
 
 // R-175 (user, 15 Nov. 2026): Photo (already in the bottom band), Colorer and Multipiste left the ground rail of a project;
-// Activité holds Multipiste. The project's colour stays a canonical property, painted by the tests above.
+// the bottom band's Vue holds the multitrack views (23 Nov. 2026). The project's colour stays a canonical property, painted by the tests above.
 test('the project ground rail holds no Photo, Colorer nor Multipiste and keeps its own actions', () => {
     for (const tool of ['couleur', 'photo', 'multitrack']) {
         assert.equal(Object.hasOwn(CONTEXT_MENUS.menus.sidebar.objects.project, tool), false, `the ground rail declares no ${tool}`);
@@ -128,9 +128,11 @@ test('the project ground rail holds no Photo, Colorer nor Multipiste and keeps i
     for (const level of ['beginner', 'advanced']) {
         const keys = projectRailKeys(level);
         assert.ok(!keys.some(key => ['couleur', 'photo', 'multitrack'].includes(key)), `the ${level} ground rail shows neither Photo, Colorer nor Multipiste`);
-        for (const key of ['project_templates', 'select_all', 'view_visual', 'info', 'import', 'activity']) {
+        // 2026-11-23: Activité left for the bottom band; Commu. and Calendrier came to the empty ground.
+        for (const key of ['project_templates', 'select_all', 'view_visual', 'info', 'import', 'communicate', 'calendar']) {
             assert.ok(keys.includes(key), `the ${level} ground rail keeps ${key}`);
         }
+        assert.equal(keys.includes('activity'), false, `the ${level} ground rail no longer holds Activité`);
     }
 });
 

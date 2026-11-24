@@ -11,7 +11,9 @@ use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::sync::Arc;
 
 pub(super) const KINDS: [&str; 3] = ["surface", "teleport", "surface-grant"];
-const ACTIONS: [&str; 4] = ["announce", "list", "ping", "retire"];
+const ACTIONS: [&str; 5] = ["announce", "list", "nearby", "ping", "retire"];
+// The most tokens one `nearby` question may carry.
+const NEARBY_TOKENS_MAX: usize = 64;
 
 pub(super) fn failure(kind: &str, message: &JsonValue, error: &str) -> JsonValue {
     response(kind, message, false, json!({ "error": error }))
@@ -94,6 +96,17 @@ async fn announce(
     if program.is_none() && js::id(message.get("platform")) == "mcp_program" {
         return Ok(failure("surface", message, "surface_program_key_required"));
     }
+    // Who may find the seat by its nearby token; an absent value keeps the seat's.
+    let discoverable = match message.get("discoverable") {
+        None | Some(JsonValue::Null) => None,
+        Some(value) => match seats::DISCOVERABLE
+            .into_iter()
+            .find(|known| value.as_str() == Some(*known))
+        {
+            Some(known) => Some(known),
+            None => return Ok(failure("surface", message, "surface_discoverable_invalid")),
+        },
+    };
     let program_platform = json!("mcp_program");
     let announced = seats::Announced {
         label: message.get("label"),
@@ -103,9 +116,13 @@ async fn announce(
         },
         capabilities: message.get("capabilities"),
         program_id: program,
+        discoverable,
     };
     let user = who.user.as_str();
-    let surface = seats::attach(connection, user, &surface_id, announced);
+    let seats::Attached {
+        surface,
+        nearby_token,
+    } = seats::attach(connection, user, &surface_id, announced);
     let online = seats::presence("online", &surface);
     live::tell_except(user, &online, connection.live).await;
     // A returning seat reclaims the objects that went DISCONNECTED when it left.
@@ -118,7 +135,7 @@ async fn announce(
         }
     };
     let fields = json!({ "surface": surface, "surfaces": seats::list(user, &surface_id),
-        "restored_atome_ids": restored });
+        "restored_atome_ids": restored, "nearby_token": nearby_token });
     Ok(response("surface", message, true, fields))
 }
 
@@ -155,6 +172,71 @@ async fn list(
     Ok(response("surface", message, true, fields))
 }
 
+/// R-248 « à proximité »: the seats this device heard on its local network (their nearby tokens),
+/// with every other seat of the account. Another account's seat is told only when its owner lets
+/// anyone find it, or lets their accepted contacts and the caller is one; its token is never told.
+async fn nearby(
+    connection: &Connection,
+    message: &JsonValue,
+    user: &str,
+) -> Result<JsonValue, String> {
+    let tokens: Option<Vec<String>> = message
+        .get("tokens")
+        .and_then(JsonValue::as_array)
+        .filter(|tokens| tokens.len() <= NEARBY_TOKENS_MAX)
+        .and_then(|tokens| {
+            tokens
+                .iter()
+                .map(|token| token.as_str().map(|token| token.trim().to_lowercase()))
+                .collect()
+        });
+    let Some(tokens) = tokens else {
+        return Ok(failure("surface", message, "surface_nearby_tokens_invalid"));
+    };
+    let tagged = |surface: &JsonValue, own: bool, person_name: &str| {
+        js::with(
+            surface,
+            [
+                ("own", json!(own)),
+                ("person_name", json!(person_name)),
+                ("shared", json!(false)),
+            ],
+        )
+    };
+    let mut surfaces: Vec<JsonValue> = seats::list(user, &seats::own(connection))
+        .iter()
+        .map(|surface| tagged(surface, true, ""))
+        .collect();
+    let central = connection.ws_api.sessions.central();
+    let directory = &connection.ws_api.social.directory;
+    for found in seats::by_tokens(user, &tokens) {
+        if found.discoverable != "everyone" {
+            let (caller, owner) = (user.to_string(), found.owner.clone());
+            // `can_communicate(sender, recipient)`: the owner accepted the caller, and neither blocked the other.
+            let verdict = central
+                .transaction(move |db| {
+                    crate::social::relations::can_communicate(db, &caller, &owner)
+                })
+                .await?;
+            if verdict["ok"] != json!(true) {
+                continue;
+            }
+        }
+        let person_name = directory
+            .source_profile(&found.owner)
+            .await?
+            .map(|profile| profile.display_name)
+            .unwrap_or_default();
+        surfaces.push(tagged(&found.surface, false, &person_name));
+    }
+    Ok(response(
+        "surface",
+        message,
+        true,
+        json!({ "surfaces": surfaces }),
+    ))
+}
+
 async fn surface(connection: &Arc<Connection>, message: &JsonValue) -> JsonValue {
     let action = action_of(message);
     let refusal = (!ACTIONS.contains(&action.as_str())).then(|| {
@@ -173,6 +255,7 @@ async fn surface(connection: &Arc<Connection>, message: &JsonValue) -> JsonValue
     let outcome = match action.as_str() {
         "announce" => announce(connection, message, who).await,
         "list" => list(connection, message, &user).await,
+        "nearby" => nearby(connection, message, &user).await,
         "ping" => Ok(match seats::touch(connection) {
             Some(surface) => response("surface", message, true, json!({ "surface": surface })),
             None => failure("surface", message, "surface_not_announced"),

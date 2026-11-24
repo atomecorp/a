@@ -1,19 +1,8 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
 
-// Strava (register R-016 lot F, question 31 « Strava d'abord », mockup temp/results_panel/mockups/M12_connexions.png:
-// Préférences › Santé). The person's Strava account, connected through Strava's own sign-in page; its activities read
-// into the person's records (#shared/activity_import_contract.js), where the Résultats monitor and the workouts tile read
-// them. One contract for runtime V2, AI discovery, voice and direct MCP calls; the screen's actions run through it
-// (eVe/domains/strava/strava_runtime.js); the server owner holds the tokens (server/strava/). The assistant never
-// reads Strava data (Strava's terms): an import answers counts only.
-export class StravaFailure extends Error {
-    constructor(code) { super(code); this.code = code; }
-}
 export const STRAVA_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'CONTEXT_CHANGED', 'NOT_CONFIGURED',
     'AUTHORIZATION_REQUIRED', 'PERMISSION_DENIED', 'AUTHORIZATION_EXPIRED', 'CANCELLED', 'USER_GESTURE_REQUIRED',
     'PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED', 'RATE_LIMITED', 'IMPORT_WRITE_FAILED', 'NOT_FOUND', 'health_access_denied_for_actor']);
-// The scopes asked: the profile's name, and every activity the person can see, « Only You » included.
-export const STRAVA_SCOPES = Object.freeze(['read', 'activity:read_all']);
 // The days read back when none is said: a re-import of them changes only what Strava changed.
 export const STRAVA_IMPORT_DAYS = 30;
 const attempt = { type: 'string', pattern: '^[a-f0-9]{32}$' };

@@ -4,70 +4,9 @@ import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 import { assertSetTargetDeclared } from '../../../../shared/atome_type_gate.js';
 import { isDeviceAtomeId } from '../../../../shared/device_scope_contract.js';
 import { mapStateCurrentToAtome } from './atome_record_projection.js';
+import { STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES, STORE_REFUSED, QUEUE_ORDER_INDEX, RECORD_TYPE_INDEX, EVENT_ATOME_INDEX, EVENT_PROJECT_INDEX, transact, requestValue, storageError, key, ownerKeyRange } from './guest_workspace_db.js';
 // Installation-scoped browser guest persistence. This is the only local guest
 // authority and keeps append-only events separate from projected current state.
-const DB_NAME = 'squirrel_guest_workspace_v1';
-const DB_VERSION = 3;
-const STORE_RECORDS = 'records';
-const STORE_EVENTS = 'events';
-const STORE_SNAPSHOTS = 'snapshots';
-const STORE_QUEUE = 'queue';
-const STORE_FILES = 'files';
-// Outbox rows the server refused: kept, never dropped, out of the send order so
-// they cannot hold back the rows behind them; requeued on the next session.
-const STORE_REFUSED = 'refused_queue';
-// Outbox rows of one owner in send order. Without it, finding the next row to
-// send meant deserializing the whole outbox on every commit.
-const QUEUE_ORDER_INDEX = 'owner_created';
-
-function unavailable() {
-    if (!globalThis.indexedDB) throw new Error('guest_storage_unavailable');
-}
-
-function openDatabase() {
-    unavailable();
-    return new Promise((resolve, reject) => {
-        const request = globalThis.indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error || new Error('guest_storage_open_failed'));
-        request.onupgradeneeded = () => {
-            const database = request.result;
-            [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES, STORE_REFUSED].forEach((name) => {
-                if (!database.objectStoreNames.contains(name)) database.createObjectStore(name, { keyPath: 'key' });
-            });
-            const queue = request.transaction.objectStore(STORE_QUEUE);
-            if (!queue.indexNames.contains(QUEUE_ORDER_INDEX)) queue.createIndex(QUEUE_ORDER_INDEX, ['owner_id', 'created_at']);
-        };
-        request.onsuccess = () => resolve(request.result);
-    });
-}
-
-async function transact(stores, mode, work) {
-    const database = await openDatabase();
-    try {
-        return await new Promise((resolve, reject) => {
-            const transaction = database.transaction(stores, mode);
-            let result;
-            transaction.onerror = () => reject(transaction.error || new Error('guest_storage_transaction_failed'));
-            transaction.onabort = () => reject(transaction.error || new Error('guest_storage_transaction_aborted'));
-            transaction.oncomplete = () => resolve(result);
-            try { result = work(transaction); } catch (error) { transaction.abort(); reject(error); }
-        });
-    } finally {
-        database.close();
-    }
-}
-
-function requestValue(request) {
-    return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error('guest_storage_request_failed'));
-    });
-}
-
-function storageError(error) {
-    if (error?.name === 'QuotaExceededError' || error?.message === 'QuotaExceededError') return 'guest_storage_quota_exceeded';
-    return error?.message || 'guest_storage_write_failed';
-}
 
 async function sha256(bytes) {
     if (!globalThis.crypto?.subtle) throw new Error('guest_adoption_digest_unavailable');
@@ -75,13 +14,15 @@ async function sha256(bytes) {
     return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-const key = (ownerId, id) => `${String(ownerId)}:${String(id)}`;
-const ownerKeyRange = (ownerId) => IDBKeyRange.bound(`${String(ownerId)}:`, `${String(ownerId)}:\uffff`);
-
 // Records, events and outbox rows are keyed `<owner>:<id>`: reads stay inside
 // the owner's key range instead of deserializing every identity on the device.
 export async function listGuestAtomes(ownerId, options = {}) {
-    const records = await transact([STORE_RECORDS], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_RECORDS).getAll(ownerKeyRange(ownerId))));
+    const records = await transact([STORE_RECORDS], 'readonly', (transaction) => {
+        const store = transaction.objectStore(STORE_RECORDS);
+        return requestValue(options.type
+            ? store.index(RECORD_TYPE_INDEX).getAll(IDBKeyRange.only([String(ownerId), String(options.type)]))
+            : store.getAll(ownerKeyRange(ownerId)));
+    });
     return (records || []).filter((record) => record.owner_id === String(ownerId))
         .filter((record) => options.include_deleted || !record.deleted_at)
         .filter((record) => !options.type || record.atome_type === options.type)
@@ -343,7 +284,11 @@ export async function clearGuestWorkspace(ownerId) {
 }
 
 export async function listWorkspaceEvents(ownerId, options = {}) {
-    const events = await transact([STORE_EVENTS], 'readonly', tx => requestValue(tx.objectStore(STORE_EVENTS).getAll(ownerKeyRange(ownerId))));
+    const events = await transact([STORE_EVENTS], 'readonly', tx => {
+        const log = tx.objectStore(STORE_EVENTS);
+        return requestValue(options.atome_id ? log.index(EVENT_ATOME_INDEX).getAll(String(options.atome_id))
+            : options.project_id ? log.index(EVENT_PROJECT_INDEX).getAll(String(options.project_id)) : log.getAll(ownerKeyRange(ownerId)));
+    });
     return events.filter(event => String(event.key).startsWith(String(ownerId) + ':'))
         .filter(event => !options.atome_id || event.atome_id === options.atome_id)
         .filter(event => !options.project_id || event.project_id === options.project_id)
@@ -354,6 +299,16 @@ export async function listWorkspaceEvents(ownerId, options = {}) {
         .sort((a, b) => options.order === 'desc' ? b.ts.localeCompare(a.ts) : a.ts.localeCompare(b.ts))
         .slice(Number(options.offset) || 0, (Number(options.offset) || 0) + (Number(options.limit) || 1000))
         .map(({ key: _key, ...event }) => event);
+}
+
+// Events the server committed for this device (an undo, a redo: `history_command.rs`) join its journal as
+// acknowledged rows, never queued for sending; without them every later undo read a journal without the
+// undo already done and undid the same transaction again. Their projections follow `importWorkspaceStates`.
+export async function logAcknowledgedWorkspaceEvents(ownerId, events) {
+    await transact([STORE_EVENTS], 'readwrite', tx => events.forEach(({ projection: _projection, inserted: _inserted, ...event }) => {
+        if (!event.id || !event.atome_id) throw new Error('workspace_event_invalid');
+        tx.objectStore(STORE_EVENTS).put({ ...event, key: key(ownerId, event.id) });
+    }));
 }
 
 // Same rows and order as filtering the outbox by owner then sorting it by

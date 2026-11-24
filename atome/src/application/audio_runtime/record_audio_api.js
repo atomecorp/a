@@ -316,7 +316,11 @@ import {
                     sampleRate: requestedSampleRate,
                     channels: requestedChannels,
                     inputDeviceName: params.inputDeviceName || null,
-                    ...(stripId ? { stripId, deviceId: params.device_id || params.deviceId || null } : {})
+                    ...(stripId ? {
+                        stripId, deviceId: params.device_id || params.deviceId || null,
+                        // The physical channels the strip hears, counted from 1 (R-286): the file holds that many.
+                        ...(Array.isArray(params.input_channels) ? { inputChannels: params.input_channels } : {})
+                    } : {})
                 });
             } catch (error) {
                 clearRecordingScopeSession(sessionId);

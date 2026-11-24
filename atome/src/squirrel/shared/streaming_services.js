@@ -37,5 +37,3 @@ export const STREAMING_SERVICES = Object.freeze([
 ].map(Object.freeze));
 
 export const streamingService = key => STREAMING_SERVICES.find(service => service.key === key) || null;
-// The service a TMDB provider id belongs to (null: a free channel, a store, one not listed).
-export const streamingServiceOfProvider = id => STREAMING_SERVICES.find(service => service.tmdb.includes(Number(id))) || null;

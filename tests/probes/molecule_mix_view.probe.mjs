@@ -7,7 +7,13 @@ const listeners = { addEventListener() {}, removeEventListener() {}, dispatchEve
 globalThis.window = { ...listeners };
 globalThis.window.Atome = {
     listStateCurrent: async (_project, options) => { assert.equal(options.atomeType, 'instrument'); return []; },
-    commit: async () => { throw new Error('unexpected_instrument_fixture_write'); }
+    // The owner the timeline opens on (project_view_timeline_owner.js reads it by its id).
+    getStateCurrent: async (id) => (id === 'molecule_mixview' ? { id, atome_id: id, project_id: id, type: 'group', properties: { name: 'Molécule' } } : null),
+    // Opening the timeline notes what it laid on the project itself (a `set` of the owner); nothing else may be written.
+    commit: async (operation) => {
+        if (operation?.kind === 'set' && operation.atome_id === 'molecule_mixview') return { ok: true };
+        throw new Error('unexpected_instrument_fixture_write');
+    }
 };
 Object.defineProperty(globalThis, 'localStorage', { configurable: true,
     value: { getItem: () => null, setItem() {}, removeItem() {} } });
@@ -37,6 +43,7 @@ const setup = async (extraRecords = []) => {
     const calls = { preview: [], cut: [] };
     const api = {
         listOpenGroupTimelines: () => ({ timelines: [{ group_id: OWNER }] }),
+        openGroupTimeline: async () => ({ ok: true }),
         readGroupTimeline: () => ({ timeline: session.getState() }),
         applyGroupTimelineOperation: async ({ operation, command }) => session.applyTimelineOperation(operation, command),
         applyGroupTimelineBatch: async ({ operations, batch_label }) => session.applyBatch(operations, { label: batch_label }),
@@ -87,7 +94,7 @@ test('strips, tiles and the node contract (only interactive kinds carry handlers
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_out'));
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_name'), 'the strip\'s name tool at its foot');
     assert.equal(ids.some((id) => id.endsWith('_welded')), false, 'no welded panel while nothing is open');
-    assert.equal(nodes.some((entry) => entry.style?.surfacePaint?.border), false, 'no border anywhere');
+    assert.equal(nodes.some((entry) => (entry.style?.surfacePaint?.border && !entry.style.surfacePaint.border.charter)), false, 'no border without a charter name');
     assert.equal(ids.some((id) => /_outline_(zone|tile|bridge)$/.test(id)), false, 'no private outline remains');
     // Volume is the column's tool slider (D16): no fader.
     assert.equal(ids.some((id) => id.includes('fader')), false, 'the old fader is gone');
@@ -160,9 +167,29 @@ test('tap, swipe, hold-move, hold-delete, + and OUT map to canonical operations'
     // Hold then pull right but release inside the strip: cancelled.
     await send('tile.press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
     await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
-    await send('tile.drag', { stripId: 'voice:audio', target: fx, event: at(60, 22) });
-    await send('tile.release', { stripId: 'voice:audio', target: fx, event: at(60, 22) });
+    // Held, the module lifts (the « plop »): larger, raised by its drop shadow.
+    assert.ok(flatten(build()).some((entry) => entry.style?.z_index === 30 && entry.style?.shadow), 'the held module is lifted');
+    await send('tile.drag', { stripId: 'voice:audio', target: fx, event: at(32, 22) });
+    await send('tile.release', { stripId: 'voice:audio', target: fx, event: at(32, 22) });
     assert.deepEqual(types(), moved);
+    assert.equal(strip('voice:audio').chain.find((module) => module.module_id === fx).bypass, true, 'set down to the side over no strip, it goes in bypass');
+    assert.equal(flatten(build()).some((entry) => entry.style?.z_index === 30), false, 'let go, nothing stays lifted');
+    // Carried: the rail holds the trash; held and let go still: Supprimer and Bypass, a touch on one acts on that module.
+    await send('tile.press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
+    await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
+    await send('tile.drag', { stripId: 'voice:audio', target: fx, event: at(32, 22) });
+    assert.deepEqual(content.railDefinitions().filter((d) => d.key.startsWith('mix_module')).map((d) => d.key), ['mix_module_trash']);
+    await send('tile.release', { stripId: 'voice:audio', target: fx, event: at(32, 22) });
+    await send('tile.press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
+    await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
+    await send('tile.release', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
+    assert.deepEqual(content.railDefinitions().filter((d) => d.key.startsWith('mix_module')).map((d) => d.key), ['mix_module_delete', 'mix_module_bypass']);
+    await content.invokeRailTool({ key: 'mix_module_bypass' });
+    assert.equal(strip('voice:audio').chain.find((module) => module.module_id === fx).bypass, true, 'Bypass on the rail toggles it');
+    assert.equal(content.railDefinitions().some((d) => d.key.startsWith('mix_module')), false, 'the rail gives the tools back');
+    const ghosts = flatten(build()).filter((entry) => entry.style?.background && /_module_\d+_background$/.test(entry.id || '') && entry.style.shadow === null);
+    assert.ok(ghosts.length >= 1, 'a bypassed module has no ground nor shadow');
+    await content.invokeRailTool({ key: 'mix_module_bypass' });
     // Hold then pull out past the strip's right edge: deleted on release.
     await send('tile.press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
     await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
@@ -195,11 +222,13 @@ test('the Volume tool slider previews live and commits once; outputs, Aux, new b
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.ok(calls.preview.length >= 1, `previewed live (${calls.preview.length})`);
     assert.equal(gain(), 0, 'no durable write while the finger moves');
-    const before = session.getHistory().undo.length;
+    // The console's own memory of what is open (`view.set`, R-199) is written beside it: only the mix writes are counted.
+    const mixWrites = () => session.getHistory().undo.filter((entry) => entry.event_type !== 'molecule.view.set').length;
+    const before = mixWrites();
     volume().on.release({});
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.ok(gain() < 0);
-    assert.equal(session.getHistory().undo.length, before + 1);
+    assert.equal(mixWrites(), before + 1);
     // OUT → its welded panel → « Aucune »: the strip goes nowhere physical.
     await send('tile.activate', { stripId: 'voice:audio', target: 'out' });
     assert.equal(selection(), 'out');
@@ -248,4 +277,50 @@ test('a strip held by its band and dropped on a group joins it; dropped outside,
     await send('band.drag', { stripId: 'voice:audio', event: { x: -2000, y: 12 } });
     await send('band.release', { stripId: 'voice:audio', event: { x: -2000, y: 12 } });
     assert.equal(session.getState().mix.groups.find((group) => group.group_id === 'auto:film')?.member_strip_ids.includes('voice:audio'), false);
+});
+
+test('an audio strip shows an empty Aux until it has one; a touch writes it and opens its panel (R-290)', async () => {
+    const { send, strip, content } = await setup();
+    const homeId = 'voice:audio:aux_home';
+    const shown = () => content.readState().strips.find((entry) => entry.strip_id === 'voice:audio');
+    assert.equal(strip('voice:audio').chain.some((module) => module.type === 'aux'), false, 'nothing is stored before the touch');
+    assert.ok(shown(), 'the console lists the strip');
+    await send('tile.activate', { stripId: 'voice:audio', target: homeId });
+    const aux = strip('voice:audio').chain.find((module) => module.type === 'aux');
+    assert.equal(aux?.module_id, homeId, 'the touch writes the Aux under its own id');
+    assert.equal(aux.destination, null);
+    assert.equal(content.readState().strips.find((entry) => entry.strip_id === 'voice:audio').selection, homeId, 'its panel opens');
+    await send('weld.choose', { stripId: 'voice:audio', panel: 'aux', moduleId: homeId, choice: 'new_bus' });
+    assert.equal(strip('voice:audio').chain.filter((module) => module.type === 'aux').length, 1, 'one Aux, no second empty one');
+    // A video strip has none of this (its engine has no send yet).
+    assert.equal(strip('film:video').chain.some((module) => module.type === 'aux'), false);
+});
+
+test('the Scope: added by the +, its panel holds the view and tap rows and a picture that the measures move (R-290)', async () => {
+    const { send, strip, build, session } = await setup();
+    await send('tile.activate', { stripId: 'film:video', target: 'add' });
+    await send('weld.choose', { stripId: 'film:video', panel: 'add', moduleId: '', choice: { type: 'scope', effect: 'scope' } });
+    const scope = strip('film:video').chain.find((module) => module.type === 'scope');
+    assert.ok(scope, 'the Scope joins the video strip');
+    assert.deepEqual(scope.params, { view: 0, tap: 0 });
+    await send('tile.activate', { stripId: 'film:video', target: scope.module_id });
+    const nodes = flatten(build());
+    // The labels are cut to the tool's width (rule 11): the first letters tell them apart.
+    const labels = nodes.map((entry) => entry.accessibility?.label || entry.text || entry.label).filter(Boolean);
+    for (const label of ['Onde', 'Vec', 'His', 'Sor', 'Ent']) assert.ok(labels.some((text) => text.startsWith(label)), `the panel shows ${label}`);
+    assert.ok(nodes.some((entry) => String(entry.id).endsWith('_scope')), 'the picture is laid');
+    assert.ok(nodes.some((entry) => String(entry.id).includes('_scope_w_')), 'the waveform view is laid by default');
+    // The audio strip takes one too, and it stays out of the program the engine plays.
+    await send('tile.activate', { stripId: 'voice:audio', target: 'add' });
+    await send('weld.choose', { stripId: 'voice:audio', panel: 'add', moduleId: '', choice: { type: 'scope', effect: 'scope' } });
+    assert.ok(strip('voice:audio').chain.some((module) => module.type === 'scope'));
+    // The engine plays it as the dsp `scope`, at the strip's input (tap 1) first, else after the rest.
+    const { compileMoleculeMixProgram } = await import('../../eVe/core/media_engine/molecule_mix_engine.js');
+    const compiled = () => compileMoleculeMixProgram(session.getState(), { clipHasAudio: () => true }).find((entry) => entry.id === 'voice:audio').chain;
+    const scopeOf = (chain) => chain.filter((module) => module.effect === 'scope');
+    assert.equal(scopeOf(compiled()).length, 1);
+    assert.equal(compiled().at(-1).effect, 'scope', 'tap 0 (Sortie) reads at the end of the chain');
+    const audioScope = strip('voice:audio').chain.find((module) => module.type === 'scope');
+    await session.applyTimelineOperation('mix.module.update', { strip_id: 'voice:audio', module_id: audioScope.module_id, params: { tap: 1 } });
+    assert.equal(compiled()[0].effect === 'scope' || compiled().findIndex((module) => module.effect === 'scope') < compiled().findIndex((module) => module.type === 'dsp' && module.effect !== 'scope'), true, 'tap 1 (Entrée) reads first');
 });

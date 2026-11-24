@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { createBevyUiPointerRuntime, localBevyEventForTarget } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
-import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
 import { registerPanelApi, clearPanelApi } from '../../eVe/intuition/runtime/panel_api.js';
 import { createPanelSurfaceRuntime } from '../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js';
 import {
@@ -179,15 +178,15 @@ const sweepContent = () => ({
     // Les cles sont celles des RACINES du menu principal (context_menus.json ->
     // menus.main.roots) : le niveau par defaut filtre tout ce qui n'en fait pas
     // partie, et un harnais qui invente ses cles ne monte rien.
-    toolbox: { children: ['find', 'communicate', 'create'] },
-    find: {
+    toolbox: { children: ['view', 'activity', 'create'] },
+    view: {
         label: 'trouver', icon: 'search', type: 'tool', action: 'momentary', latch: true,
-        atome_tool: true, tool_id: 'tool.main.find',
+        atome_tool: true, tool_id: 'ui.find.panel',
         active: () => ({ ok: true }), inactive: () => ({ ok: true })
     },
-    communicate: {
-        label: 'communication', icon: 'communicate', type: 'tool', action: 'toggle',
-        atome_tool: true, tool_id: 'tool.main.communicate',
+    activity: {
+        label: 'activité', icon: 'activity', type: 'tool', action: 'toggle',
+        atome_tool: true, tool_id: 'ui.comm.panel',
         active: () => ({ ok: true }), inactive: () => ({ ok: true })
     },
     create: {
@@ -216,7 +215,8 @@ test('a panel tool sweeps and holds through one reveal while a palette keeps its
     const ribbonTool = (key) => findNode(tree(), `eve_bevy_ui_main_menu_tool_${key}`);
     try {
         await harness.runtime.showFully();
-        const findTool = ribbonTool('find');
+        // A root of the band (context_menus.json menus.main.roots) carrying a panel tool: its surface is read from its tool id.
+        const findTool = ribbonTool('view');
         assert.equal(typeof findTool.on.palette_slide_open, 'function');
         // Holding is owned by the pointer lens, not a second native long-press route.
         assert.equal(findTool.on.long_press, undefined);
@@ -224,7 +224,7 @@ test('a panel tool sweeps and holds through one reveal while a palette keeps its
         assert.equal(typeof findTool.on.release, 'function');
 
         await findTool.on.palette_slide_open({});
-        assert.deepEqual(invocations, [{ key: 'find', source: 'bevy_ui.activate', actionOverride: 'state.on' }]);
+        assert.deepEqual(invocations, [{ key: 'view', source: 'bevy_ui.activate', actionOverride: 'state.on' }]);
 
         // Panneau deja ouvert : le glissement ne le bascule jamais en fermeture.
         openSurfaces.add('finder');
@@ -233,10 +233,10 @@ test('a panel tool sweeps and holds through one reveal while a palette keeps its
         assert.equal(invocations.length, 1, 'an open panel is never toggled shut by the reveal');
         openSurfaces.delete('finder');
 
-        const communicateTool = ribbonTool('communicate');
+        const activityTool = ribbonTool('activity');
         invocations.length = 0;
-        await communicateTool.on.palette_slide_open({});
-        assert.deepEqual(invocations, [{ key: 'communicate', source: 'bevy_ui.activate', actionOverride: 'state.on' }]);
+        await activityTool.on.palette_slide_open({});
+        assert.deepEqual(invocations, [{ key: 'activity', source: 'bevy_ui.activate', actionOverride: 'state.on' }]);
 
         // Une palette garde sa route de glissement et n'ouvre aucun appui
         // immobile : ce lot ne change rien a son comportement.

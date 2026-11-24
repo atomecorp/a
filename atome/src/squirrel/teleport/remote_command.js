@@ -12,6 +12,7 @@
 import { FastifyAdapter } from '../apis/unified/adole.js';
 import { ensureRemoteSurfacePrincipal, ensureSurfaceAnnounced, listSurfaces } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
+import { EXTERNAL_DISPLAY_RELAY_TOOL } from '../external_display_role.js';
 
 // The server gives up at 30 s; the client waits a little longer so the server's
 // explicit `remote_command_timeout` is what the caller hears, not a transport timeout.
@@ -209,8 +210,9 @@ export const installRemoteCommandExecutor = () => {
             } catch (error) {
                 result = { ok: false, error: error?.message || String(error) };
             }
-            // Shown on this device: an order from elsewhere is never silent (§11.1).
-            window.dispatchEvent(new CustomEvent('squirrel:remote-command-received', {
+            // Shown on this device: an order from elsewhere is never silent (§11.1). A remote follower's link is no
+            // order: the follow it carries was announced.
+            if (detail.toolId !== EXTERNAL_DISPLAY_RELAY_TOOL) window.dispatchEvent(new CustomEvent('squirrel:remote-command-received', {
                 detail: { toolId: detail.toolId, fromLabel: detail.fromLabel, fromSurfaceId: detail.fromSurfaceId, ok: result?.ok !== false }
             }));
             await send('command-result', { command_id: detail.commandId, result });

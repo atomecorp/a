@@ -17,7 +17,7 @@ use crate::auth::device_sessions;
 use crate::auth::outcome::Outcome;
 use crate::auth::{
     PUBLIC_ERRORS, account_actions, account_auth, devices, handles, invites, now_ms, pairing,
-    recovery, signup,
+    program_scope, recovery, signup,
 };
 use crate::vault_router::central::atomic;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
@@ -244,6 +244,12 @@ async fn outcome(
         .committed(move |db| {
             let proof = worker.proof().expect("proof keys");
             let now = now_ms() as i64;
+            // A program's session signs its own renewal alone (auth/program_scope.rs).
+            if !program_scope::SESSION_ACTIONS.contains(&act.as_str())
+                && program_scope::names_program_session(db, input.get("sessionId"))?
+            {
+                return Err(program_scope::DENIED.into());
+            }
             let principal = claims["sub"].as_str().unwrap_or_default();
             let kid = claims.pointer("/cnf/kid").and_then(JsonValue::as_str).unwrap_or_default();
             // Kept as Fastify keeps what it writes outside its own transactions.

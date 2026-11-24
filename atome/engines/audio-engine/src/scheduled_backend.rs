@@ -24,8 +24,21 @@ use std::time::{Duration, Instant};
 
 pub(crate) const BLOCK_FRAMES: usize = 256;
 pub(crate) const CHANNELS: usize = 2;
-// Frames rendered ahead of the device: room for the main thread to schedule.
-const LOOKAHEAD_FRAMES: u64 = 2048;
+// Frames rendered ahead of the device: what the device asks at each quantum, and
+// two blocks of room for the render thread. Every frame rendered ahead is heard
+// that much later after a touch (a cell launched, user 24 Nov. 2026: « on ne doit
+// pas avoir de latence »); before the first quantum is known, the most a device asks.
+const LOOKAHEAD_UNKNOWN_FRAMES: u64 = 2048;
+const LOOKAHEAD_ROOM_FRAMES: u64 = 2 * BLOCK_FRAMES as u64;
+// The frames of the device's last quantum (0: none played yet).
+static QUANTUM_FRAMES: AtomicU64 = AtomicU64::new(0);
+
+fn lookahead_frames() -> u64 {
+    match QUANTUM_FRAMES.load(Ordering::Acquire) {
+        0 => LOOKAHEAD_UNKNOWN_FRAMES,
+        quantum => quantum.max(BLOCK_FRAMES as u64) + LOOKAHEAD_ROOM_FRAMES,
+    }
+}
 pub(crate) const FIFO_FRAMES: usize = 16_384;
 
 struct PendingStart {
@@ -301,9 +314,23 @@ fn default_output() -> Result<(cpal::Device, cpal::StreamConfig), ScheduledBacke
 
 pub(crate) type SharedConsumer = Arc<Mutex<ringbuf::HeapCons<f32>>>;
 
+pub(crate) fn generation() -> u64 {
+    GENERATION.load(Ordering::Acquire)
+}
+
+// A quantum of a device output a later start replaced (its stream still
+// draining its own FIFO while it closes) counts nowhere: the frames played are
+// the current FIFO's alone, never more than were rendered into it.
+pub(crate) fn note_output_quantum_of(generation: u64, host_ns: i64, frames: usize, popped: usize) {
+    if GENERATION.load(Ordering::Acquire) == generation {
+        note_output_quantum(host_ns, frames, popped);
+    }
+}
+
 // One output quantum played (device callback or host render block): which
 // rendered frame starts at `host_ns`, and how many frames the FIFO supplied.
 pub(crate) fn note_output_quantum(host_ns: i64, frames: usize, popped: usize) {
+    QUANTUM_FRAMES.store(frames as u64, Ordering::Release);
     let first = FRAMES_PLAYED.load(Ordering::Acquire);
     if let Ok(mut slot) = ANCHOR.try_lock() {
         *slot = Some(Anchor {
@@ -391,6 +418,8 @@ impl Backend for ScheduledCpalBackend {
     fn start(&mut self, renderer: Renderer) -> Result<(), Self::Error> {
         let generation = GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
         FRAMES_PLAYED.store(FRAMES_RENDERED.load(Ordering::Acquire), Ordering::Release);
+        // A new device's quantum is learned from its first callback.
+        QUANTUM_FRAMES.store(0, Ordering::Release);
         if let Ok(mut pending) = PENDING.lock() {
             pending.clear();
         }
@@ -409,7 +438,7 @@ impl Backend for ScheduledCpalBackend {
             start_device_thread(consumer, aux_consumers, direct, Arc::clone(&stop), wake_rx)?;
         }
         RUNNING.store(true, Ordering::Release);
-        // The render thread keeps LOOKAHEAD_FRAMES rendered ahead of the device.
+        // The render thread keeps `lookahead_frames()` rendered ahead of the device.
         let render = spawn_render_thread(renderer, producer, aux_feeder, stop, generation);
         output_idle::register(wake_tx, render.thread().clone());
         Ok(())
@@ -495,7 +524,7 @@ fn start_device_thread(
         .map_err(ScheduledBackendError)
 }
 
-// The render thread keeps LOOKAHEAD_FRAMES rendered ahead of what is played.
+// The render thread keeps `lookahead_frames()` rendered ahead of what is played.
 fn spawn_render_thread(
     mut renderer: Renderer,
     mut producer: ringbuf::HeapProd<f32>,
@@ -507,7 +536,7 @@ fn spawn_render_thread(
         let mut block = vec![0.0f32; BLOCK_FRAMES * CHANNELS];
         while !stop.load(Ordering::Acquire) && GENERATION.load(Ordering::Acquire) == generation {
             while FRAMES_RENDERED.load(Ordering::Acquire) - FRAMES_PLAYED.load(Ordering::Acquire)
-                < LOOKAHEAD_FRAMES
+                < lookahead_frames()
                 && producer.vacant_len() >= block.len()
             {
                 block.iter_mut().for_each(|sample| *sample = 0.0);

@@ -29,9 +29,10 @@ use windows::Win32::Media::Audio::{AUDCLNT_BUFFERFLAGS_SILENT, eCapture, eRender
 
 struct Input {
     stream: Exclusive,
-    live: Vec<Arc<LiveInput>>,
+    // Each listener takes its own channels (R-286), resampled on its own.
+    live: Vec<(Arc<LiveInput>, LinearResampler)>,
     taps: Vec<(u64, Tap)>,
-    resampler: LinearResampler,
+    rates: (u32, u32),
     samples: Vec<f32>,
     frames: Vec<Frame>,
     resampled: Vec<Frame>,
@@ -140,7 +141,7 @@ fn open_input(key: &str) -> Result<Input, String> {
     .0;
     let capacity = stream.frames as usize * 4;
     Ok(Input {
-        resampler: LinearResampler::new(stream.format.rate, rate),
+        rates: (stream.format.rate, rate),
         samples: Vec::with_capacity(capacity * usize::from(stream.format.channels)),
         frames: Vec::with_capacity(capacity),
         resampled: Vec::with_capacity(capacity * 2),
@@ -156,7 +157,19 @@ unsafe impl Send for SendExclusive {}
 // The live inputs (mixer strips) listening to `device` now; none closes it for them.
 pub(crate) fn listen(device: &str, live: Vec<Arc<LiveInput>>) -> Result<(), String> {
     let open = !live.is_empty();
-    with_input(Some(device), open, |input| input.live = live)
+    let mut fitted = Ok(());
+    with_input(Some(device), open, |input| {
+        let width = usize::from(input.stream.format.channels.max(1));
+        fitted = live.iter().try_for_each(|listener| listener.fits(width));
+        if fitted.is_ok() {
+            let (from, to) = input.rates;
+            input.live = live
+                .into_iter()
+                .map(|listener| (listener, LinearResampler::new(from, to)))
+                .collect();
+        }
+    })?;
+    fitted
 }
 
 // A take's tap `id` on `device` (None: the default input).
@@ -202,24 +215,24 @@ impl Input {
             if self.live.is_empty() {
                 continue;
             }
-            self.frames.clear();
-            self.frames.extend(
-                self.samples
-                    .chunks(channels)
-                    .take(self.frames.capacity())
-                    .map(|frame| Frame::new(frame[0], frame.get(1).copied().unwrap_or(frame[0]))),
-            );
-            super::direct::note_input_quantum(self.frames.len());
-            let pushed = if self.resampler.is_identity() {
-                &self.frames
-            } else {
-                self.resampled.clear();
-                self.resampler.process(&self.frames, &mut self.resampled);
-                &self.resampled
-            };
-            self.live.iter().for_each(|input| {
+            super::direct::note_input_quantum(self.samples.len() / channels);
+            for (input, resampler) in &mut self.live {
+                self.frames.clear();
+                self.frames.extend(
+                    self.samples
+                        .chunks(channels)
+                        .take(self.frames.capacity())
+                        .map(|frame| input.frame_of(frame)),
+                );
+                let pushed = if resampler.is_identity() {
+                    &self.frames
+                } else {
+                    self.resampled.clear();
+                    resampler.process(&self.frames, &mut self.resampled);
+                    &self.resampled
+                };
                 input.push_at(pushed, host_ns as f64);
-            });
+            }
         }
     }
 }

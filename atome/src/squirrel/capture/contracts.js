@@ -6,7 +6,7 @@ import { validateParams } from '../ai/agent_gateway_normalize.js';
 // band (Enreg., Arrêter, Caméra, Aperçu, Préc., Lire, Suiv., Suppr.). An item is named by its `atome_id`
 // (captures.state gives the open list's).
 export const CAPTURE_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'NOT_OPEN', 'NOT_FOUND', 'NOTHING_PLAYING', 'NOTHING_RECORDING',
-    'PROJECT_UNAVAILABLE', 'PRESENTATION_UNAVAILABLE', 'CAMERA_UNAVAILABLE', 'WRITE_FAILED']);
+    'PROJECT_UNAVAILABLE', 'PRESENTATION_UNAVAILABLE', 'CAMERA_UNAVAILABLE', 'TAKE_EMPTY', 'WRITE_FAILED']);
 export const CAPTURE_KINDS = Object.freeze(['audio', 'video', 'photo', 'text', 'midi']);
 
 const id = { type: 'string', minLength: 1, maxLength: 200 };
@@ -17,7 +17,8 @@ const definitions = {
         + 'duration_seconds (not for a photo): the take stops by itself that long after it really started, and is kept (« filme pendant 10 secondes »); '
         + 'the result gives its take and stops_at.', true, 'write'],
     stop: [{ take: { type: 'integer', minimum: 1 } }, [], 'End the take recording (it is kept and becomes current in its list). '
-        + 'take: only that take (the number captures.start gave); another one recording is left alone (NOTHING_RECORDING).', true, 'write'],
+        + 'take: only that take (the number captures.start gave); another one recording is left alone (NOTHING_RECORDING). '
+        + 'TAKE_EMPTY: the take stopped but held nothing (silence, no picture), so nothing was kept.', true, 'write'],
     close: [{}, [], 'Close the capture open on the Dashboard (its bottom record tool): a take recording is stopped and kept, the camera turned off; '
         + 'a capture begun from a list (Créer) gives that list back.', true, 'write'],
     camera: [{}, [], 'Film with the next camera while one shows (Dashboard capture, a take on a project, the import panel): the photo camera reopens on it; '
@@ -43,7 +44,14 @@ export const validateCaptureInput = (action, input) => {
     const contract = CAPTURE_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';
 };
-export const captureError = error => (CAPTURE_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'WRITE_FAILED');
+// A take the recorder refuses for holding nothing (audio_core_record_persist.js, the video recorder's empty output) stopped
+// all the same: it answers TAKE_EMPTY, never a failed write.
+const EMPTY_TAKE_CAUSES = Object.freeze(['audio_recording_empty', 'video_recording_empty_output']);
+export const captureError = (error) => {
+    const cause = error?.code || error?.message || error;
+    if (EMPTY_TAKE_CAUSES.includes(cause)) return 'TAKE_EMPTY';
+    return CAPTURE_ERRORS.includes(cause) ? cause : 'WRITE_FAILED';
+};
 export const CAPTURE_ASSISTANT_INSTRUCTIONS = 'Captures and their lists: « enregistre un son / une vidéo », « prends une photo », « dicte un texte » call captures.start '
     + '(kind audio, video, photo, text); a length asked (« filme pendant 10 secondes », « enregistre 30 secondes de son », « dicte pendant une minute ») '
     + 'is its duration_seconds, never a stop called yourself; « arrête » during a take calls captures.stop; « arrête dans 2 minutes » calls timer.schedule '

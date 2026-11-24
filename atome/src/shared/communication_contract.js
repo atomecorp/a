@@ -1,6 +1,5 @@
 export const CALL_RING_TIMEOUT_MS = 10_000;
 export const CALL_MODES = Object.freeze(['audio', 'visio']);
-export const COMMUNICATION_PAGE_SIZE = 30;
 export const COMMUNICATION_PRIORITIES = Object.freeze(['normal', 'priority', 'urgent']);
 export const normalizeCommunicationPriority = value => {
     if (value == null) return 'normal';

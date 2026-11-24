@@ -1,9 +1,11 @@
 import { getTauriInvoke } from '../../application/audio_runtime/runtime_audio_backend.js';
+import { ensureNativeMicrophone } from './wake_capture.js';
 
 // The native voice engine (atome-audio-engine `voice`, todo/refonte_assistant_vocal.md §4): the
 // host owns the microphone and the recognition; JavaScript sends the screen's phrases and eVe's
 // speaking state, and receives events — speech_start, phrase { text, words }, unknown { reason },
-// wake { score }, error { code }. Same commands on the Tauri desktop app and the iOS app.
+// wake { score }, window { window, base_score } (enrollment), error { code }. Same commands on the
+// Tauri desktop and Android apps and the iOS app.
 const MODELS_ROOT = 'atome/src/assets/voice';
 const POLL_MS = 80;
 
@@ -12,7 +14,7 @@ const POLL_MS = 80;
 export const createNativeVoiceEngine = ({ env = globalThis, onEvent, recording = () => false }) => {
     const invoke = getTauriInvoke(env);
     if (!invoke) throw new Error('voice_engine_native_unavailable');
-    let timer = null, running = false, inputDb = null;
+    let timer = null, running = false, started = false, inputDb = null;
 
     const fail = (code) => { running = false; onEvent({ type: 'error', code }); };
     const poll = async () => {
@@ -31,15 +33,22 @@ export const createNativeVoiceEngine = ({ env = globalThis, onEvent, recording =
     };
 
     return Object.freeze({
-        async start() {
-            await invoke('audio_voice_start', { modelsRoot: MODELS_ROOT });
-            running = true;
+        // `listening`: 'conversation' (default), 'wake' (hung up: only the wake models are loaded, Vosk
+        // and Silero wait for the first conversation) or 'collect' (enrollment: every wake window).
+        async start({ listening = 'conversation' } = {}) {
+            await ensureNativeMicrophone(env, invoke);
+            await invoke('audio_voice_start', { modelsRoot: MODELS_ROOT, listening });
+            started = running = true;
             void poll();
         },
+        // Only a session this engine started is stopped: a start refused (voice_session_busy) leaves the
+        // session of its owner (the guide, standby) running.
         async stop() {
             running = false;
             if (timer !== null) env.clearTimeout(timer);
             timer = null;
+            if (!started) return;
+            started = false;
             await invoke('audio_voice_stop', {});
         },
         // Phrases of the current screen, every word in the recognizer's vocabulary.

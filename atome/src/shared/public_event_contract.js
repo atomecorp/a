@@ -7,8 +7,6 @@
 import { ACTIVITY_CATEGORY_SLUGS } from './activity_categories.js';
 
 export const PUBLIC_EVENT_MAX_CATEGORIES = 3;
-// A repeated event is published for the occurrences of the next days.
-export const PUBLIC_EVENT_HORIZON_DAYS = 60;
 // The poster is a small picture carried by the publication itself (a JPEG data URL).
 export const PUBLIC_EVENT_POSTER_MAX_PX = 360;
 export const PUBLIC_EVENT_POSTER_MAX_CHARS = 120_000;

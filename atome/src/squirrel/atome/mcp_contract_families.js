@@ -49,6 +49,7 @@ import { QR_ASSISTANT_INSTRUCTIONS, QR_COMMANDS, validateQrInput } from '../qr/c
 import { VISUAL_THEME_ASSISTANT_INSTRUCTIONS, VISUAL_THEME_COMMANDS, validateVisualThemeInput } from '../visual_theme/contracts.js';
 import { WALLPAPER_ASSISTANT_INSTRUCTIONS, WALLPAPER_COMMANDS, validateWallpaperInput } from '../wallpaper/contracts.js';
 import { INTERACTIONS_ASSISTANT_INSTRUCTIONS, INTERACTIONS_COMMANDS, validateInteractionsInput } from '../interactions/contracts.js';
+import { CONTROLS_ASSISTANT_INSTRUCTIONS, CONTROLS_COMMANDS, validateControlsInput } from '../controls/contracts.js';
 import { PUBLISH_ASSISTANT_INSTRUCTIONS, PUBLISH_COMMANDS, PUBLISH_CONFIRMED_COMMANDS, validatePublishInput } from '../publish/contracts.js';
 import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS, validateForumInput } from '../forum/contracts.js';
 import { CB_ASSISTANT_INSTRUCTIONS, CB_COMMANDS, CB_CONFIRMED_COMMANDS, validateCbInput } from '../cb/contracts.js';
@@ -202,6 +203,9 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         instructions: WALLPAPER_ASSISTANT_INSTRUCTIONS, preload: ['wallpaper.restore_default'] },
     { id: 'interactions', commands: INTERACTIONS_COMMANDS, validate: validateInteractionsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: INTERACTIONS_ASSISTANT_INSTRUCTIONS, preload: ['interactions.create'] },
+    // A project's controls (R-347): a slider, a knob, a button… laid and changed; their reactions are interactions.*.
+    { id: 'controls', commands: CONTROLS_COMMANDS, validate: validateControlsInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        instructions: CONTROLS_ASSISTANT_INSTRUCTIONS, preload: ['controls.create'] },
     // Sending a session to people and withdrawing a contribution are the user's to confirm.
     { id: 'video_train', commands: VIDEO_TRAIN_COMMANDS, validate: validateVideoTrainInput, noClient: 'AUTH_REQUIRED',
         confirmed: VIDEO_TRAIN_CONFIRMED_COMMANDS, instructions: VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS,

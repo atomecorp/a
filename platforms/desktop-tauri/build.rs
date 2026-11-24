@@ -1,13 +1,5 @@
 fn main() {
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android") {
-        let status = std::process::Command::new("node")
-            .arg("package_tauri_engines.mjs")
-            .status()
-            .expect("Engine packaging requires the existing Node build runtime");
-        assert!(status.success(), "Canonical engine packaging failed");
-        println!("cargo:rerun-if-changed=package_tauri_engines.mjs");
-    }
-    tauri_build::build();
+    // The GPS engine is generated into atome/src before that tree is staged for the bundle.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         let status = std::process::Command::new("node")
             .arg("../../scripts/build_gps_native_engine.mjs")
@@ -21,6 +13,17 @@ fn main() {
         ] {
             println!("cargo:rerun-if-changed={source}");
         }
+    }
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android") {
+        let status = std::process::Command::new("node")
+            .arg("package_tauri_runtime.mjs")
+            .status()
+            .expect("Runtime packaging requires the existing Node build runtime");
+        assert!(status.success(), "Canonical runtime packaging failed");
+        println!("cargo:rerun-if-changed=package_tauri_runtime.mjs");
+    }
+    tauri_build::build();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         cc::Build::new()
             .file("native/personal_import.m")
             .file("../ios/atome-auv3/Common/AtomeContactHistory.m")

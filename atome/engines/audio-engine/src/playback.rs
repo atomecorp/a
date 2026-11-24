@@ -246,8 +246,7 @@ fn resolve_native_decode_route(
     source_label: &str,
 ) -> Result<NativeDecodeRoute, String> {
     let container = sniff_native_container(bytes);
-    let symphonia_only = atome_mix_graph::clip_decode::is_aiff_container(bytes);
-    if symphonia_only
+    if atome_mix_graph::clip_decode::is_symphonia_container(bytes)
         || container == NativeContainer::IsoBmff
         || is_isobmff_extension(extension_hint)
     {

@@ -1,5 +1,5 @@
 import { generateUUID } from '../adole.js';
-import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, updateWindowProject } from './session.js';
+import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, updateWindowProject, readWindowProjectId } from './session.js';
 import { list_atomes, create_atome, delete_atomes, get_atome } from './atomes.js';
 import { resolveAtomeId, resolveAtomeParentId, resolveAtomeProjectId } from './atome_record_projection.js';
 import { with_callback, getCurrentUserId, isLoggedOut } from './activities_support.js';
@@ -229,10 +229,7 @@ export async function delete_project(projectId, callback) {
 }
 
 export function get_current_project_id() {
-    if (typeof window !== 'undefined' && window.__currentProject?.id) {
-        return window.__currentProject.id;
-    }
-    return null;
+    return readWindowProjectId();
 }
 
 export function get_current_project() {

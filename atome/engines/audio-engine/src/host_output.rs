@@ -48,6 +48,8 @@ pub fn host_rate() -> Option<u32> {
 
 // The strips that now listen to the host's input (live_input.rs#reconcile).
 pub(crate) fn listen_host_input(inputs: Vec<Arc<LiveInput>>) -> Result<(), String> {
+    // The host sends a stereo pair: a strip taking another channel of it is an error (R-286).
+    inputs.iter().try_for_each(|input| input.fits(2))?;
     *HOST_LISTENERS
         .lock()
         .map_err(|error| format!("Lock error: {error}"))? = inputs;
@@ -70,11 +72,12 @@ pub fn push_host_input(left: &[f32], right: &[f32], host_ns: i64) -> bool {
     let chunks = left.chunks(CHUNK_FRAMES).zip(right.chunks(CHUNK_FRAMES));
     for (chunk, (left, right)) in chunks.enumerate() {
         let count = left.len().min(right.len());
-        for frame in 0..count {
-            frames[frame] = Frame::new(left[frame], right[frame]);
-        }
         let at = host_ns as f64 + (chunk * CHUNK_FRAMES) as f64 * nanos_per_frame;
+        // Each strip takes its own channels of the pair (R-286): both, or one heard on both sides.
         listeners.iter().for_each(|input| {
+            for (index, slot) in frames.iter_mut().take(count).enumerate() {
+                *slot = input.frame_of(&[left[index], right[index]]);
+            }
             input.push_at(&frames[..count], at);
         });
     }

@@ -1,4 +1,5 @@
-//! Non-persistent microphone capture for the local WASM wake detector.
+//! Non-persistent 16 kHz microphone capture: the native voice session's (wake phrase, guided
+//! conversation, enrollment) and the page's when it streams the person's words (online STT).
 //! The stream lives on its owning thread; only bounded PCM crosses the bridge.
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample, Stream, StreamConfig};
@@ -236,6 +237,15 @@ pub fn read() -> Result<Value, String> {
         ),
         Some((samples, overrun)) => Ok(json!({"active":true,"samples":samples,"overrun":overrun})),
     }
+}
+
+/// Whether a capture could start now, without reading one that runs: its PCM stays its owner's.
+pub fn state() -> Result<Value, String> {
+    Ok(json!({
+        "busy": !FOREGROUND.load(Ordering::SeqCst)
+            || capture_owner()?.is_some()
+            || super::recorder::has_active_sessions()
+    }))
 }
 
 #[cfg(test)]

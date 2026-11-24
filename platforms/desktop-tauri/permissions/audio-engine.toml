@@ -40,6 +40,7 @@ permissions = [
   "allow-audio-wake-start",
   "allow-audio-wake-stop",
   "allow-audio-wake-read",
+  "allow-audio-wake-state",
   "allow-audio-voice-start",
   "allow-audio-voice-stop",
   "allow-audio-voice-set-phrases",
@@ -282,6 +283,11 @@ commands.allow = ["audio_wake_stop"]
 identifier = "allow-audio-wake-read"
 description = "Enables the audio_wake_read command."
 commands.allow = ["audio_wake_read"]
+
+[[permission]]
+identifier = "allow-audio-wake-state"
+description = "Enables the audio_wake_state command."
+commands.allow = ["audio_wake_state"]
 
 [[permission]]
 identifier = "allow-audio-voice-start"

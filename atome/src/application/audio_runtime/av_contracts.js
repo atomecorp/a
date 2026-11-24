@@ -444,6 +444,8 @@ export class AVDeviceRegistry {
             label: safeString(input.label || input.name || id),
             backend: safeString(input.backend || input.runtime_backend || input.runtimeBackend),
             channels: safeNumber(input.channels) ?? 0,
+            // An iPadOS session port the session routes now (the engine's one input, R-286).
+            routed: input.routed === true,
             sample_rate: safeNumber(input.sample_rate, input.sampleRate) ?? 0,
             created_at: nowIso()
         });

@@ -39,21 +39,6 @@ export const socialNetworkLink = network => SOCIAL_NETWORK_SETUP[network]?.link 
 // A destination: `<network>` (its first account) or `<network>:<account>`; Facebook keeps its Pages and profile.
 export const SOCIAL_DESTINATION_PATTERN = '^(facebook:profile|facebook:page:[0-9]{1,40}|(tiktok|instagram|threads|youtube|linkedin|bluesky|mastodon|telegram|discord)(:[A-Za-z0-9._@-]{1,120})?)$';
 
-// What the user ends up doing. `direct`: atome publishes through the provider
-// API. `app_transfer`: the content is handed to the network's app (provider
-// inbox, system share sheet, or copied text + official page) and the user
-// finishes there. `export`: the prepared file is saved for a manual upload.
-export const SOCIAL_ROUTES = Object.freeze(['direct', 'app_transfer', 'export']);
-export const SOCIAL_TRANSFERS = Object.freeze(['provider_inbox', 'system_share', 'copy_open']);
-
-// Internal delivery model. `handed_off` (given to the network's app) and
-// `exported` (file saved for a manual upload) never mean published;
-// `unconfirmed` is a publish request whose answer was lost: it must be
-// verified, never resent. `ready` is a prepared delivery not sent yet.
-export const SOCIAL_STATUSES = Object.freeze(['ready', 'preparing', 'transferring', 'remote_processing', 'published',
-    'handed_off', 'exported', 'unconfirmed', 'cancelled', 'failed']);
-export const SOCIAL_TERMINAL_STATUSES = Object.freeze(['published', 'handed_off', 'exported', 'cancelled', 'failed']);
-
 export const SOCIAL_ERRORS = Object.freeze([
     'social_not_configured', 'social_not_connected', 'social_session_expired', 'social_authorization_denied',
     'social_authorization_expired', 'social_permission_missing', 'social_account_incompatible',
@@ -193,5 +178,3 @@ export const socialContentKind = (content = {}) => {
     return String(content?.text || '').trim() ? 'text' : null;
 };
 
-// UTF-16 code units, the unit TikTok documents for its caption limits.
-export const utf16Length = (value) => String(value || '').length;

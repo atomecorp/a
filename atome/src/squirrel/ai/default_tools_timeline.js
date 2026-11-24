@@ -19,7 +19,16 @@ const TIMELINE_TOOLS = [
     ['record.prepare', 'Prepare the current project for microphone recording using the existing Record tool owner. Return group_id and track_id for record.start; creates a Molecule only when needed.', 'timeline.write', 'moderate'],
     ['mix.param.set', 'Set one mix module parameter of a strip (strip_id, module_id, param, value): heard at once, kept once it rests.', 'timeline.write', 'low'],
     ['history.undo', 'Undo the last Molecule timeline edit on the active session.', 'timeline.write', 'moderate'],
-    ['history.redo', 'Redo the last undone Molecule timeline edit on the active session.', 'timeline.write', 'moderate']
+    ['history.redo', 'Redo the last undone Molecule timeline edit on the active session.', 'timeline.write', 'moderate'],
+    ['performance.delete', 'Delete the recorded performance (automation played live) of the active Molecule.', 'timeline.write', 'moderate'],
+    ['realign', 'Lay a project\'s timeline again in its List order (the current project when project_id is omitted).', 'timeline.write', 'moderate'],
+    ['midi.export', 'Hand a MIDI clip\'s own .mid file (clip_id) to the system\'s export.', 'timeline.write', 'moderate'],
+    ['mix.preset.list', 'List the person\'s console strip presets (id, name, lane), of one lane when given.', 'timeline.read', 'low'],
+    ['mix.preset.save', 'Save a console strip\'s chain, input and output (strip_id) as a preset under name.', 'timeline.write', 'moderate'],
+    ['mix.preset.load', 'Lay a strip preset (preset_id) on a console strip (strip_id), in place of its effects.', 'timeline.write', 'moderate'],
+    ['track.import', 'Lay the person\'s media atomes (media_atome_ids: audio, video, image) end to end on a track (track_id) from start_seconds, as its Importer plate.', 'timeline.write', 'moderate'],
+    ['audio.export', 'Hand an audio clip\'s window (clip_id), as heard, to the system\'s export as a 24-bit WAV.', 'timeline.write', 'moderate'],
+    ['midi.freeze', 'Figer: render a MIDI clip (clip_id) by its eVe instrument as an audio clip on the next free track, its MIDI track muted.', 'timeline.write', 'moderate']
 ];
 
 const RECORD_DESCRIPTIONS = {

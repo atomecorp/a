@@ -54,8 +54,6 @@ export const attenuateRights = (granter = {}, requested = {}) => {
     return Object.fromEntries(SHARE_CAPABILITIES.map((capability) => [capability, held[capability] && wanted[capability]]));
 };
 
-export const OWNER_RIGHTS = Object.freeze(rightsOfRole('coowner'));
-
 // Property lists: `null` means "every property". The granted list is always within the
 // granter's list.
 export const normalizePropertyList = (value) => (Array.isArray(value)

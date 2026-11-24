@@ -16,9 +16,12 @@ pub(crate) const ADMIN: &str = "admin";
 pub(crate) const TESTER: &str = "tester";
 /// The principal administrator (R-193): confirms a new admin; given only by `atome_admin roles`.
 pub(crate) const OWNER: &str = "owner";
+/// The block list (R-342): refused every spending of atome's AI, on the list or not, whatever the
+/// access mode (billing/guard.rs#payer); given and taken back by an administrator (Réglages › Admin).
+pub(crate) const BLOCKED: &str = "blocked";
 
 /// Every role, in `ACCOUNT_ROLES`' order.
-pub(crate) const ROLES: [&str; 3] = [ADMIN, TESTER, OWNER];
+pub(crate) const ROLES: [&str; 4] = [ADMIN, TESTER, OWNER, BLOCKED];
 
 pub(super) const KIND: &str = "account-roles";
 

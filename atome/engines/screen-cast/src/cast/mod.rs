@@ -116,19 +116,24 @@ fn transport_of(status: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The LOAD request of `media`.
+/// The LOAD request of `media`; a live stream says its segments are fMP4, which the receiver does not guess.
 pub fn load_payload(media: &MediaToSend) -> Value {
-    json!({
+    let mut load = json!({
         "type": "LOAD",
         "autoplay": true,
         "currentTime": media.start_seconds,
         "media": {
             "contentId": media.url,
             "contentType": media.mime,
-            "streamType": "BUFFERED",
+            "streamType": if media.live { "LIVE" } else { "BUFFERED" },
             "metadata": { "metadataType": 0, "title": media.title }
         }
-    })
+    });
+    if media.live {
+        load["media"]["hlsSegmentFormat"] = json!("fmp4");
+        load["media"]["hlsVideoSegmentFormat"] = json!("fmp4");
+    }
+    load
 }
 
 /// `media` played by the Chromecast at `address` (the Bonjour `_googlecast._tcp` host and port).

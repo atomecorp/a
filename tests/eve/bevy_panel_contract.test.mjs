@@ -1,3 +1,4 @@
+import { SYSTEM_UI_DROP_SHADOW } from '../../eVe/elements/system_ui_tokens.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,7 +47,7 @@ const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../
 const { contactSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js');
 const { colorSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_color_runtime.js');
 const { createInfoPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js');
-const { registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
+await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
 const { EVE_COMMON_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -118,7 +119,8 @@ test('style projections keep one source for system depth and panel control paint
         assert.deepEqual(material.background, system.background);
         assert.deepEqual(material.backdrop, system.backdrop);
     }
-    assert.notDeepEqual(panel.material.shadow, system.shadow, 'the shell casts its own deeper shadow');
+    // One drop shadow for every raised element, the panel slab included (AGENTS.md rule 15; user, 19 Nov. 2026).
+    assert.deepEqual(panel.material.shadow, system.shadow, 'the shell casts the one drop shadow');
     assert.equal(BEVY_MENU_TOKENS.surface.material, EVE_COMMON_SKIN_TOKENS.bevy.toolSurface);
     assert.equal(panel.colors.control, panel.actionButton.idleBackground);
     assert.equal(panel.colors.control, panel.table.rowBackground);
@@ -224,6 +226,8 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     const mounted = [];
     const unmounted = [];
     dom.window.eveBevyUiRuntime = {
+        // The runtime's own record of the trees it holds (a panel's tether reads it, bevy_panel_tether.js).
+        state: { trees: new Map() },
         mountTree: async ({ tree }) => {
             mounted.push(tree);
             return tree;
@@ -353,6 +357,8 @@ test('Calendar Contact Info and Color route to Bevy UI instead of legacy HTML', 
     const { dom } = installPanelDom();
     const mounted = [];
     dom.window.eveBevyUiRuntime = {
+        // The runtime's own record of the trees it holds (a panel's tether reads it, bevy_panel_tether.js).
+        state: { trees: new Map() },
         mountTree: async ({ tree }) => {
             mounted.push(tree);
             return tree;
@@ -458,7 +464,8 @@ test('shared panel material remains canonical after retirement of the specimen-o
     assert.equal(BEVY_PANEL_TOKENS.material, EVE_PANEL_SKIN_TOKENS.bevyPanel.surfaces.shell);
     assert.deepEqual(BEVY_PANEL_TOKENS.material.backdrop, material.backdrop);
     assert.equal(BEVY_MENU_TOKENS.surface.material, EVE_COMMON_SKIN_TOKENS.bevy.toolSurface);
+    // The one drop shadow (AGENTS.md rule 15): no offset, its reach the token's.
     assert.deepEqual(material.shadow.offset, [0, 0]);
-    assert.equal(material.shadow.spread, 0);
+    assert.equal(material.shadow.spread, SYSTEM_UI_DROP_SHADOW.spread);
     assert.deepEqual(material.backdrop.tint, material.tint, 'the backdrop tints with the live glass');
 });

@@ -119,7 +119,10 @@ export const CORE_DATA_ATOME_TYPES = Object.freeze([
             modes: { type: 'array' },
             trigger: { type: 'object' },
             target: { type: 'object' },
-            actions: { type: 'array' }
+            actions: { type: 'array' },
+            // A control's reaction (R-347): how its value becomes the message's, and its MIDI feedback.
+            value_map: { type: 'object' },
+            feedback_midi: { type: 'boolean' }
         }
     }),
     defineType({

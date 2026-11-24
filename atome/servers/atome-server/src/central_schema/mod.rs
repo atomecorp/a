@@ -125,6 +125,7 @@ fn migrate(db: &Connection, schema: &str, auth_schema: &str) -> rusqlite::Result
     backfill_event_sequences(db)?;
     principal_identity_tables(db)?;
     run(db, &service_tables::SERVICES)?;
+    ensure_legacy_columns(db, "surface_grants", &service_tables::SURFACE_GRANT_COLUMNS)?;
     run(db, &money_tables::MONEY)?;
     run(db, &CB_TABLES)?;
     // The Appel's pairs put in touch (lot L5): a keyed fingerprint and an instant, kept across a restart for 21 days.
@@ -161,15 +162,15 @@ fn drop_cb_columns(db: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-// A roles table made before the roles `tester` and `owner` (its CHECK naming fewer roles) is made again from
-// the account schema, its rows kept (database/adole_cb_social_schema.js `widenAccountRoles`).
+// A roles table made before the roles `tester`, `owner` and `blocked` (R-342; its CHECK naming fewer roles) is
+// made again from the account schema, its rows kept (database/adole_cb_social_schema.js `widenAccountRoles`).
 fn widen_account_roles(db: &Connection, auth_schema: &str) -> rusqlite::Result<()> {
     let made: String = db.query_row(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'auth_account_roles'",
         [],
         |row| row.get(0),
     )?;
-    if made.contains("'owner'") {
+    if made.contains("'blocked'") {
         return Ok(());
     }
     db.execute_batch("ALTER TABLE auth_account_roles RENAME TO auth_account_roles_before_tester;")?;

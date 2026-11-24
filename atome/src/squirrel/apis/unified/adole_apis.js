@@ -3,6 +3,7 @@ import auth from './adole_api/auth.js';
 import { contactBookPhone } from '../../../shared/contact_book_hash.js';
 import { accountMethods } from './adole_api/auth_methods_account.js';
 import { flushBrowserWorkspace } from './adole_api/auth_methods_login.js';
+import { recordServerHistoryEvents } from './adole_api/browser_workspace.js';
 import {
   create_project,
   list_projects,
@@ -199,6 +200,8 @@ export const AdoleAPI = {
     sync: auth.sync,
     // Envoie au serveur ce que le workspace navigateur a cree localement (web seulement).
     flushWorkspace: flushBrowserWorkspace,
+    // Logs in the browser's journal what the server's history wrote (undo, redo; Web only).
+    recordServerHistoryEvents,
     listUnsynced: auth.listUnsynced,
     maybeSync: auth.maybeSync
   },

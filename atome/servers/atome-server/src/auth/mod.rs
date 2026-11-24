@@ -20,6 +20,7 @@ pub mod pairing;
 pub mod password_crypto;
 pub mod passwords;
 pub mod phone_link;
+pub mod program_scope;
 pub mod proof;
 pub mod recovery;
 pub mod signup;
@@ -51,6 +52,7 @@ pub const PUBLIC_ERRORS: &[&str] = &[
     "auth_pairing_locked",
     "sms_configuration_required",
     "auth_session_invalid",
+    "program_scope_denied",
     "auth_session_stale",
     "auth_session_reused",
     "auth_device_cooling_off",
@@ -214,6 +216,10 @@ impl Sessions {
             token,
             &validation(&[Algorithm::HS256, Algorithm::HS384, Algorithm::HS512]),
         )?;
+        // A program reaches no HTTP route (program_scope.rs).
+        if program_scope::is_program(&claims) {
+            return None;
+        }
         self.assert_device_session(claims).await.ok()
     }
 }

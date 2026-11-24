@@ -127,9 +127,10 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
             + 'it is paired. Use it when surface.send_media says the screen must be paired. Say the result message.',
         properties: { surface: line(120), pin: { type: 'string', maxLength: 8, description: 'The code the television shows.' } } },
     { name: 'surface.mirror', required: ['surface'],
-        description: 'Show the whole view of this device on an Apple TV of the network (« mets l\'écran sur la télé du salon »): '
-            + 'the system starts a mirroring itself, so the result says how (Control Center, Screen Mirroring, the screen\'s '
-            + 'name), or that the view is already there. Say the result message.',
+        description: 'Show the whole view of this device on a screen of the network (an Apple TV, a Chromecast: « mets l\'écran '
+            + 'sur la télé du salon ») or on another device of the user (« montre mon bureau sur le Mac »): it goes there live, '
+            + 'mirrored or extended as the screen mode says (ui.external_display.mode). Say the result message, including a '
+            + 'pairing to do (surface.pair).',
         properties: { surface: line(120) } },
     { name: 'media.resume', required: ['atome_id'],
         description: 'Resume on THIS device a media object that was just teleported here from another device: opens its '
@@ -139,6 +140,20 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
             atome_id: line(128), project_id: line(128),
             position_seconds: { type: 'number', minimum: 0 },
             fullscreen: { type: 'boolean' }
-        } }
+        } },
+    // The whole view of a device shown by another device of the account (R-248, Téléporte with nothing selected): sent by
+    // the device that leads; the assistant never calls these, Téléporte does.
+    { name: 'display.follow', required: ['leader_surface_id'],
+        description: 'Show on THIS device the place of another device of the user (its project, its view), following it live. '
+            + 'Sent by that device (Téléporte, nothing selected); the assistant never calls it.',
+        properties: { leader_surface_id: line(128) } },
+    { name: 'display.unfollow', required: [],
+        description: 'Stop following another device here, and come back to this device\'s own place. Sent by the device that '
+            + 'led; the assistant never calls it.',
+        properties: { leader_surface_id: line(128) } },
+    { name: 'display.relay', required: ['from', 'message'],
+        description: 'One message between a device and another that follows it (its place, a request of its Timeline). Sent '
+            + 'by those devices only; the assistant never calls it.',
+        properties: { from: line(128), message: { type: 'object' } } }
 ]);
 export const ASSISTANT_CONTEXT_COMMAND_NAMES = Object.freeze(ASSISTANT_CONTEXT_COMMANDS.map(command => command.name));

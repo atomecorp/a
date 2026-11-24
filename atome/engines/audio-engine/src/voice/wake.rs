@@ -1,7 +1,9 @@
-//! « Ève, écoute-moi » while eVe is hung up: the openWakeWord front end (melspectrogram.onnx,
-//! embedding_model.onnx) and the dense classifier eve_ecoute_moi.json, with its trigger policy
-//! and the optional personal verifier. Port of atome/src/squirrel/voice/wake_features.js,
-//! wake_classifier.js and wake_detector_worker.js (detection mode).
+//! « Ève, écoute-moi »: the openWakeWord front end (melspectrogram.onnx, embedding_model.onnx)
+//! and the dense classifier eve_ecoute_moi.json, with its trigger policy and the optional
+//! personal verifier. The same detector as the browser's worker (atome/src/squirrel/voice/
+//! wake_features.js, wake_classifier.js, wake_detector_worker.js), which a browser alone runs: on
+//! a device this one hears the phrase, in standby and hung up alike, and hands enrollment its
+//! windows (collection).
 
 use super::VoiceError;
 use base64::Engine as _;
@@ -136,7 +138,7 @@ impl Model {
             .map_err(|e| fail(e.to_string()))?
             .with_intra_threads(1)
             .map_err(|e| fail(e.to_string()))?
-            .commit_from_file(path)
+            .commit_from_file(super::model_file(path)?)
             .map_err(|e| fail(e.to_string()))?;
         let input = session
             .inputs()
@@ -196,7 +198,7 @@ impl WakeDetector {
         embedding_path: &str,
         classifier_path: &str,
     ) -> Result<Self, VoiceError> {
-        let text = std::fs::read_to_string(classifier_path)
+        let text = std::fs::read_to_string(super::model_file(classifier_path)?)
             .map_err(|e| VoiceError::Wake(format!("{classifier_path}: {e}")))?;
         let json: serde_json::Value = serde_json::from_str(&text).map_err(|_| invalid("json"))?;
         let mut detector = Self {
@@ -262,9 +264,10 @@ impl WakeDetector {
         })
     }
 
-    /// One 80 ms frame in int16 scale; the base score when the phrase is detected.
-    pub fn push(&mut self, frame: &[f32]) -> Result<Option<f32>, VoiceError> {
-        let skip = self.quiet(frame);
+    /// Moves the stream one 80 ms frame on; true when a new window of embeddings is complete.
+    /// `gated`: detection skips the embedding of a silent second, collection needs every window.
+    fn advance(&mut self, frame: &[f32], gated: bool) -> Result<bool, VoiceError> {
+        let skip = self.quiet(frame) && gated;
         self.mel_input.copy_within(WAKE_FRAME_SAMPLES.., 0);
         self.mel_input[MEL_CONTEXT_SAMPLES..].copy_from_slice(frame);
         let frames = self.mel_model.run(
@@ -285,14 +288,19 @@ impl WakeDetector {
             // Nothing can be said in a silent second: no window is scored, the streak is kept.
             self.embeddings
                 .copy_within(latest - EMBEDDING_SIZE..latest, latest);
-            return Ok(None);
+            return Ok(false);
         }
         let embedding = self
             .embedding_model
             .run(&[1, MEL_WINDOW_FRAMES, MEL_BINS, 1], self.mel.clone())?;
         self.embeddings[latest..].copy_from_slice(&embedding);
         self.filled = (self.filled + 1).min(WINDOW_EMBEDDINGS);
-        if self.filled < WINDOW_EMBEDDINGS {
+        Ok(self.filled == WINDOW_EMBEDDINGS)
+    }
+
+    /// One 80 ms frame in int16 scale; the base score when the phrase is detected.
+    pub fn push(&mut self, frame: &[f32]) -> Result<Option<f32>, VoiceError> {
+        if !self.advance(frame, true)? {
             return Ok(None);
         }
         let base = self.base.score(&self.embeddings);
@@ -306,5 +314,17 @@ impl WakeDetector {
         let voiced = self.voice_ratio() >= self.policy.voice_ratio;
         self.streak = if voiced && passed { self.streak + 1 } else { 0 };
         Ok((self.streak == self.policy.consecutive).then_some(base))
+    }
+
+    /// Collection (enrollment): one 80 ms frame in int16 scale; every complete window, silence
+    /// included, with its base score.
+    pub fn collect(&mut self, frame: &[f32]) -> Result<Option<(Vec<f32>, f32)>, VoiceError> {
+        if !self.advance(frame, false)? {
+            return Ok(None);
+        }
+        Ok(Some((
+            self.embeddings.clone(),
+            self.base.score(&self.embeddings),
+        )))
     }
 }

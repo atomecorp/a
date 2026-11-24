@@ -64,6 +64,10 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
     code_file: {
         content: ANY, fileName: ANY, language: ANY, lastModified: ANY, size: ANY
     },
+    // A control (R-347) is born through the tool base (eveToolBase.createAtome), which writes these.
+    control: {
+        created_iso: S, media_kind: S, render_order: N, renderOrder: N, zIndex: N
+    },
     tag: {
         background: ANY, backgroundColor: ANY, bg: ANY, color: ANY, created_iso: S, font_size: ANY,
         font_weight: ANY, fontSize: ANY, fontWeight: ANY, height: S, hierarchy_order: N, left: S, line_height: ANY, lineHeight: ANY,
@@ -162,6 +166,8 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
     // `data_folder`: a folder of Médiathèque › Données (R-202 Q17, eVe/domains/data/data_folders.js).
     // `uses_media`: the media Atome ids its `molecule_timeline` plays (clips, instruments' samples), written at each save
     // (molecule_stores.js), so a project shared as a folder lets its parties read them (atome-server media/shared_folders.rs).
+    // `timeline_laid_atome_ids`: the objects its Timeline was already given, so one deleted there is never laid again
+    // (eVe/domains/rendering/project_view_timeline_owner.js).
     project: {
         action_recording: O, action_templates: A, active: B, background: S, backgroundColor: S, bg: S, color: S, data_folder: B,
         forced_activity: S, import_source: O, left: S, loop: B, material: O, matrix_slot: N, matrixSlot: N, molecule_timeline: O,
@@ -170,7 +176,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         preview_region_height: N, preview_region_width: N, preview_region_x: N, preview_region_y: N,
         preview_updated_at: S, preview_url: S, preview_width: N, project_number: N, project_tags: A,
         project_template: O, projectNumber: N, render_order: N, system_template_key: S, system_template_version: N,
-        top: S, uses_media: A, view_mode: S, work_mode: S, zIndex: N
+        timeline_laid_atome_ids: A, top: S, uses_media: A, view_mode: S, work_mode: S, zIndex: N
     },
     group: {
         action_recording: O, author_id: S, author_name: S, background: S, backgroundColor: S, bg: S, color: S,
@@ -263,5 +269,8 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
     },
     interaction: {
         system_template_ref: S, template_instance_id: S, template_slot_id: S
+    },
+    action_take: {
+        action_recording: O, duration_sec: N
     }
 });

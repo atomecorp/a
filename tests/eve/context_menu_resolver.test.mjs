@@ -137,14 +137,15 @@ test('both compositions filter canonical object and property grants without conf
  assert.deepEqual(keys({ ...context, projectRecord:{capabilities:{create:false}} }, 'mystic'), MYSTIC_FIXED);
  // The sidebar remains contextual and continues to filter access.
  const result = keys(context, 'sidebar');
- // A text's look (its font among it) lies in its « Style » palette (prompter_rail_content.js, 2026-10-29).
- assert.ok(!result.includes('text_style')); assert.ok(!result.includes('size'));
- assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('text_style'));
+ // A text's Police lies apart in its rail (user, 23 Nov. 2026): it needs the text written.
+ assert.ok(!result.includes('font')); assert.ok(!result.includes('size'));
+ assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('font'));
  assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('size'));
 });
 
 test('every sidebar object, activity and mastery level omits redundant actions while Mystic retains them', () => {
- const removed = ['copy', 'cut', 'paste', 'delete', 'record_action', 'draw'];
+ // Supprimer is always in the rail (user, 23 Nov. 2026): it is not among the redundant actions.
+ const removed = ['copy', 'cut', 'paste', 'record_action', 'draw'];
  for (const level of CONTEXT_MENUS.vocabulary.levels) {
   for (const activity of ['', ...CONTEXT_MENUS.vocabulary.activities]) {
    for (const kind of [...CONTEXT_MENUS.vocabulary.kinds, 'mixed']) {
@@ -156,7 +157,7 @@ test('every sidebar object, activity and mastery level omits redundant actions w
    }
   }
  }
- // « Gestes » (`container_record`) reaches the project rail through the Natural rail, never a second sidebar key.
+ // Geste is a source of rec. (user, 23 Nov. 2026), never a sidebar key.
  assert.ok(!keys({type:'project',level:'advanced'}, 'sidebar').includes('record_actions'));
  for (const tool of CONTEXT_MENUS.vocabulary.tools) {
   assert.deepEqual(keys({type:'tool',tool,level:'advanced'}, 'sidebar').filter(key => removed.includes(key)), []);
@@ -255,9 +256,8 @@ test('the three object effects take their one place: rounding, then shadow, then
  assert.deepEqual(group('shape'), ['rounding', 'shadow', 'mask']);
  // Le texte et le dessin vectoriel ne s'arrondissent pas : ils n'ont pas de cadre
  // a arrondir, seulement des glyphes et des points. Tous deux masquent. Le texte
- // range son ombre et son masque dans sa palette « Style » (2026-10-29).
- assert.deepEqual(group('text'), [], 'text keeps its effects in its Style palette');
- assert.ok(rail('text').includes('text_style'));
+ // porte son ombre et son masque dans son rail, rassembles dans la case Style (user, 23 Nov. 2026).
+ assert.deepEqual(group('text'), ['shadow', 'mask'], 'text has no frame to round');
  const style = createPrompterRailContent({ t: (_key, fallback) => fallback }).text_style.children;
  assert.deepEqual(style.filter(key => ['rounding', 'shadow', 'mask'].includes(key)), ['shadow', 'mask'], 'text has no frame to round');
  assert.deepEqual(group('svg'), ['shadow', 'mask'], 'a vector drawing rounds its own points, never its box');

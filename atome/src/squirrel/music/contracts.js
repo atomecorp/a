@@ -3,11 +3,6 @@ import { MUSIC_QUEUE_MAX } from '../apple_music/contracts.js';
 
 export const MUSIC_PROVIDERS = Object.freeze(['spotify', 'deezer']);
 export const MUSIC_WRITES = Object.freeze(['create_playlist', 'add_tracks', 'favorite_current']);
-export class MusicFailure extends Error {
-    constructor(code, { uncertain = false, retryAfter = null } = {}) {
-        super(code); this.code = code; this.uncertain = uncertain; this.retryAfter = retryAfter;
-    }
-}
 export const MUSIC_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'CONTEXT_CHANGED', 'NOT_CONFIGURED',
     'DEVELOPER_ACCESS_REQUIRED', 'AUTHORIZATION_REQUIRED', 'PERMISSION_DENIED', 'AUTHORIZATION_EXPIRED', 'CANCELLED',
     'USER_GESTURE_REQUIRED', 'PROVIDER_UNAVAILABLE', 'PROVIDER_REJECTED', 'RATE_LIMITED', 'SUBSCRIPTION_REQUIRED',

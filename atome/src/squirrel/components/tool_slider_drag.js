@@ -8,12 +8,13 @@ const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 // follows the finger whatever the number of values (user, 2026-10-30, Q10). Every tool slider is a value slider: a natural
 // value (a Fibonacci number or a multiple of 3, AGENTS.md rule 19) holds the finger a little, its place along the length
 // twice an ordinary value's, one step's extra travel to pass it, the whole range still lying along `length`. A range
-// with no natural value follows the finger evenly.
+// with no natural value follows the finger evenly, and so does one whose values are named stops (`even`: the History's
+// steps, R-317), where a number is no value eVe proposes.
 const travelledSliderValue = (start, travel, length, config = {}) => {
     const { min, max, step } = normalizeSliderRange(config), span = Math.max(1, finite(length, 1));
     const count = Math.round((max - min) / step) + 1, indexOf = value => Math.round((value - min) / step);
     const stops = [];
-    for (let value = Math.max(1, Math.ceil(min)); value <= max; value += 1) {
+    for (let value = Math.max(1, Math.ceil(min)); config.even !== true && value <= max; value += 1) {
         if (isNaturalNumber(value) && Math.abs((value - min) / step - indexOf(value)) < 1e-6) stops.push(indexOf(value));
     }
     if (!stops.length) return quantize(finite(start, min) + (finite(travel) / span) * (max - min), config);

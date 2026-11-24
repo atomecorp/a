@@ -10,7 +10,7 @@ import { billingStorePurchase } from '../../../billing/store_purchase.js';
 import { normalizePhone, normalizeUser } from './auth_core.js';
 import { isTauriRuntime } from './runtime.js';
 import { setSessionState, getSessionState } from './session.js';
-import { isExternalDisplayFollower } from '../../../external_display_role.js';
+import { externalDisplaySharesDeviceSession } from '../../../external_display_role.js';
 import { externalDisplayDeviceKeyInvoke } from '../../../external_display_device_key.js';
 
 let devices;
@@ -78,7 +78,7 @@ export async function changeRemoteServer(apply) {
 // profile and the tool catalogue into the device's store (user, 20 Nov. 2026: a slow, looping sync).
 const scheduleRemoteRenewal = () => {
     const env = globalThis.window;
-    if (!env?.setTimeout || isExternalDisplayFollower()) return;
+    if (!env?.setTimeout || externalDisplaySharesDeviceSession()) return;
     if (remoteRenewalTimer) env.clearTimeout(remoteRenewalTimer);
     remoteRenewalTimer = env.setTimeout(() => {
         remoteRenewalTimer = null;
@@ -306,7 +306,7 @@ export async function lockLocalAuthorization() {
 
 export function ensureRemoteSession() {
     if (changingRemoteServer) return Promise.reject(new Error('sync_environment_busy'));
-    if (isExternalDisplayFollower()) return Promise.reject(new Error('external_display_follower_remote_session'));
+    if (externalDisplaySharesDeviceSession()) return Promise.reject(new Error('external_display_follower_remote_session'));
     if (FastifyAdapter.getToken() && remoteExpiresAt > Date.now()) return Promise.resolve({ ok: true });
     if (!renewal) renewal = phoneLinkClient().renew().then(() => ({ ok: true })).finally(() => { renewal = null; });
     return renewal;
@@ -358,7 +358,7 @@ let communicationPushClient = null;
 // queue is ordered by creation and may hold a whole workspace republication.
 export async function flushBrowserWorkspace({ atomeIds = [] } = {}) {
     if (typeof workspaceSynchronize !== 'function') return { ok: true, skipped: true };
-    await workspaceSynchronize({ pull: 'none' });
+    await workspaceSynchronize({ pull: 'none', untilSent: true });
     const ids = [...new Set((Array.isArray(atomeIds) ? atomeIds : []).map(id => String(id || '').trim()).filter(Boolean))];
     if (isTauriRuntime() && ids.length) {
         const flushed = await TauriAdapter.sync.flush({ atome_ids: ids });

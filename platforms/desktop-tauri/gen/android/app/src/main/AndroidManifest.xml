@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The screens of the network (R-248: a Chromecast, an AirPlay receiver) answer mDNS by multicast, which Android
+         drops unless the app holds a Wi-Fi multicast lock (MainActivity#screensMulticast). -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- Captures in the WebView (getUserMedia: video, sound, dictated text). The WebView grants a
          page's microphone only once RECORD_AUDIO and MODIFY_AUDIO_SETTINGS are both held
          (RustWebChromeClient#androidPermissionsForResources): without the latter, every capture

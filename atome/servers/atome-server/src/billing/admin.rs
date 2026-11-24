@@ -2,10 +2,13 @@
 // month's test budget and its ceilings per category, the allowed (tester) accounts and their
 // own ceilings, the invitations' activation terms, and the administrators' list. Every frame
 // checks the role again on the server; an administrator proposes a new one, the principal
-// administrator (`owner`, given only by `atome_admin roles`) confirms it.
-use super::{guard, wallet};
-use crate::vault_router::central::row_json;
-use crate::ws_api::sources::account_roles::{self, ADMIN, OWNER, TESTER};
+// administrator (`owner`, given only by `atome_admin roles`) confirms it. R-342 (Réglages ›
+// Admin): the access open to the white list or to everyone (`accessMode`, `everyone`'s ceilings),
+// the block list (`blocked`), an account found by its phone; what the screen shows is
+// admin_overview.rs.
+use super::{admin_overview, guard};
+use crate::auth::accounts;
+use crate::ws_api::sources::account_roles::{self, ADMIN, BLOCKED, OWNER, TESTER};
 use rusqlite::{Connection, params};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
@@ -88,18 +91,6 @@ fn revoke(db: &Connection, principal: &str, role: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-fn rows(
-    db: &Connection,
-    sql: &str,
-    values: &[&dyn rusqlite::ToSql],
-) -> Result<Vec<JsonValue>, String> {
-    let mut statement = db.prepare(sql).map_err(|e| e.to_string())?;
-    let rows = statement
-        .query_map(values, row_json)
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
-}
-
 fn whole(value: &JsonValue, name: &str) -> Result<Option<i64>, String> {
     match value.get(name) {
         None | Some(JsonValue::Null) => Ok(None),
@@ -109,57 +100,6 @@ fn whole(value: &JsonValue, name: &str) -> Result<Option<i64>, String> {
             .map(Some)
             .ok_or_else(|| format!("money_value_invalid:{name}")),
     }
-}
-
-// M8: the month, the budgets, the allowed accounts, the administrators.
-fn overview(db: &Connection, now: i64) -> Result<JsonValue, String> {
-    let month = guard::month_start(now);
-    let spent = -wallet::moved_since(db, "test_budget", month)?;
-    let held: i64 = db
-        .query_row(
-            "SELECT COALESCE(SUM(amount_cents), 0) FROM money_holds WHERE payer = 'test_budget' AND state = 'held'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-    let mut accounts = rows(
-        db,
-        "SELECT r.principal_id FROM auth_account_roles r WHERE r.role = ? ORDER BY r.granted_ms",
-        &[&TESTER],
-    )?;
-    for account in &mut accounts {
-        let principal = account["principal_id"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        account["controls"] = guard::controls(db, &format!("account:{principal}"))?;
-        account["monthSpentCents"] = json!(-moved_by(db, &principal, month)?);
-    }
-    let admins = rows(
-        db,
-        "SELECT principal_id, role, granted_ms FROM auth_account_roles WHERE role IN ('owner', 'admin') ORDER BY granted_ms",
-        &[],
-    )?;
-    let proposals = rows(
-        db,
-        "SELECT * FROM money_admin_proposals ORDER BY proposed_ms",
-        &[],
-    )?;
-    Ok(
-        json!({ "global": guard::controls(db, "global")?, "monthSpentCents": spent, "heldCents": held,
-        "accounts": accounts, "admins": admins, "proposals": proposals }),
-    )
-}
-
-// What the test budget spent for one account since `from`.
-fn moved_by(db: &Connection, principal: &str, from: i64) -> Result<i64, String> {
-    db.query_row(
-        "SELECT COALESCE(SUM(l.amount_cents), 0) FROM money_legs l JOIN money_transactions t ON t.txn_ref = l.txn_ref
-         WHERE l.account = 'test_budget' AND t.principal_id = ? AND t.recorded_ms >= ?",
-        params![principal, from],
-        |row| row.get(0),
-    )
-    .map_err(|e| e.to_string())
 }
 
 fn merge(mut current: JsonValue, patch: &JsonValue, keys: &[&str]) -> JsonValue {
@@ -189,7 +129,7 @@ pub fn frame(
     }
     let target = message["principal"].as_str().unwrap_or_default();
     match action {
-        "admin.money" => overview(db, now),
+        "admin.money" => admin_overview::overview(db, now),
         "admin.money.set" => {
             let patch = &message["settings"];
             if let Some(switch) = patch
@@ -207,13 +147,38 @@ pub fn frame(
                     whole(categories, category)?;
                 }
             }
+            if let Some(mode) = patch
+                .get("accessMode")
+                .filter(|mode| *mode != "list" && *mode != "all")
+            {
+                return Err(format!("money_value_invalid:accessMode:{mode}"));
+            }
+            let current = guard::controls(db, "global")?;
+            let mut patch = patch.clone();
+            if let Some(everyone) = patch.get("everyone") {
+                for name in ["perDayCents", "perMonthCents", "aiPromptsPerDay"] {
+                    whole(everyone, name)?;
+                }
+                // Everyone's ceilings change one by one: the others keep their value.
+                patch["everyone"] = merge(
+                    current["everyone"].clone(),
+                    everyone,
+                    &["perDayCents", "perMonthCents", "aiPromptsPerDay"],
+                );
+            }
             let next = merge(
-                guard::controls(db, "global")?,
-                patch,
-                &["realSpending", "testBudgetMonthCents", "categoryMonthCents"],
+                current,
+                &patch,
+                &[
+                    "realSpending",
+                    "testBudgetMonthCents",
+                    "categoryMonthCents",
+                    "accessMode",
+                    "everyone",
+                ],
             );
             guard::set_controls(db, "global", &next, by, now)?;
-            overview(db, now)
+            admin_overview::overview(db, now)
         }
         "admin.account.set" => {
             if target.is_empty() {
@@ -229,9 +194,19 @@ pub fn frame(
                 whole(patch, name)?;
             }
             let scope = format!("account:{target}");
+            // Blocked (R-342) is one notion: on the block list, and not allowed while on it.
+            let mut patch = patch.clone();
+            if let Some(blocked) = patch.get("blocked").and_then(JsonValue::as_bool) {
+                patch["allowed"] = json!(!blocked);
+                if blocked {
+                    grant(db, target, BLOCKED, by, now)?;
+                } else {
+                    revoke(db, target, BLOCKED)?;
+                }
+            }
             let next = merge(
                 guard::controls(db, &scope)?,
-                patch,
+                &patch,
                 &[
                     "allowed",
                     "perOpCents",
@@ -247,7 +222,24 @@ pub fn frame(
                 Some(false) => revoke(db, target, TESTER)?,
                 None => {}
             }
-            overview(db, now)
+            admin_overview::overview(db, now)
+        }
+        // An account found by its verified phone (Réglages › Admin › Ajout, R-342).
+        "admin.account.find" => {
+            let phone = accounts::normalize_phone(message["phone"].as_str().unwrap_or_default());
+            let found = if phone.is_empty() {
+                None
+            } else {
+                accounts::find_by_phone(db, &phone)?
+            };
+            let principal = found
+                .as_ref()
+                .and_then(|account| account["user_id"].as_str())
+                .ok_or("money_account_not_found")?;
+            let mut shown = admin_overview::person(db, principal)?;
+            shown["listed"] = json!(account_roles::holds(db, principal, TESTER)?);
+            shown["blocked"] = json!(account_roles::holds(db, principal, BLOCKED)?);
+            Ok(json!({ "account": shown }))
         }
         "admin.propose" => {
             db.execute(
@@ -255,7 +247,7 @@ pub fn frame(
                 params![target, by, now],
             )
             .map_err(|e| e.to_string())?;
-            overview(db, now)
+            admin_overview::overview(db, now)
         }
         "admin.confirm" | "admin.revoke" => {
             if !account_roles::holds(db, by, OWNER)? {
@@ -280,7 +272,7 @@ pub fn frame(
                 .map_err(|e| e.to_string())?;
                 revoke(db, target, ADMIN)?;
             }
-            overview(db, now)
+            admin_overview::overview(db, now)
         }
         _ => Err("billing_operation_not_allowed".into()),
     }

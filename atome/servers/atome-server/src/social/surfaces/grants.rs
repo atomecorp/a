@@ -2,6 +2,7 @@
 // surface, each capability checked on its own, so a grant to receive an object confers nothing
 // about driving the pointer. A grant never transfers the ownership of anything.
 use super::Surfaces;
+use crate::vault_router::central::row_json;
 use crate::vault_router::js;
 use serde_json::{Value as JsonValue, json};
 
@@ -9,13 +10,14 @@ pub const TELEPORT_RECEIVE: &str = "teleport_receive";
 pub const TELEPORT_DISPLAY: &str = "teleport_display";
 pub const REMOTE_COMMAND: &str = "remote_command";
 
-const KNOWN: [&str; 8] = [
+const KNOWN: [&str; 9] = [
     TELEPORT_RECEIVE,
     TELEPORT_DISPLAY,
     "teleport_manipulate",
     "teleport_persist",
     "teleport_return",
     "remote_pointer",
+    "remote_keyboard",
     "remote_surface",
     REMOTE_COMMAND,
 ];
@@ -53,7 +55,8 @@ fn grant(row: &JsonValue) -> JsonValue {
     json!({ "grant_id": row["grant_id"], "owner_id": js::string(&row["owner_id"]),
         "surface_id": js::string(&row["surface_id"]), "grantee_id": js::string(&row["grantee_id"]),
         "capabilities": capabilities, "status": row["status"], "requested_at": row["requested_at"],
-        "decided_at": or_null("decided_at"), "revoked_at": or_null("revoked_at"), "expires_at": or_null("expires_at") })
+        "decided_at": or_null("decided_at"), "revoked_at": or_null("revoked_at"), "expires_at": or_null("expires_at"),
+        "once": row.get("once") == Some(&json!(1)) })
 }
 
 fn text(grant: &JsonValue, key: &str) -> String {
@@ -68,6 +71,14 @@ fn live(grant: &JsonValue, now: i64) -> bool {
         return true;
     }
     js::date(Some(&grant["expires_at"])).is_some_and(|expires| expires > now)
+}
+
+/// How long an accepted grant lasts: until `expires_at` (ISO) when given, and only to its first
+/// use when `once`.
+#[derive(Default)]
+pub struct Limits {
+    pub expires_at: Option<String>,
+    pub once: bool,
 }
 
 /// A request's outcome: the grant, and whether it was the pending one asked before.
@@ -123,9 +134,29 @@ impl Surfaces {
             )
             .await?;
         if let Some(existing) = existing {
+            let mut pending = grant(&existing);
+            // Asked again for more, the pending request grows to it, and its owner is told again.
+            let mut held = normalized(pending.get("capabilities"));
+            let before = held.len();
+            held.extend(
+                requested
+                    .iter()
+                    .filter(|c| !held.contains(c))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+            if held.len() != before {
+                self.central
+                    .run(
+                        "UPDATE surface_grants SET capabilities = ? WHERE grant_id = ?",
+                        vec![json!(json!(held).to_string()), pending["grant_id"].clone()],
+                    )
+                    .await?;
+                pending["capabilities"] = json!(held);
+            }
             return Ok(Ok(Requested {
-                grant: grant(&existing),
-                reused: true,
+                grant: pending,
+                reused: held.len() == before,
             }));
         }
         let grant_id = uuid::Uuid::new_v4().to_string();
@@ -144,13 +175,15 @@ impl Surfaces {
         }))
     }
 
-    /// Only the owner decides, and may grant less than was asked, never more.
+    /// Only the owner decides, and may grant less than was asked, never more. An accepted grant
+    /// may end at `limits.expires_at`, or at its first use when `limits.once`.
     pub async fn decide(
         &self,
         grant_id: &str,
         owner: &str,
         accept: bool,
         capabilities: Option<&JsonValue>,
+        limits: Limits,
     ) -> Result<Decided, String> {
         let (id, owner) = (js::trim(grant_id), js::trim(owner));
         let Some(mut grant) = self.grant(id).await? else {
@@ -186,14 +219,21 @@ impl Surfaces {
         if approved.is_empty() {
             return Ok(Err("surface_grant_capabilities_invalid".into()));
         }
+        let expires_at = match limits.expires_at {
+            None => grant["expires_at"].clone(),
+            Some(at) if js::date(Some(&json!(at))).is_some() => json!(at),
+            Some(_) => return Ok(Err("surface_grant_expires_invalid".into())),
+        };
         self.central
             .run(
-                "UPDATE surface_grants SET status = 'granted', decided_at = datetime('now'), capabilities = ? WHERE grant_id = ?",
-                vec![json!(json!(approved).to_string()), json!(id)],
+                "UPDATE surface_grants SET status = 'granted', decided_at = datetime('now'), capabilities = ?, expires_at = ?, once = ? WHERE grant_id = ?",
+                vec![json!(json!(approved).to_string()), expires_at.clone(), json!(limits.once), json!(id)],
             )
             .await?;
         grant["status"] = json!("granted");
         grant["capabilities"] = json!(approved);
+        grant["expires_at"] = expires_at;
+        grant["once"] = json!(limits.once);
         Ok(Ok(grant))
     }
 
@@ -224,42 +264,82 @@ impl Surfaces {
         Ok(Ok((grant, Some(if owner { "owner" } else { "grantee" }))))
     }
 
-    /// The check every cross-account action goes through: any live grant of `owner` to
-    /// `grantee` on that surface holding `capability` (`hasSurfaceCapability`).
-    pub async fn has_capability(
+    /// The check every cross-account action goes through (`hasSurfaceCapability`): each of
+    /// `capabilities` held by a live grant of `owner` to `grantee` on that surface. A grant given
+    /// for one use is spent by this check, a lasting grant taking precedence; `Some` lists the
+    /// grants it spent, `None` is a refusal. One transaction: two uses never share a single one.
+    pub async fn use_capabilities(
         &self,
         owner: &str,
         surface: &str,
         grantee: &str,
-        capability: &str,
-    ) -> Result<bool, String> {
-        let (owner, grantee) = (js::trim(owner), js::trim(grantee));
+        capabilities: &[&str],
+    ) -> Result<Option<Vec<JsonValue>>, String> {
+        let (owner, grantee) = (js::trim(owner).to_string(), js::trim(grantee).to_string());
         if owner.is_empty() || grantee.is_empty() {
-            return Ok(false);
+            return Ok(None);
         }
         if owner == grantee {
-            return Ok(true);
+            return Ok(Some(Vec::new()));
         }
-        let needed = js::trim(capability).to_lowercase();
-        if !KNOWN.contains(&needed.as_str()) {
-            return Ok(false);
+        let needed: Vec<String> = capabilities
+            .iter()
+            .map(|capability| js::trim(capability).to_lowercase())
+            .collect();
+        if needed.is_empty() || needed.iter().any(|c| !KNOWN.contains(&c.as_str())) {
+            return Ok(None);
         }
-        let rows = self
-            .central
-            .all(
-                "SELECT * FROM surface_grants
-                 WHERE owner_id = ? AND surface_id = ? AND grantee_id = ? AND status = 'granted'"
-                    .into(),
-                vec![json!(owner), json!(js::trim(surface)), json!(grantee)],
-            )
-            .await?;
-        let now = atome_js_values::dates::now_ms();
-        Ok(rows.iter().map(grant).any(|grant| {
-            live(&grant, now)
-                && grant["capabilities"]
-                    .as_array()
-                    .is_some_and(|held| held.contains(&json!(needed)))
-        }))
+        let surface = js::trim(surface).to_string();
+        self.central
+            .transaction(move |db| {
+                let mut statement = db
+                    .prepare_cached(
+                        "SELECT * FROM surface_grants
+                         WHERE owner_id = ? AND surface_id = ? AND grantee_id = ? AND status = 'granted'",
+                    )
+                    .map_err(|e| e.to_string())?;
+                let rows = statement
+                    .query_map(rusqlite::params![owner, surface, grantee], row_json)
+                    .map_err(|e| e.to_string())?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(|e| e.to_string())?;
+                let now = atome_js_values::dates::now_ms();
+                let held: Vec<JsonValue> = rows
+                    .iter()
+                    .map(grant)
+                    .filter(|grant| live(grant, now))
+                    .collect();
+                let holding = |capability: &String, once: bool| {
+                    held.iter().find(|grant| {
+                        grant["once"] == json!(once)
+                            && grant["capabilities"]
+                                .as_array()
+                                .is_some_and(|caps| caps.contains(&json!(capability)))
+                    })
+                };
+                let mut spent: Vec<JsonValue> = Vec::new();
+                for capability in &needed {
+                    if holding(capability, false).is_some() {
+                        continue;
+                    }
+                    let Some(once) = holding(capability, true) else {
+                        return Ok(None);
+                    };
+                    if !spent.iter().any(|g| g["grant_id"] == once["grant_id"]) {
+                        spent.push(once.clone());
+                    }
+                }
+                for grant in &mut spent {
+                    db.execute(
+                        "UPDATE surface_grants SET status = 'revoked', revoked_at = datetime('now') WHERE grant_id = ?",
+                        rusqlite::params![js::string(&grant["grant_id"])],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    grant["status"] = json!("revoked");
+                }
+                Ok(Some(spent))
+            })
+            .await
     }
 
     /// The pending and granted grants `principal` gave (`incoming`) or holds (`outgoing`).

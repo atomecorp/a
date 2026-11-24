@@ -177,9 +177,6 @@ export const createGlobalVoiceApi = ({
         get telemetry() {
             return env[SERVICE_KEY]?.telemetry || null;
         },
-        get vad() {
-            return env[SERVICE_KEY]?.vad || null;
-        },
         async createSession(options = {}) {
             const service = await ensureReady();
             return service.runtime.createSession(options);
@@ -294,10 +291,6 @@ export const createGlobalVoiceApi = ({
         async executeUtterance(utterance, options = {}) {
             const service = await ensureReady();
             return service.executeUtterance(utterance, options);
-        },
-        async planFollowup(sessionId, options = {}) {
-            const service = await ensureReady();
-            return service.planFollowup(sessionId, options);
         },
         async executeFollowup(sessionId, options = {}) {
             const service = await ensureReady();

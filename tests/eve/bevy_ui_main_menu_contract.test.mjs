@@ -91,10 +91,10 @@ test('the capture palette keeps only its capture sources and Actions while the r
         },
         translate: (_key, fallback) => fallback
     });
-    // La palette « rec. » ne garde que ses sources de capture (MIDI compris) ;
+    // La palette « rec. » ne garde que ses sources de capture (MIDI et Geste compris, Geste = ui.record.actions, 23 nov.) ;
     // import, validation et apercu en sortent mais restent declares ; Relire
     // (capture_actions) et Actions (record_actions) ne sont plus des outils du ruban.
-    assert.deepEqual(content.capture.children, ['audio', 'video', 'photo', 'screen', 'midi']);
+    assert.deepEqual(content.capture.children, ['audio', 'video', 'photo', 'screen', 'midi', 'gesture']);
     for (const key of ['preview', 'import', 'validation']) {
         assert.ok(content[key], `${key} doit rester un outil declare, hors palette`);
     }
@@ -102,11 +102,11 @@ test('the capture palette keeps only its capture sources and Actions while the r
     // Les trois listes synchronisees du ruban portent la meme composition.
     const runtimeSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/core/tool_runtime.js'), 'utf8');
     const captureSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/capture.js'), 'utf8');
-    assert.match(runtimeSource, /children: \['ui\.capture\.audio', 'ui\.capture\.video', 'ui\.capture\.photo', 'ui\.capture\.screen', 'ui\.capture\.midi'\]/);
-    assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'midi'\];/);
+    assert.match(runtimeSource, /children: \['ui\.capture\.audio', 'ui\.capture\.video', 'ui\.capture\.photo', 'ui\.capture\.screen', 'ui\.capture\.midi', 'ui\.record\.actions'\]/);
+    assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'midi', 'gesture'\];/);
 });
 
-test('the permanent bar is the four intents; mode, activity, view, help and contact stay declared', async () => {
+test('the permanent bar is Enr., Créer, Activité and Vue; mode, help, contact, Commu. and Calendrier stay declared', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
@@ -133,8 +133,11 @@ test('the permanent bar is the four intents; mode, activity, view, help and cont
     // 2026-09-29 : `mode` et `activity` quittent la barre permanente ; 2026-11-21 :
     // `view` (rangee dans Utilitaires du Mystic), `help` et `contact` la quittent aussi.
     // 2026-11-22 (R-264): no Find tool any more; the assistant, touched, unfolds her field with its search toggle.
-    assert.deepEqual(content.toolbox.children, ['capture', 'create', 'communicate', 'calendar']);
-    for (const key of ['mode', 'activity', 'view', 'help', 'contact']) {
+    // 2026-11-23: the band is Enr., Créer, Activité (the status tool) and Vue; Commu. and Calendrier go to the rail.
+    assert.deepEqual(content.toolbox.children, ['capture', 'create', 'activity', 'view']);
+    assert.deepEqual(content.view.children, ['view_list', 'view_table', 'view_natural', 'view_timeline', 'view_cells', 'view_mix']);
+    assert.equal(typeof content.activity.status_touch, 'function', 'Activité takes what runs (ribbon_status_tool.js)');
+    for (const key of ['mode', 'help', 'contact', 'communicate', 'calendar']) {
         assert.ok(content[key], `${key} reste un outil declare, hors barre permanente`);
         assert.equal(content.toolbox.children.includes(key), false, `${key} ne reside plus dans la barre`);
     }
@@ -150,7 +153,7 @@ test('the permanent bar is the four intents; mode, activity, view, help and cont
     // disparait (le niveau reste dans les Reglages et les commandes `ui.level.*`).
     assert.equal(content.level, undefined);
     assert.equal(content.view.type, 'palette');
-    assert.deepEqual(content.view.children, ['view_list', 'view_table', 'view_natural']);
+    assert.deepEqual(content.view.children, ['view_list', 'view_table', 'view_natural', 'view_timeline', 'view_cells', 'view_mix']);
     assert.deepEqual(content.mode.children, ['perform', 'mode_edit', 'mode_consume']);
     assert.equal(content.validation.tool_id, 'ui.capture.validation');
     assert.equal(content.matrix.tool_id, 'tool.main.matrix');
@@ -425,18 +428,18 @@ test('BevyUI main menu tool activation reuses the normalized ribbon definition t
     }
 });
 
-test('BevyUI Communicate tool shows what waits as its count, folded', async () => {
+test('BevyUI status tool (Activité) shows what waits as its count, folded', async () => {
     const harness = createRuntimeHarness();
     try {
         await harness.runtime.showFully();
         assert.equal(harness.runtime.setToolInlineNotification({
-            tool_id: 'tool.main.communicate', summary: 'Hello', count: 2
+            tool_id: 'tool.main.activity', summary: 'Hello', count: 2
         }), true);
         await waitFrame();
         const tree = harness.calls.at(-1).payload.tree;
         assert.equal(findNode(tree.root, 'eve_bevy_ui_main_menu_communication_unread_summary'), null);
         assert.equal(findNode(tree.root, 'eve_bevy_ui_main_menu_communication_unread_badge_count')?.text, '2');
-        harness.runtime.setToolInlineNotification({ tool_id: 'tool.main.communicate', count: 0 });
+        harness.runtime.setToolInlineNotification({ tool_id: 'tool.main.activity', count: 0 });
         await waitFrame();
         assert.equal(findNode(harness.calls.at(-1).payload.tree.root,
             'eve_bevy_ui_main_menu_communication_unread_badge'), null);

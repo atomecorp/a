@@ -118,6 +118,10 @@ name = "ws_api"
 path = "../../../tests/atome_server/ws_api.rs"
 
 [[test]]
+name = "program_scope"
+path = "../../../tests/atome_server/program_scope.rs"
+
+[[test]]
 name = "ws_sync"
 path = "../../../tests/atome_server/ws_sync.rs"
 

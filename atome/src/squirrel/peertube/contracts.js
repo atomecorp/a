@@ -7,7 +7,6 @@ const contract = createOnlineVideoContract({ key: 'peertube', label: 'PeerTube',
     refSchema: { type: 'string', maxLength: 300, pattern: PEERTUBE_VIDEO_URL_PATTERN },
     searchErrors: ['unavailable', 'rate_limited'] });
 
-export const PEERTUBE_ERRORS = contract.errors;
 export const PEERTUBE_COMMANDS = contract.commands;
 export const validatePeertubeInput = contract.validate;
 export const normalizePeertubeError = contract.normalizeError;

@@ -23,7 +23,7 @@ impl SileroVad {
             .map_err(|error| fail(error.to_string()))?
             .with_intra_threads(1)
             .map_err(|error| fail(error.to_string()))?
-            .commit_from_file(model_path)
+            .commit_from_file(super::model_file(model_path)?)
             .map_err(|error| fail(error.to_string()))?;
         Ok(Self {
             session,

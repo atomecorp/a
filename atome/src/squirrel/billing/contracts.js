@@ -1,8 +1,8 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
 
 // The money screens' commands (register R-193): every action of Réglages › Paiement (the balance, a top-up, a withdrawal,
-// the history) and of the administrators' Réglages › Budget (real spending, budgets, an account's ceilings, the
-// administrators, an invitation's terms), for runtime V2, AI discovery, voice and direct MCP calls alike, run by
+// the history) and of the administrators' Réglages › Admin (real spending, budgets, the access, an account's ceilings,
+// the block list, the administrators, an invitation's terms), for runtime V2, AI discovery, voice and direct MCP calls alike, run by
 // eVe/domains/billing/billing_commands.js through the same `billing` frames as the screens. Amounts are integer cents.
 const cents = { type: 'integer', minimum: 0, maximum: 10_000_000 };
 const principal = { type: 'string', minLength: 1, maxLength: 200, description: 'An account\'s principal id (billing.budget lists them).' };
@@ -17,12 +17,16 @@ const definitions = {
     withdraw: [{ amountCents: { ...cents, minimum: 1 } }, ['amountCents'],
         'Give unused balance back onto the card that paid it. Say the amount and wait for the user\'s yes.', true, 'write'],
     budget: [{}, [], 'Administrators: real spending on or off, the test budget, the ceilings per category, the allowed accounts and the administrators.', false, 'read'],
-    budget_set: [{ realSpending: { type: 'boolean' }, testBudgetMonthCents: cents, categoryMonthCents: categories }, [],
-        'Administrators: turn real spending on or off, set the test budget or the ceilings per category. Wait for the user\'s yes.', true, 'write'],
-    account_set: [{ principal, listed: { type: 'boolean' }, allowed: { type: 'boolean' }, perOpCents: cents, perDayCents: cents, perMonthCents: cents,
+    budget_set: [{ realSpending: { type: 'boolean' }, testBudgetMonthCents: cents, categoryMonthCents: categories,
+        accessMode: { type: 'string', enum: ['list', 'all'] }, everyone: { type: 'object', additionalProperties: false,
+            properties: { perDayCents: cents, perMonthCents: cents, aiPromptsPerDay: { type: 'integer', minimum: 0, maximum: 10_000 } } } }, [],
+        'Administrators: turn real spending on or off, set the test budget or the ceilings per category, open atome\'s AI to the white list (accessMode list) or to everyone but the blocked (all) and everyone\'s ceilings. Wait for the user\'s yes.', true, 'write'],
+    account_find: [{ phone: { type: 'string', minLength: 3, maxLength: 40 } }, ['phone'],
+        'Administrators: the account holding a verified phone number (its principal, name, whether it is on the white list or blocked).', false, 'read'],
+    account_set: [{ principal, listed: { type: 'boolean' }, blocked: { type: 'boolean' }, allowed: { type: 'boolean' }, perOpCents: cents, perDayCents: cents, perMonthCents: cents,
         aiPromptsPerDay: { type: 'integer', minimum: 0, maximum: 10_000 },
         categories: { type: 'array', maxItems: 4, items: { type: 'string', enum: ['ai', 'domains', 'shop', 'services'] } } }, ['principal'],
-    'Administrators: list or unlist an allowed account, allow or block it, set its ceilings, AI prompts a day and categories. Wait for the user\'s yes.', true, 'write'],
+    'Administrators: list or unlist an allowed account (white list), block it or unblock it (block list, refused whatever the access), set its ceilings, AI prompts a day and categories. Wait for the user\'s yes.', true, 'write'],
     admin_move: [{ verb: { type: 'string', enum: ['propose', 'confirm', 'revoke'] }, principal }, ['verb', 'principal'],
         'Administrators: propose an administrator, confirm one (the principal administrator), or revoke one. Wait for the user\'s yes.', true, 'write'],
     invite: [{ email: { type: 'string', minLength: 3, maxLength: 254 }, mode: { type: 'string', enum: ['free', 'pay', 'discount'] },
@@ -39,4 +43,4 @@ export const validateBillingInput = (action, input) => {
     const contract = BILLING_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';
 };
-export const BILLING_ASSISTANT_INSTRUCTIONS = 'Money: « mon solde » calls billing.wallet (cents: say euros); « recharge 21 € » says the amount then billing.topup with amountCents 2100 after the yes; « rends-moi mon solde » billing.withdraw; « mon historique » billing.open with screen history. Administrators only: billing.budget, billing.budget_set (realSpending false stops every real spending), billing.account_set, billing.admin_move, billing.invite (offered, to pay, or a discount).';
+export const BILLING_ASSISTANT_INSTRUCTIONS = 'Money: « mon solde » calls billing.wallet (cents: say euros); « recharge 21 € » says the amount then billing.topup with amountCents 2100 after the yes; « rends-moi mon solde » billing.withdraw; « mon historique » billing.open with screen history. Administrators only: billing.budget, billing.budget_set (realSpending false stops every real spending; accessMode all opens the AI to everyone but the blocked), billing.account_find (by phone), billing.account_set (listed, blocked), billing.admin_move, billing.invite (offered, to pay, or a discount).';

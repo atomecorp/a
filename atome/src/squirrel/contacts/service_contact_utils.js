@@ -3,8 +3,6 @@ import { toText } from '../shared/scalars.js';
 export { toText };
 export const normalizePhoneKey = (value) => toText(value).replace(/[^\d+]/g, '');
 
-export const normalizeEmailKey = (value) => toText(value).toLowerCase();
-
 export const hasFiniteLimit = (value) => (
     value !== null
     && value !== undefined

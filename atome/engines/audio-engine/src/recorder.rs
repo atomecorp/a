@@ -179,6 +179,12 @@ pub(super) fn input_device(name: Option<&str>) -> Result<cpal::Device, String> {
                     .map(|candidate| candidate == wanted)
                     .unwrap_or(false)
             })
+            // A port iPadOS routed (its uid) is the one input cpal opens there (session_input.rs).
+            .or_else(|| {
+                (super::session_input::routed().as_deref() == Some(wanted))
+                    .then(|| host.default_input_device())
+                    .flatten()
+            })
             .ok_or_else(|| format!("audio_input_device_not_found: {wanted}"));
     }
     host.default_input_device()

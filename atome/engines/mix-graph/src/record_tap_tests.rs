@@ -28,7 +28,7 @@ fn take(rec_first: bool) -> (Vec<Frame>, Frame, Option<f64>) {
     let mic = rig.graph.live_inputs().pop().unwrap().1;
     mic.push_at(&vec![Frame::new(0.8, 0.8); BLOCK], 1_000.0);
     rig.block(&[]);
-    let tap = rig.graph.arm_record("take", Some("mic")).unwrap();
+    let tap = rig.graph.arm_record("take", Some("mic"), &[]).unwrap();
     let mut last = Frame::ZERO;
     for _ in 0..3 {
         mic.push_at(&vec![Frame::new(0.8, 0.8); BLOCK], 0.0);
@@ -80,7 +80,7 @@ fn a_take_is_placed_by_its_inputs_clock() {
 fn a_take_starts_with_its_inputs_first_push() {
     let mut rig = rig(&chain(true));
     let mic = rig.graph.live_inputs().pop().unwrap().1;
-    let tap = rig.graph.arm_record("take", Some("mic")).unwrap();
+    let tap = rig.graph.arm_record("take", Some("mic"), &[]).unwrap();
     rig.block(&[]);
     assert!(tap.start().is_none(), "no input yet, no take yet");
     mic.push_at(&vec![Frame::new(0.8, 0.8); BLOCK], 500.0);
@@ -97,7 +97,7 @@ fn an_unarmed_rec_point_takes_nothing_and_passes_its_signal() {
     mic.push(&vec![Frame::new(0.8, 0.8); BLOCK]);
     let out = rig.block(&[]);
     assert!((out[BLOCK - 1].left - 0.4).abs() < 1e-4);
-    assert!(rig.graph.arm_record("nowhere", None).is_err());
+    assert!(rig.graph.arm_record("nowhere", None, &[]).is_err());
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn a_strip_applied_later_takes_its_input() {
     );
     rig.graph.apply(crate::tests::program(&later)).unwrap();
     rig.block(&[]);
-    let tap = rig.graph.arm_record("b", Some("mic")).unwrap();
+    let tap = rig.graph.arm_record("b", Some("mic"), &[]).unwrap();
     for index in 0..3 {
         mic.push_at(
             &vec![Frame::new(0.8, 0.8); BLOCK],
@@ -155,4 +155,87 @@ fn a_strip_applied_later_takes_its_input() {
         / count as f32)
         .sqrt();
     assert!((rms - 0.8).abs() < 1e-3, "rms {rms}");
+}
+
+// Two tracks on one 30-channel interface (R-286): track 3 in mono on its 17th
+// channel, track 4 in stereo on 23 (left) and 24 (right). Each strip hears its
+// own channels, never the other's nor the first two, and its REC point takes
+// them in order.
+#[test]
+fn two_strips_take_their_own_channels_of_one_interface() {
+    let strip = |id: &str, channels: &str| {
+        format!(
+            r#"{{"id":"{id}","input":{{"kind":"live_audio","device_id":"card","channels":[{channels}]}},"chain":[{{"id":"{id}:record","type":"record","params":{{}}}}],"output":{{"kind":"main"}}}}"#
+        )
+    };
+    let mut rig = rig(&format!(
+        r#"{{"strips":[{},{}]}}"#,
+        strip("t3", "16"),
+        strip("t4", "22,23")
+    ));
+    let inputs = rig.graph.live_inputs();
+    assert_eq!(inputs.len(), 2, "one input per channel set of the card");
+    assert!(inputs.iter().all(|(device, _)| device == "card"));
+    // Every channel carries its own number, so a wrong pick shows.
+    let capture: Vec<f32> = (1..=30).map(|channel| channel as f32 / 100.0).collect();
+    let push = |at: f64| {
+        for (_, input) in &inputs {
+            let frames = vec![input.frame_of(&capture); BLOCK];
+            input.push_at(&frames, at);
+        }
+    };
+    push(0.0);
+    rig.block(&[]);
+    let mono = rig.graph.arm_record("t3", Some("card"), &[16]).unwrap();
+    let stereo = rig.graph.arm_record("t4", Some("card"), &[22, 23]).unwrap();
+    assert!(
+        rig.graph.arm_record("t3", Some("card"), &[]).is_err(),
+        "no input of the card's first two"
+    );
+    for index in 0..3 {
+        push((BLOCK * (index + 1)) as f64);
+        rig.block(&[]);
+    }
+    let drained = |tap: &crate::record_tap::RecordTap| {
+        let mut taken = vec![Frame::ZERO; BLOCK * 8];
+        let count = tap.drain(&mut taken);
+        taken.truncate(count);
+        taken
+    };
+    let (mono, stereo) = (drained(&mono), drained(&stereo));
+    assert_eq!(mono.len(), BLOCK * 3);
+    assert!(
+        mono.iter()
+            .all(|frame| (frame.left - 0.17).abs() < 1e-6 && (frame.right - 0.17).abs() < 1e-6),
+        "{:?}",
+        mono[0]
+    );
+    assert!(
+        stereo
+            .iter()
+            .all(|frame| (frame.left - 0.23).abs() < 1e-6 && (frame.right - 0.24).abs() < 1e-6),
+        "{:?}",
+        stereo[0]
+    );
+}
+
+#[test]
+fn a_channel_the_interface_lacks_is_refused() {
+    let input = crate::shared::LiveInput::with_channels(64, &[16]);
+    assert!(input.fits(17).is_ok());
+    assert_eq!(
+        input.fits(16).unwrap_err(),
+        "live_input_channel_unavailable: 17 of 16"
+    );
+    let historical = crate::shared::LiveInput::new(64);
+    assert_eq!(
+        historical.frame_of(&[0.1]),
+        Frame::new(0.1, 0.1),
+        "a one-channel device doubled"
+    );
+    assert_eq!(
+        historical.frame_of(&[0.1, 0.2, 0.3]),
+        Frame::new(0.1, 0.2),
+        "the first two"
+    );
 }

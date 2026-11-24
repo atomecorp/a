@@ -5,7 +5,7 @@
 // the session read the user chose for the screen (option A, 19 Nov. 2026, on iOS: ExternalDisplaySceneDelegate.swift).
 // Both pages are of one origin (the app's Axum), so one browser channel joins them, from the screen's first request
 // (its boot), before the pages' own link opens.
-import { isExternalDisplayFollower } from './external_display_role.js';
+import { externalDisplaySharesDeviceSession } from './external_display_role.js';
 
 const CHANNEL = 'eve.external_display.device_key.v1';
 const COMMAND = 'auth_device_key';
@@ -15,7 +15,7 @@ const tauriInvoke = env => env?.__TAURI_INTERNALS__?.invoke || env?.__TAURI__?.c
 
 // The screen's page with no bridge of its own: an invoke that asks the device's page; anywhere else, none.
 export const externalDisplayDeviceKeyInvoke = (env = globalThis.window) => {
-    if (!isExternalDisplayFollower() || tauriInvoke(env) || typeof env?.BroadcastChannel !== 'function') return null;
+    if (!externalDisplaySharesDeviceSession() || tauriInvoke(env) || typeof env?.BroadcastChannel !== 'function') return null;
     return (command, args) => new Promise((resolve, reject) => {
         if (command !== COMMAND) { reject(new Error(`external_display_device_key_refused:${command}`)); return; }
         const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -33,7 +33,7 @@ export const externalDisplayDeviceKeyInvoke = (env = globalThis.window) => {
 // The device's page: it answers the screen's requests through its own bridge.
 export const answerExternalDisplayDeviceKey = (env = globalThis.window) => {
     const invoke = tauriInvoke(env);
-    if (isExternalDisplayFollower() || !invoke || typeof env?.BroadcastChannel !== 'function') return () => { };
+    if (externalDisplaySharesDeviceSession() || !invoke || typeof env?.BroadcastChannel !== 'function') return () => { };
     const channel = new env.BroadcastChannel(CHANNEL);
     channel.onmessage = ({ data }) => {
         if (data?.type !== 'device-key' || typeof data.id !== 'string') return;

@@ -5,6 +5,13 @@ const NATIVE_POLL_MS = 80;
 
 export const isNativeWakeCapture = env => isTauriAudioRuntime(env) || isIosHostAppRuntime(env);
 
+// Android grants the microphone at run time (the STT plugin owns that permission; a desktop has it):
+// without it a native capture only delivers silence while eVe looks to be listening. Every native
+// capture asks it first: this one, and the native voice engine's (native_voice_engine.js).
+export const ensureNativeMicrophone = async (env, invoke) => {
+    if (isTauriAudioRuntime(env) && (await invoke('plugin:stt|request_permission'))?.microphone !== 'granted') throw new Error('microphone_permission_denied');
+};
+
 // Non-persistent 16 kHz PCM capture in 80 ms frames (int16 scale, Float32Array).
 // Native hosts own the microphone through audio_wake_*; the browser resamples in
 // a 16 kHz AudioContext. Audio is never stored: frames go straight to onFrame.
@@ -21,9 +28,7 @@ export const createWakeCapture = ({ env = globalThis, onFrame, onError }) => {
     const startNative = async () => {
         const invoke = getTauriInvoke(env);
         if (!invoke) throw new Error('wake_native_capture_unavailable');
-        // Android grants the microphone at run time (the STT plugin owns that permission; a desktop has it):
-        // without it the native capture only delivered silence while eVe looked to be listening.
-        if (isTauriAudioRuntime(env) && (await invoke('plugin:stt|request_permission'))?.microphone !== 'granted') throw new Error('microphone_permission_denied');
+        await ensureNativeMicrophone(env, invoke);
         if (closed) return;
         // Subscribed only once the start is granted: a start refused (the capture busy elsewhere, a connected screen's
         // page) must never stop the capture its owner holds.
@@ -87,8 +92,10 @@ export const createWakeCapture = ({ env = globalThis, onFrame, onError }) => {
     });
 };
 
+// Whether a native capture could start now. It only asks (audio_wake_state): reading the capture
+// (audio_wake_read) would take the PCM of the owner holding it, and report it free.
 export const wakeCaptureAvailable = async (env = globalThis) => {
     if (!isNativeWakeCapture(env)) return false;
-    const data = await getTauriInvoke(env)('audio_wake_read', {});
-    return data?.busy !== true && data?.failed !== true;
+    const data = await getTauriInvoke(env)('audio_wake_state', {});
+    return data?.busy !== true;
 };

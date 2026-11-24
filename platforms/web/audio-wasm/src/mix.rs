@@ -39,6 +39,8 @@ pub fn audio_mix_levels() -> Result<js_sys::Array, JsValue> {
         let entry = js_sys::Object::new();
         js_sys::Reflect::set(&entry, &"strip_id".into(), &level.strip_id.into())?;
         js_sys::Reflect::set(&entry, &"peak".into(), &(level.peak as f64).into())?;
+        js_sys::Reflect::set(&entry, &"peak_left".into(), &(level.peak_left as f64).into())?;
+        js_sys::Reflect::set(&entry, &"peak_right".into(), &(level.peak_right as f64).into())?;
         js_sys::Reflect::set(&entry, &"rms".into(), &(level.rms as f64).into())?;
         out.push(&entry);
     }
@@ -114,19 +116,20 @@ pub fn audio_mix_module_state(module_id: &str) -> Result<Option<u8>, JsValue> {
 pub fn audio_mix_live_push(device_id: &str, pcm: &[f32], start_frame: f64) -> Result<(), JsValue> {
     crate::scheduled_backend::wake()?;
     with_engine(|engine| {
-        if let Some((_, input)) = engine
+        let frames: Vec<kira::Frame> = pcm
+            .iter()
+            .map(|sample| kira::Frame::from_mono(*sample))
+            .collect();
+        // Every input of the device hears it (a device may feed several, R-286).
+        engine
             .mix
             .graph()
             .live_inputs()
             .into_iter()
-            .find(|(device, _)| device == device_id)
-        {
-            let frames: Vec<kira::Frame> = pcm
-                .iter()
-                .map(|sample| kira::Frame::from_mono(*sample))
-                .collect();
-            input.push_at(&frames, start_frame);
-        }
+            .filter(|(device, _)| device == device_id)
+            .for_each(|(_, input)| {
+                input.push_at(&frames, start_frame);
+            });
         Ok(())
     })
 }

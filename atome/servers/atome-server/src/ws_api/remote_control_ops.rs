@@ -6,7 +6,7 @@
 // front's, as the seats they join.
 use super::projection_ops::response;
 use super::surface_ops::{action_of, failure, identity};
-use super::{Connection, remote_commands, seats};
+use super::{Connection, remote_commands, seats, surface_grant_ops};
 use crate::vault_router::js;
 use indexmap::IndexMap;
 use serde_json::{Value as JsonValue, json};
@@ -189,15 +189,12 @@ async fn request(
         return refused("remote_control_capabilities_invalid");
     }
     // Driving another account's device needs a grant they gave, each capability on its own.
+    let asked: Vec<&str> = capabilities.iter().map(String::as_str).collect();
     if target_user != user {
-        let surfaces = &connection.ws_api.social.surfaces;
-        for capability in &capabilities {
-            if !surfaces
-                .has_capability(&target_user, &target, user, capability)
-                .await?
-            {
-                return refused("remote_control_cross_user_not_authorized");
-            }
+        let gate = surface_grant_ops::gate(connection, &target_user, &target, user, &asked).await?;
+        if let Some((error, grant_id)) = gate.refusal() {
+            let fields = json!({ "error": error, "grant_id": grant_id });
+            return Ok(response(KIND, message, false, fields));
         }
     }
     let now = now_ms();
