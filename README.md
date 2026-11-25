@@ -1,3 +1,5 @@
+> **Deprecated (2026-11-26).** This repository is no longer maintained. atome and eVe now live together in one repository, `atomecorp/eVe`. This one is kept as history.
+
 # 🐿️ atome Framework Squirrel version
 
 > This repository (`a`, codename **Squirrel**) is the next-generation evolution of the original Atome Ruby framework and is still under active development. It is a work in progress, but not a mere proof of concept: it serves as the base for the fully functional solution. The roadmap includes a FreeBSD boot mode leveraging jails to provide connected, shareable environments that sync seamlessly online/offline (with robust conflict resolution), plus the same unified, agnostic object system that made classic Atome unique.
