@@ -35,6 +35,7 @@ import { DOCUMENT_ASSISTANT_INSTRUCTIONS, DOCUMENT_COMMANDS, validateDocumentInp
 import { SCRIPT_ASSISTANT_INSTRUCTIONS, SCRIPT_COMMANDS, SCRIPT_CONFIRMED_COMMANDS, validateScriptInput } from '../script/contracts.js';
 import { AUDIO_FX_ASSISTANT_INSTRUCTIONS, AUDIO_FX_COMMANDS, validateAudioFxInput } from '../audio_fx/contracts.js';
 import { AUDIO_FREEZE_ASSISTANT_INSTRUCTIONS, AUDIO_FREEZE_COMMANDS, validateAudioFreezeInput } from '../audio_freeze/contracts.js';
+import { MIDI_SYNC_ASSISTANT_INSTRUCTIONS, MIDI_SYNC_COMMANDS, validateMidiSyncInput } from '../midi_sync/contracts.js';
 import { MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS, MEDIA_IMPORT_COMMANDS, validateMediaImportInput } from '../media_import/contracts.js';
 import { FOOD_ASSISTANT_INSTRUCTIONS, FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
 import { BOOKS_ASSISTANT_INSTRUCTIONS, BOOKS_COMMANDS, BOOKS_CONFIRMED_COMMANDS, validateBooksInput } from '../books/contracts.js';
@@ -179,6 +180,9 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // The track freeze (R-370) reads the engine and lays renders: nothing leaves, nothing is lost (a stem is a derivative).
     { id: 'audio_freeze', commands: AUDIO_FREEZE_COMMANDS, validate: validateAudioFreezeInput, noClient: 'HOST_UNSUPPORTED',
         instructions: AUDIO_FREEZE_ASSISTANT_INSTRUCTIONS, preload: ['audio_freeze.load'] },
+    // The MIDI sync (R-379) sets which devices take eVe's clock and starts and who gives the tempo: nothing leaves the person's devices.
+    { id: 'midi_sync', commands: MIDI_SYNC_COMMANDS, validate: validateMidiSyncInput, noClient: 'HOST_UNSUPPORTED',
+        instructions: MIDI_SYNC_ASSISTANT_INSTRUCTIONS },
     // Deleting a profile changes what every list shows: the user's to allow.
     { id: 'profiles', commands: LIFE_PROFILE_COMMANDS, validate: validateLifeProfileInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['profiles.delete'], instructions: LIFE_PROFILE_ASSISTANT_INSTRUCTIONS,

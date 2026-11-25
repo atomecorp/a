@@ -29,6 +29,11 @@ hkdf = "0.12"
 [target.'cfg(not(target_os = "ios"))'.dependencies]
 mdns-sd = "0.13"
 
+# The sound of a live stream in AAC (src/hls/aac.rs): the device's own encoder, the crates cpal already builds on.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["std", "AudioConverter", "objc2-core-audio-types"] }
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 

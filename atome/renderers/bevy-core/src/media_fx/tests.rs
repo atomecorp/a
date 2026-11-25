@@ -443,3 +443,31 @@ fn the_media_clock_follows_the_offline_instant_then_the_real_time_again() {
     );
     assert!(refused.unwrap_err().starts_with("media_clock_invalid"));
 }
+
+#[test]
+fn a_star_mask_keeps_its_points_and_cuts_its_hollows() {
+    let (feather, star) = (0.02, 2.0);
+    // A point up (y down in the media's frame), the hollow between two points cut at the same distance.
+    assert!(mask_keep(star, (0.0, -0.9), feather, false) > 0.99);
+    let hollow = -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU / 10.0;
+    assert!(
+        mask_keep(
+            star,
+            (0.9 * hollow.cos(), 0.9 * hollow.sin()),
+            feather,
+            false
+        ) < 0.01
+    );
+    assert!(
+        mask_keep(
+            star,
+            (0.4 * hollow.cos(), 0.4 * hollow.sin()),
+            feather,
+            false
+        ) > 0.99
+    );
+    // The ellipse and the rectangle unchanged: a corner kept by the rectangle alone.
+    assert!(mask_keep(1.0, (0.9, 0.9), feather, false) > 0.99);
+    assert!(mask_keep(0.0, (0.9, 0.9), feather, false) < 0.01);
+    assert!(mask_keep(star, (0.0, 0.0), feather, true) < 0.01);
+}

@@ -39,8 +39,10 @@ async fn public_target(request: &HttpRequest) -> Result<Option<SocketAddr>, Stri
 
 /// What the central server does with a `send`: OSC refused, HTTP to a public address.
 pub(crate) async fn send_central(message: &JsonValue) -> Result<Option<u16>, String> {
-    if network::protocol_of(message)? == "osc" {
-        return Err(OSC_LOCAL_ONLY.into());
+    match network::protocol_of(message)? {
+        "osc" => return Err(OSC_LOCAL_ONLY.into()),
+        network::camera::PROTOCOL => return Err(network::camera::REST_LOCAL_ONLY.into()),
+        _ => {}
     }
     let request = HttpRequest::from_message(message)?;
     let mut client = crate::tls::http_client()?;
@@ -66,6 +68,12 @@ pub(super) async fn answer(connection: Arc<Connection>, message: JsonValue) {
             .reply(network::reply(&message, Err(error.into())))
             .await;
     };
+    // A camera's packet is only encoded (Web Bluetooth writes it from the page).
+    if network::camera::is_encode(&message) {
+        return connection
+            .reply(network::camera::encode_reply(&message))
+            .await;
+    }
     let outcome = if LIMITS.limited(principal, atome_js_values::dates::now_ms() as i64) {
         Err("network_rate_limited".into())
     } else {

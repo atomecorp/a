@@ -11,17 +11,20 @@ entend. Elle reste dans `tests/parcours_musique/`, dont les identifiants (`TL-03
 - Parcours : [tests/parcours_musique/commandes_vocales.md](../tests/parcours_musique/commandes_vocales.md)
 - Propriétaires du code : `eVe/intuition/tools/molecule`, `eVe/domains/midi`, `eVe/domains/music`, `eVe/domains/audio_fx`, `eVe/domains/sample_edit`, `eVe/domains/controls`, `eVe/domains/molecule_import`, `atome/engines`.
 
-## Demandes du registre (95)
+## Demandes du registre (96)
 
 Titre et statut tels que [todo/REGISTRE_DEMANDES.md](../todo/REGISTRE_DEMANDES.md) les donne le 2026-11-25. Une demande `FAIT`
 a des fonctions à relever ; les autres disent ce qui reste ouvert.
 
+- R-375 — Multicam dans la Timeline : une piste Multicam qui se déplie (une voie par angle), la régie dans le Visuel (toucher une vignette = couper), Vue › Régie live (sources à 6 zones A · AV · V / F1 · F2 · F3, effets live, Latch, Enr. = toutes les sources), stabilo, PiP, synchro débrayable (repère, aimant), Auto (Manuel, Son, Rythme, Scènes, Hasard, Modèles en direct), effets et colorimétrie non destructifs par angle et master, caméras Blackmagic (panneau Iris…Pivot, Réseau ou Bluetooth), l'iPhone comme caméra, sorties live (écran relié et flux TV : le programme seul ; « à l'antenne » ; le programme rendu en MP4 après une prise) ; voix/MCP `multicam.*` (2026-11-25) ; Capture › Multicam (tuile après Vidéo : l'appareil filme pour le Mac, son flux dans l'aperçu) et sa lampe rouge « à l'antenne » qui respire (26 nov.) — `FAIT` (L0–L8) ; Vision plus tard
+- R-380 — Prises › Matériel : un appareil MIDI externe (synthé ou effet) posé et peint sur la Timeline, ses CC envoyés et reçus (2026-11-25) — `FAIT` (fonctions PZ-09 à PZ-13 du parcours `06_effets.md`)
 - R-374 — Clavier d'une piste : split, layer et multitimbral en barres sur un clavier, Fondu de jointure, Vélocité, commandes `keyboard.bar.*` (2026-11-25) — `FAIT` (fonctions KB-01 à KB-06 du parcours `08_instruments_slicer.md`)
 - R-372 — Quantise audio par les repères warp, correction de hauteur « à la Melodyne », effets de pitch (vibrato, rampe) (2026-11-25) — `FAIT` (fonctions TN-01 à TN-06 du parcours `08_instruments_slicer.md`)
 - R-370 — Gel automatique et invisible des pistes, pour soulager le processeur, avec indicateur de charge (2026-11-25) — `FAIT` (PE-30 à PE-38 du parcours `10_persistance_plateformes.md`)
 - R-373 — Console (Mixage) : rack d'effets vertical à droite de la tranche, potards rotatifs d'une couleur, écran du compresseur, faces repliées (2026-11-25) — `FAIT` (fonctions MX-76 à MX-80 du parcours `05_console.md`)
 - R-369 — Montage gigogne : une Scène incluse dans une autre Scène (cellule ou clip), et des clips groupés en clip-bloc dans la Timeline (2026-11-25) — `FAIT` (fonctions PI-15 à PI-20 du parcours `02_clips_edition.md`)
 - R-368 — Prises › Instr. et Effets : poser un synthé ou un effet sur une piste et le peindre sur une zone de la Timeline (2026-11-25) — `FAIT` (fonctions PZ-01 à PZ-08 du parcours `06_effets.md`)
+- R-379 — Synchro MIDI entrée et sortie : horloge, départ/arrêt (Start, Continue, position) par appareil avec décalage, eVe maître ou esclave d'un appareil (tempo suivi, départs suivis), Réglages › Avancé › Synchro, commandes `midi_sync.*` (2026-11-25) — `FAIT`
 - R-367 — Multipiste : effets temps réel Stutter / Ratchet, Hachoir, Chaos et Vitesse (rampes, avec ou sans time stretch) (2026-11-25) — `FAIT` (FX-19 à FX-25, CT-21, MX-70 ; moteur audio installé avec celui de R-370)
 - R-366 — Presets de tranche par parties : sauver avec un nom, charger tout / effets / routage / E/S (2026-11-25) — `ATTENTE UTILISATEUR`
 - R-365 — Charger un preset de tranche à la volée : depuis un widget du projet ou une Follow Action (2026-11-25) — `FAIT`

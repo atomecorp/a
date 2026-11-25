@@ -111,7 +111,7 @@ const TRANSPORT = {
     'transport.tempo': command('Set the tempo (BPM), from start_seconds as a ramp when ramp is set; remove deletes a tempo change.', { tempo: num('', { exclusiveMinimum: 0 }), start_seconds: num('', { minimum: 0 }), ramp: bool(), remove: bool(), beats_per_bar: int('', { minimum: 1 }), beat_unit: int('', { minimum: 1 }) }),
     'quantization.set': command('Set the project\'s grid (quantization of launches and takes).', { quantization: grid }, ['quantization']),
     'metronome.set': command('Set the metronome: enabled, pre_roll_bars, volume, accent, sound, output, record_only (at least one).', { enabled: bool(), pre_roll_bars: int('', { minimum: 0 }), volume: num('', { minimum: 0, maximum: 1 }), accent: bool(), sound: { type: 'string', enum: ['beep', 'wood', 'clave', 'bell'] }, output: destination, record_only: bool() }),
-    'view.set': command('Set what the project view shows: snap (Aimant), x_zoom, y_zoom, headers_open, unfolded_track_id, folded_groups, console, inspector, scene_filter, focus…', { snap: grid, x_zoom: num(), y_zoom: num(), headers_open: bool(), unfolded_track_id: str(), folded_groups: { type: 'array' }, console: obj(), inspector: bool(), scene_filter: str(), scene_id: sceneId, fx_track_id: str(), focus: obj() })
+    'view.set': command('Set what the project view shows: snap (Aimant), x_zoom, y_zoom, headers_open, unfolded_track_id, folded_groups, console, inspector, scene_filter, regie (the Multicam control room), focus…', { snap: grid, x_zoom: num(), y_zoom: num(), headers_open: bool(), unfolded_track_id: str(), folded_groups: { type: 'array' }, console: obj(), inspector: bool(), scene_filter: str(), regie: bool(), scene_id: sceneId, fx_track_id: str(), focus: obj() })
 };
 
 const AUTOMATION = {
@@ -141,5 +141,29 @@ const KEYBOARD = {
     'keyboard.bar.remove': command('Take a bar off a track\'s Clavier.', bar, ['track_id', 'endpoint_id'])
 };
 
+// The Multicam (R-375, eVe kernel multicam.js): a group track whose angles are content tracks, each a camera; the edit is
+// cut points (picture `video`, sound `audio`, both `av`), never written into the media; timeline.read shows timeline.multicam.
+const multicamId = str('The multicam (timeline.multicam[].multicam_id).');
+const angleId = str('An angle: the track_id of one of its cameras.');
+const part = { type: 'string', enum: ['audio', 'av', 'video'], description: 'What passes: the sound (audio), both (av) or the picture (video).' };
+const transition = obj('A passage instead of a cut: {kind: fade|black|slide|blur|zoom|star|glitch|color|iris, seconds}.');
+const span = { from_seconds: num('', { minimum: 0 }), to_seconds: num('', { minimum: 0 }) };
+const MULTICAM = {
+    'multicam.create': command('Make a group track a Multicam track, its angles the given tracks (cameras laid at origin_seconds).', { multicam_id: multicamId, track_id: trackId, angles: { type: 'array', items: { type: 'object', properties: { track_id: trackId, origin_seconds: num('', { minimum: 0 }) } } } }, ['multicam_id', 'track_id']),
+    'multicam.remove': command('Make a Multicam track a plain group again; its edit is gone.', { multicam_id: multicamId }, ['multicam_id']),
+    'multicam.angle.add': command('Add a camera\'s track as an angle of a Multicam.', { multicam_id: multicamId, track_id: trackId, origin_seconds: num('', { minimum: 0 }) }, ['multicam_id', 'track_id']),
+    'multicam.angle.remove': command('Take an angle out of a Multicam (its track stays; its cuts go).', { multicam_id: multicamId, track_id: trackId }, ['multicam_id', 'track_id']),
+    'multicam.angle.snap': command('Lay an angle back in sync (the magnet): its clips carried back by their offset.', { multicam_id: multicamId, track_id: trackId }, ['multicam_id', 'track_id']),
+    'multicam.angle.camera': command('Link an angle to its Blackmagic camera and keep its settings: camera {transport: network|bluetooth, address, camera_id, values {iris {f_number}, focus {normalised}, iso {iso}, shutter {degrees}, white_balance {kelvin, tint}, nd {stops}, lift {luma}, gamma {luma}, gain {luma}, saturation {saturation}, contrast {pivot, adjust}}}; null unlinks it.', { multicam_id: multicamId, track_id: trackId, camera: { type: ['object', 'null'] } }, ['multicam_id', 'track_id']),
+    'multicam.cut': command('Cut to an angle at time_seconds (picture, sound or both), with a transition when given.', { multicam_id: multicamId, cut_id: str(), time_seconds: num('', { minimum: 0 }), angle_id: angleId, part, transition }, ['multicam_id', 'cut_id', 'time_seconds', 'angle_id', 'part']),
+    'multicam.cut.update': command('Move a cut, give it to another angle, or set its transition (null: a plain cut).', { multicam_id: multicamId, cut_id: str(), time_seconds: num('', { minimum: 0 }), angle_id: angleId, transition: { type: ['object', 'null'] } }, ['multicam_id', 'cut_id']),
+    'multicam.cut.remove': command('Erase a cut; the angle before goes on.', { multicam_id: multicamId, cut_id: str() }, ['multicam_id', 'cut_id']),
+    'multicam.paint': command('Paint a span with one angle (the Stabilo): it covers the span exclusively, the angle after comes back at its end.', { multicam_id: multicamId, angle_id: angleId, part, ...span, cut_id: str(), end_cut_id: str() }, ['multicam_id', 'angle_id', 'part', 'from_seconds', 'to_seconds']),
+    'multicam.pip': command('Inset an angle over the program over a span (picture in picture).', { multicam_id: multicamId, pip_id: str(), angle_id: angleId, ...span }, ['multicam_id', 'pip_id', 'angle_id', 'from_seconds', 'to_seconds']),
+    'multicam.pip.remove': command('Remove a picture in picture.', { multicam_id: multicamId, pip_id: str() }, ['multicam_id', 'pip_id']),
+    'multicam.cuts.replace': command('Replace every cut of a part with the given cuts [{cut_id, time_seconds, angle_id}] (an automatic edit).', { multicam_id: multicamId, part, cuts: { type: 'array', items: { type: 'object', properties: { cut_id: str(), time_seconds: num('', { minimum: 0 }), angle_id: angleId } } } }, ['multicam_id', 'part', 'cuts']),
+    'multicam.auto': command('Set Auto: mode manual|sound|rhythm|scenes|random|models, its rule idle_seconds, shot_min, shot_max, template; null back to Manuel.', { multicam_id: multicamId, auto: { type: ['object', 'null'] } }, ['multicam_id'])
+};
+
 /** Each edit verb's command, by verb. */
-export const TIMELINE_EDIT_COMMANDS = Object.freeze({ ...CLIP, ...SCENE_CELL, ...STRUCTURE, ...TRANSPORT, ...AUTOMATION, ...KEYBOARD });
+export const TIMELINE_EDIT_COMMANDS = Object.freeze({ ...CLIP, ...SCENE_CELL, ...STRUCTURE, ...TRANSPORT, ...AUTOMATION, ...KEYBOARD, ...MULTICAM });

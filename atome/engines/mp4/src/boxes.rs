@@ -183,3 +183,33 @@ pub fn opus(channels: u8, pre_skip: u16, input_rate: u32) -> Vec<u8> {
     entry.child(dops.finish());
     entry.finish()
 }
+
+/// One MPEG-4 descriptor (ISO/IEC 14496-1 §8.3.3): its tag, its length on one byte (every descriptor here is short)
+/// and its body.
+fn descriptor(tag: u8, body: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![tag, body.len() as u8];
+    bytes.extend_from_slice(body);
+    bytes
+}
+
+/// `mp4a`: an AAC sample entry, its `esds` carrying the AudioSpecificConfig (ISO/IEC 14496-3 §1.6.2.1) the encoder
+/// was set with, its channels and its rate (at most 65 535 Hz, the entry's 16.16 field).
+pub fn mp4a(audio_specific_config: &[u8], channels: u16, rate: u32, bitrate: u32) -> Vec<u8> {
+    // DecoderConfigDescriptor: Audio ISO/IEC 14496-3 (0x40), an audio stream (0x15), no buffer size, the bitrate.
+    let mut config = vec![0x40, 0x15, 0, 0, 0];
+    config.extend_from_slice(&bitrate.to_be_bytes());
+    config.extend_from_slice(&bitrate.to_be_bytes());
+    config.extend_from_slice(&descriptor(0x05, audio_specific_config));
+    // ES_Descriptor: ES id 0, no flags, the decoder configuration, the sync layer's predefined MP4 setting (2).
+    let mut es = vec![0, 0, 0];
+    es.extend_from_slice(&descriptor(0x04, &config));
+    es.extend_from_slice(&descriptor(0x06, &[0x02]));
+    let mut esds = BoxWriter::full(b"esds", 0, 0);
+    esds.raw(&descriptor(0x03, &es));
+    let mut entry = BoxWriter::new(b"mp4a");
+    entry.zeros(6).u16(1).zeros(8);
+    entry.u16(channels).u16(16).u16(0).u16(0);
+    entry.u32(rate.min(u32::from(u16::MAX)) << 16);
+    entry.child(esds.finish());
+    entry.finish()
+}

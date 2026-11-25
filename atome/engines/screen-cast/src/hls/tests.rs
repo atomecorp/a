@@ -2,7 +2,7 @@ use super::mp4::{DELTA_SAMPLE_FLAGS, KEY_SAMPLE_FLAGS};
 use super::*;
 
 /// A minimal AVCDecoderConfigurationRecord: version 1, High profile, level 3.1, 4-byte lengths, one SPS, one PPS.
-fn avcc() -> Vec<u8> {
+pub(super) fn avcc() -> Vec<u8> {
     vec![
         1, 0x64, 0x00, 0x1f, 0xff, 0xe1, 0x00, 0x04, 0x67, 0x64, 0x00, 0x1f, 0x01, 0x00, 0x02,
         0x68, 0xee,
@@ -15,12 +15,13 @@ fn stream() -> LiveStream {
         height: 360,
         timescale: 90_000,
         avcc: avcc(),
+        sound_rate: None,
     })
     .expect("valid config")
 }
 
 /// A frame at `index` of a 30 fps stream (its time rounded down to the microsecond), a key frame every `gop` frames.
-fn frame(index: i64, gop: i64) -> Sample {
+pub(super) fn frame(index: i64, gop: i64) -> Sample {
     let byte = (index % 251) as u8;
     Sample {
         data: vec![0, 0, 0, 3, 0x65, byte, byte],
@@ -30,14 +31,14 @@ fn frame(index: i64, gop: i64) -> Sample {
     }
 }
 
-struct Mp4Box<'a> {
-    kind: [u8; 4],
-    body: &'a [u8],
-    start: usize,
+pub(super) struct Mp4Box<'a> {
+    pub kind: [u8; 4],
+    pub body: &'a [u8],
+    pub start: usize,
 }
 
 /// The boxes laid one after another in `bytes`, each size checked against what remains.
-fn walk(bytes: &[u8], base: usize) -> Vec<Mp4Box<'_>> {
+pub(super) fn walk(bytes: &[u8], base: usize) -> Vec<Mp4Box<'_>> {
     let mut boxes = Vec::new();
     let mut at = 0;
     while at < bytes.len() {
@@ -57,21 +58,21 @@ fn walk(bytes: &[u8], base: usize) -> Vec<Mp4Box<'_>> {
     boxes
 }
 
-fn find<'a>(boxes: &'a [Mp4Box<'a>], kind: &[u8; 4]) -> &'a Mp4Box<'a> {
+pub(super) fn find<'a>(boxes: &'a [Mp4Box<'a>], kind: &[u8; 4]) -> &'a Mp4Box<'a> {
     boxes
         .iter()
         .find(|found| &found.kind == kind)
         .unwrap_or_else(|| panic!("no {}", String::from_utf8_lossy(kind)))
 }
 
-fn kinds(boxes: &[Mp4Box]) -> Vec<String> {
+pub(super) fn kinds(boxes: &[Mp4Box]) -> Vec<String> {
     boxes
         .iter()
         .map(|found| String::from_utf8_lossy(&found.kind).into_owned())
         .collect()
 }
 
-fn be32(bytes: &[u8], at: usize) -> u32 {
+pub(super) fn be32(bytes: &[u8], at: usize) -> u32 {
     u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap())
 }
 
@@ -249,6 +250,7 @@ fn a_configuration_without_an_avc_record_is_refused() {
         height: 360,
         timescale: 90_000,
         avcc: vec![0, 1, 2],
+        sound_rate: None,
     });
     assert_eq!(refused.err(), Some(HlsError::InvalidConfig("avcc")));
 }

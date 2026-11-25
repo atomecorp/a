@@ -11,7 +11,7 @@ use atome_mix_graph::direct_render::{DirectRender, LIVE_RING_FRAMES};
 use atome_mix_graph::dsp_module::StoredAsset;
 use atome_mix_graph::round_trip;
 use atome_mix_graph::{MixGraph, Program, StripLevel};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -39,8 +39,16 @@ pub(crate) fn note_input_quantum(frames: usize) {
     INPUT_QUANTUM.store(frames, Ordering::Relaxed);
 }
 
+// The rate of the started output, which the direct path renders at (0 before a start).
+static OUTPUT_RATE: AtomicU32 = AtomicU32::new(0);
+
+pub(crate) fn output_rate() -> Option<u32> {
+    Some(OUTPUT_RATE.load(Ordering::Acquire)).filter(|rate| *rate > 0)
+}
+
 // A started backend's direct path: an empty graph and the render its device callback owns.
 pub(crate) fn install(sample_rate: u32) -> SharedDirect {
+    OUTPUT_RATE.store(sample_rate, Ordering::Release);
     let graph = MixGraph::with_live_capacity(sample_rate, LIVE_RING_FRAMES);
     let render = Arc::new(Mutex::new(DirectRender::new(
         graph.effect_builder().into_effect(),

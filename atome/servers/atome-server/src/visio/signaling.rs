@@ -70,9 +70,13 @@ impl Visio {
         // In a CB room the peer is its pseudonym of the channel (its id and every frame's), kept apart from those it
         // blocked or who blocked it (lot L3).
         let cb = state::cb_room(&room_id);
+        // In a room of the account's own devices each connection is a peer of its own (`<account>~<connection>`).
+        let devices = state::devices_room_owner(&room_id).is_some();
         let shown = if cb {
             self.cb_handle_on(&room_id, &caller.user, caller.live)
                 .ok_or("Access denied")?
+        } else if devices {
+            format!("{}~{}", caller.user, caller.live)
         } else {
             caller.user.clone()
         };
@@ -97,7 +101,7 @@ impl Visio {
             {
                 held
             } else {
-                let id = if cb {
+                let id = if cb || devices {
                     shown.clone()
                 } else {
                     seat.peer_id.clone().unwrap_or_else(|| caller.user.clone())
@@ -140,8 +144,10 @@ impl Visio {
                 }
             }
             let user = room.peers[&peer_id].shown.clone();
+            // `self_peer_id`: the peer this connection is in the room (a device of the account's own devices' room knows
+            // itself among them: the Multicam's « à l'antenne », R-375 L8).
             let fields = json!({ "room_id": room_id, "rtpCapabilities": shapes::rtp_capabilities(&room.router),
-                "existingProducers": existing, "participants": participants });
+                "existingProducers": existing, "participants": participants, "self_peer_id": user });
             let joined =
                 json!({ "type": "participantJoined", "peer_user_id": user, "username": null });
             (fields, state.notify_room(&room_id, &joined, Some(&peer_id)))

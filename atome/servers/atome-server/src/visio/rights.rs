@@ -86,6 +86,9 @@ impl Visio {
         if super::state::cb_room(room_id) {
             return Ok(!user.is_empty() && self.cb_handle_on(room_id, user, live).is_some());
         }
+        if let Some(owner) = super::state::devices_room_owner(room_id) {
+            return Ok(!user.is_empty() && owner == user);
+        }
         self.can_join(user, room_id, device_key).await
     }
 

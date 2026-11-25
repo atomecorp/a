@@ -71,7 +71,9 @@ const EDIT_VERBS = [
     'clip.slip', 'clip.edge', 'clip.gain', 'clip.source', 'clip.output', 'clip.velocity', 'clip.transition', 'clip.sound.link',
     'marker.add', 'marker.update', 'marker.remove', 'section.move', 'track.move', 'scene.layout', 'cells.defaults.set',
     // A track's Clavier (user, 25 Nov. 2026): its sounds split and layered over a keyboard.
-    'keyboard.bar.add', 'keyboard.bar.edge', 'keyboard.bar.set', 'keyboard.bar.remove'
+    'keyboard.bar.add', 'keyboard.bar.edge', 'keyboard.bar.set', 'keyboard.bar.remove',
+    // The Multicam (R-375): its angles, its cut points, its Stabilo, its PiP, Auto, its cameras.
+    'multicam.create', 'multicam.remove', 'multicam.angle.add', 'multicam.angle.remove', 'multicam.angle.snap', 'multicam.angle.camera', 'multicam.cut', 'multicam.cut.update', 'multicam.cut.remove', 'multicam.paint', 'multicam.pip', 'multicam.pip.remove', 'multicam.cuts.replace', 'multicam.auto'
 ];
 
 /** Write verbs applied through `applyGroupTimelineOperation`, with their command contract. */
@@ -169,6 +171,22 @@ export const TIMELINE_TOOL_SCHEMAS = Object.freeze({
         media_atome_ids: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } } }, ['track_id', 'media_atome_ids']),
     // A project's media, as the rail's Médias shows them (R-357): listed by kind, joined with no clip, replaced in every clip
     // playing them by another of the same kind (same place and length), deleted with their clips.
+    // The outside devices (R-380, Prises › Matériel): listed, laid on a track, a control learned from what it sends.
+    'hardware.list': closed({}),
+    'hardware.place': closed({ group_id: groupId, device: { ...id, description: 'A device of hardware.list: its key or its name.' },
+        track_id: { ...id, description: 'The track it engages on (a zone); omitted: a new track (a synth plays it).' },
+        start_seconds: { type: 'number', minimum: 0 }, end_seconds: { type: 'number', minimum: 0 } }, ['device']),
+    'hardware.learn': closed({ group_id: groupId, track_id: id, module_id: id }, ['track_id']),
+    // The Multicam live (R-375 L8): the Régie's effect of the upper zones (or « latch », switched), a camera's setting
+    // sent to it and kept on its angle, this device's camera shared with the account's Multicam (a second call stops),
+    // and the « à l'antenne » signal between the account's devices (peer: the device on air, '' none).
+    'multicam.regie.effect': closed({ effect: { ...id, description: 'fade, slide, star, blur, pip, zoom, glitch, color, black, iris, or latch (switched).' } }, ['effect']),
+    'multicam.camera.set': closed({ group_id: groupId, track_id: { ...id, description: 'The angle\'s track.' },
+        name: { type: 'string', enum: ['iris', 'focus', 'iso', 'shutter', 'white_balance', 'nd', 'lift', 'gamma', 'gain', 'saturation', 'contrast'] },
+        values: { type: 'object', description: 'The setting\'s values: iris {f_number}, focus {normalised 0–1}, iso {iso}, shutter {degrees}, white_balance {kelvin, tint}, nd {stops}, lift/gamma/gain {luma}, saturation {saturation}, contrast {pivot, adjust}.' } },
+        ['track_id', 'name', 'values']),
+    'multicam.camera.share': closed({}),
+    'multicam.on_air': closed({ peer: { type: 'string' } }, ['peer']),
     'media.list': closed({ project_id: id, types: { type: 'array', items: { type: 'string', enum: ['audio', 'video', 'image', 'midi'] } } }),
     'media.add': closed({ project_id: id, media_atome_ids: { type: 'array', minItems: 1, items: id } }, ['media_atome_ids']),
     'media.replace': closed({ project_id: id, media_ids: { type: 'array', minItems: 1, items: id }, by_media_atome_id: id }, ['media_ids', 'by_media_atome_id']),

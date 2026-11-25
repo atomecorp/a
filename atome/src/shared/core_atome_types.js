@@ -19,6 +19,7 @@ import { MUSIC_OPERATION_TYPE } from './music_operation_contract.js';
 import { LIFE_PROFILE_FILING_TYPE, LIFE_PROFILE_TYPE } from './life_profile_contract.js';
 import { AUDIO_EFFECT_TYPE, AUDIO_RACK_TYPE } from './audio_fx_contract.js';
 import { INSTRUMENT_TYPE } from './instrument_contract.js';
+import { HARDWARE_DEVICE_TYPE } from './hardware_device_contract.js';
 import { AUDIO_SLICE_TYPE, SAMPLE_EDIT_TYPE } from './sample_edit_contract.js';
 import { HTML_PAGE_TYPE } from './html_page_contract.js';
 import { CONTROL_TYPE } from './control_contract.js';
@@ -33,7 +34,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(APPLE_MUSIC_OPERATION_TYPE),
     defineType(MUSIC_OPERATION_TYPE),
     defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(SHOPPING_LIST_TYPE), defineType(CONTACT_INVITATION_TYPE), defineType(LIBRARY_WORK_TYPE), defineType(MEDIA_LIST_TYPE), defineType(ITEM_LIST_TYPE), defineType(LIST_RECEIPT_TYPE), defineType(SHARE_KEY_TYPE),
-    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE), defineType(LIFE_PROFILE_FILING_TYPE), defineType(AUDIO_RACK_TYPE), defineType(AUDIO_EFFECT_TYPE), defineType(INSTRUMENT_TYPE),
+    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE), defineType(LIFE_PROFILE_FILING_TYPE), defineType(AUDIO_RACK_TYPE), defineType(AUDIO_EFFECT_TYPE), defineType(INSTRUMENT_TYPE), defineType(HARDWARE_DEVICE_TYPE),
     defineType(SAMPLE_EDIT_TYPE), defineType(AUDIO_SLICE_TYPE), ...PERSONAL_IMPORT_TYPES.map(defineType), ...APP_ATOME_TYPES.map(defineType),
     ...CORE_SCENE_ATOME_TYPES,
     defineType(HTML_PAGE_TYPE),

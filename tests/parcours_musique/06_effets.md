@@ -136,6 +136,20 @@ Sonde Rust du catalogue : `cargo test -p atome-dsp` (catalog, catalog_js, ports_
   jamais en simple lecture. *Origine* R-368 (Q7, `project_view_timeline_fx.js#followZones`).
 - **PZ-08** · P1 · W — Une piste vide sous les pistes recevant un effet : une piste est créée d'abord, l'effet peint
   dessus. *Origine* R-368.
+- **PZ-09** · P0 · W — Prises › Matériel : « Branchés » (les appareils des ports MIDI, leurs ports réunis sous un nom, le
+  profil d'un modèle courant donnant ses contrôles) puis « Les miens » ; chaque ligne ses liaisons ⇢ ⇠ ♪ et son voyant
+  allumé quand l'appareil envoie. *Origine* R-380 (maquette 7, `project_view_timeline_prises_panel.js`).
+- **PZ-10** · P0 · W — Un synthé externe porté sous les pistes : sa piste, notes de tous les ports vers son port sur son
+  canal, son module `hardware` (contrôles rappelés), son retour audio en direct s'il a un Retour ; gardé dans « Les miens ».
+  *Origine* R-380 (maquette 8, `project_view_timeline_prise_drop.js`).
+- **PZ-11** · P0 · W — Un appareil porté sur une piste : sa zone ; à l'entrée son interrupteur CC et son programme, à la
+  sortie leur valeur off ; ses courbes de contrôles envoyées en CC, CC 14 bits, NRPN ou SysEx ; tête arrêtée = l'état sous
+  elle. *Origine* R-380 (maquette 10, `runtime_hardware.js`).
+- **PZ-12** · P1 · W — Matériel déplié : Liaison (Sortie, Reçoit, Canal, Retour, Envoi), Prog., ses contrôles ; « Appr. »
+  allumé, le prochain contrôle bougé sur l'appareil devient un des siens ; ce que l'appareil envoie bouge ses valeurs et,
+  Rec allumé pendant la lecture, écrit leur courbe. *Origine* R-380 (maquette 9, `project_view_timeline_fx_hardware.js`).
+- **PZ-13** · P1 · W — Par la voix : `hardware.list`, `hardware.place` (un appareil sur une piste ou sous les pistes),
+  `hardware.learn`. *Origine* R-380 (`timeline_hardware_actions.js`).
 
 ## À compléter
 

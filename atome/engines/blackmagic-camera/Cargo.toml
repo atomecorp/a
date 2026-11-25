@@ -1,0 +1,16 @@
+[package]
+name = "atome-blackmagic-camera"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Blackmagic camera control of atome/eVe's Multicam (R-375 L6): each setting of a camera's panel as a Camera Control Protocol packet (Bluetooth LE) or a REST request (network)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

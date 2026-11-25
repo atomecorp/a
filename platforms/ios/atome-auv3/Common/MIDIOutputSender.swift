@@ -64,7 +64,7 @@ final class MIDIOutputSender {
 
     // One message to one destination (`destinationId`), else to every CoreMIDI destination (the page's broadcast
     // output), at its instant (`delayMs` from now, CoreMIDI holding it until then).
-    private func sendMIDIMessage(data: [UInt8], port: MIDIPortRef, destinationId: String?, delayMs: Double) {
+    private func sendMIDIMessage(data: [UInt8], port: MIDIPortRef, destinationId: String? = nil, delayMs: Double = 0) {
         guard !data.isEmpty && data.count <= 3 else {
             logger.error("Invalid MIDI data length: \(data.count)")
             return

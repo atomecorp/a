@@ -108,6 +108,15 @@ impl Host for TauriHost {
         }
     }
 
+    // The engine this process links (atome-audio-engine), its output copied for a television (R-248).
+    fn cast_sound(&self) -> Result<local::CastSound, String> {
+        let mut tap = atome_audio_engine::cast_tap::open()?;
+        Ok(local::CastSound {
+            rate: tap.rate(),
+            read: Box::new(move |out| tap.read(out)),
+        })
+    }
+
     fn routes(&self) -> Router<AppState> {
         Router::new()
             .route("/api/eve/mail/sync", post(mail::eve_mail_sync_handler))

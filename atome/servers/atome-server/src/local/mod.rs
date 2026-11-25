@@ -146,6 +146,16 @@ pub trait Host: Send + Sync + 'static {
     ) -> Option<futures_util::future::BoxFuture<'static, JsonValue>>;
     /// The routes this host alone serves, merged before the application's files.
     fn routes(&self) -> Router<AppState>;
+    /// The audio engine's output, copied while a view is streamed to a television (R-248): the host links the engine,
+    /// the server does not.
+    fn cast_sound(&self) -> Result<CastSound, String>;
+}
+
+/// The engine's stereo output as a live stream reads it (`local_screens_stream.rs`): its rate, and `read`, which
+/// appends the interleaved frames heard since the previous read. Dropped, the copy stops.
+pub struct CastSound {
+    pub rate: u32,
+    pub read: Box<dyn FnMut(&mut Vec<f32>) + Send>,
 }
 
 static HOST: OnceLock<Arc<dyn Host>> = OnceLock::new();

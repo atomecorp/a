@@ -219,7 +219,10 @@ mod tests {
         assert!((beat_at(&map, 5.0).0 - 8.0).abs() < 1e-12);
         for beat in [0.0, 1.0, 2.5, 5.9, 6.0, 8.0] {
             let seconds = seconds_at_beat(&map, beat);
-            assert!((beat_at(&map, seconds).0 - beat).abs() < 1e-9, "beat {beat}");
+            assert!(
+                (beat_at(&map, seconds).0 - beat).abs() < 1e-9,
+                "beat {beat}"
+            );
         }
     }
 

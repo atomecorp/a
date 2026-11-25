@@ -239,7 +239,11 @@ fn fx_mask(c: vec4<f32>, s: u32, local: vec2<f32>) -> vec4<f32> {
     let half_size = max(vec2<f32>(p0.w, p1.x) * 0.5, vec2<f32>(0.0001));
     let q = (local - p0.yz) / half_size;
     var r = length(q);
-    if (p0.x > 0.5) {
+    if (p0.x > 1.5) {
+        // Star: five points, one up; its edge runs from the tips (1) to the hollows (0.45) by the angle.
+        let turn = fract((atan2(q.y, q.x) + 1.5707964) * 0.7957747);
+        r = r / mix(0.45, 1.0, abs(turn * 2.0 - 1.0));
+    } else if (p0.x > 0.5) {
         r = max(abs(q.x), abs(q.y));
     }
     var keep = 1.0 - smoothstep(1.0 - max(p1.y, 0.0001), 1.0, r);

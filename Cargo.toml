@@ -14,6 +14,7 @@ members = [
     "atome/engines/atome-usd",
     "atome/engines/audio-engine",
     "atome/engines/audio-kernels",
+    "atome/engines/blackmagic-camera",
     "atome/engines/interchange",
     "atome/engines/js-values",
     "atome/engines/lpproj-import",

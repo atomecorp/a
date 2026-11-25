@@ -1,9 +1,11 @@
 // A view streamed live to a screen (R-248, `/ws/api` `screens` family): the page encodes the view in H.264 (WebCodecs,
 // format `avc`) and hands each frame here; atome-screen-cast's `hls` cuts them into fMP4 segments, served on the
 // screens' share (`/stream/{token}/index.m3u8`, `init.mp4`, `{seq}.m4s`). The screen is sent the playlist's URL once
-// the first segment exists, as any media (`play_on`).
+// the first segment exists, as any media (`play_on`). The sound is the audio engine's output, copied by the host
+// (`Host::cast_sound`) and handed to the stream after each picture, in AAC (user, 25 Nov. 2026: « le son… tout passe »);
+// where the stream cannot carry it, `stream_start` says why in `sound`.
 //
-// Actions: `stream_start` ({ target, credentials?, width, height, avcc (base64), title } → { stream_id, url }),
+// Actions: `stream_start` ({ target, credentials?, width, height, avcc (base64), title } → { stream_id, url, sound }),
 // `stream_chunk` ({ stream_id, data (base64), key, pts_us, duration_us } → { stream_id, segment, playing }),
 // `stream_stop` ({ stream_id } → { stream_id, stopped }). Two live streams at most; a new one for the same screen
 // replaces the old; a stream stopped, or left without a frame, is dropped after 30 s.
@@ -32,6 +34,8 @@ struct LiveCast {
     url: String,
     title: String,
     stream: LiveStream,
+    sound: Option<CastSound>,
+    heard: Vec<f32>,
     announced: bool,
     stopped: bool,
     touched: Instant,
@@ -76,13 +80,14 @@ pub(super) async fn stream_start(data: &JsonValue) -> Result<JsonValue, String> 
     if target.kind == ScreenKind::Airplay {
         airplay_credentials(&credentials)?;
     }
-    let stream = LiveStream::new(StreamConfig {
+    let config = StreamConfig {
         width: dimension(data, "width")?,
         height: dimension(data, "height")?,
         timescale: 90_000,
         avcc: base64_field(data, "avcc")?,
-    })
-    .map_err(|error| error.code())?;
+        sound_rate: None,
+    };
+    let (stream, sound, sound_state) = with_sound(config)?;
     let port = share_port().await?;
     let token = token();
     let url = format!("http://{local}:{port}/stream/{token}/index.m3u8");
@@ -100,11 +105,33 @@ pub(super) async fn stream_start(data: &JsonValue) -> Result<JsonValue, String> 
         url: url.clone(),
         title: data["title"].as_str().unwrap_or_default().to_string(),
         stream,
+        sound,
+        heard: Vec::new(),
         announced: false,
         stopped: false,
         touched: Instant::now(),
     });
-    Ok(json!({ "stream_id": token, "url": url }))
+    Ok(json!({ "stream_id": token, "url": url, "sound": sound_state }))
+}
+
+/// The stream with the engine's sound; without it where the host cannot copy it or the device cannot encode it, the
+/// reason given back (`sound`: `"on"`, else its code).
+fn with_sound(config: StreamConfig) -> Result<(LiveStream, Option<CastSound>, String), String> {
+    let sound = host().cast_sound();
+    let refused = match sound {
+        Ok(sound) => {
+            match LiveStream::new(StreamConfig {
+                sound_rate: Some(sound.rate),
+                ..config.clone()
+            }) {
+                Ok(stream) => return Ok((stream, Some(sound), "on".into())),
+                Err(error) => error.code(),
+            }
+        }
+        Err(code) => code,
+    };
+    let stream = LiveStream::new(config).map_err(|error| error.code())?;
+    Ok((stream, None, refused))
 }
 
 fn stream_id(data: &JsonValue) -> Result<&str, String> {
@@ -131,6 +158,13 @@ pub(super) async fn stream_chunk(data: &JsonValue) -> Result<JsonValue, String> 
             .find(|cast| cast.token == id)
             .ok_or("stream_not_found")?;
         let segment = cast.stream.push(sample).map_err(|error| error.code())?;
+        if let Some(sound) = cast.sound.as_mut() {
+            cast.heard.clear();
+            (sound.read)(&mut cast.heard);
+            cast.stream
+                .push_sound(&cast.heard)
+                .map_err(|error| error.code())?;
+        }
         cast.touched = Instant::now();
         // The screen is sent the URL once a segment exists to play.
         let announce = (segment.is_some() && !cast.announced).then(|| {
@@ -165,6 +199,7 @@ pub(super) async fn stream_stop(data: &JsonValue) -> Result<JsonValue, String> {
             .find(|cast| cast.token == id)
             .ok_or("stream_not_found")?;
         cast.stream.finish();
+        cast.sound = None;
         cast.stopped = true;
         cast.touched = Instant::now();
         let target_id = cast.target.id.clone();

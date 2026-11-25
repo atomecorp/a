@@ -260,6 +260,14 @@ export function layEditPiece(channels: Array<any>, length: number, gain: number,
  */
 export function lpprojRead(store: Uint8Array, resources: string, name: string): string;
 
+export function midiBeatAt(starts: Float64Array, bpms: Float64Array, ramps: Uint8Array, seconds: number): number;
+
+export function midiClockTempo(arrivals_ms: Float64Array): number;
+
+export function midiClockTicks(starts: Float64Array, bpms: Float64Array, ramps: Uint8Array, from: number, to: number): Float64Array;
+
+export function midiSecondsAtBeat(starts: Float64Array, bpms: Float64Array, ramps: Uint8Array, beat: number): number;
+
 export function nearestZeroCrossing(channels: Array<any>, frame: number, radius: number): number;
 
 export function readEditWindow(channels: Array<any>, start: number, end: number, dc: boolean, reverse: boolean): Array<any>;
@@ -297,19 +305,6 @@ export interface InitOutput {
     readonly interchangeReadDawproject: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly interchangeReadFcpxml: (a: number, b: number) => [number, number, number, number];
     readonly interchangeReadOtio: (a: number, b: number) => [number, number, number, number];
-    readonly calendarExpand: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
-    readonly calendarOccurrenceEnd: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly calendarRangeOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
-    readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
-    readonly lpprojRead: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly voiceconversation_inputDb: (a: number) => number;
-    readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
-    readonly voiceconversation_new: () => number;
-    readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
-    readonly voiceconversation_reset: (a: number) => void;
-    readonly voiceconversation_setRecording: (a: number, b: number) => void;
-    readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
-    readonly voiceconversation_takeRecording: (a: number) => any;
     readonly clickBar: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly compileSliceMotif: (a: any, b: any, c: number, d: number, e: number) => [number, number, number];
     readonly cutTakes: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -333,9 +328,38 @@ export interface InitOutput {
     readonly wavInfo: (a: any) => [number, number, number];
     readonly waveformOfSound: (a: number, b: number, c: number) => [number, number, number];
     readonly waveformPeaks: (a: any, b: number) => [number, number, number, number];
+    readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
+    readonly lpprojRead: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly voiceconversation_inputDb: (a: number) => number;
+    readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
+    readonly voiceconversation_new: () => number;
+    readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
+    readonly voiceconversation_reset: (a: number) => void;
+    readonly voiceconversation_setRecording: (a: number, b: number) => void;
+    readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
+    readonly voiceconversation_takeRecording: (a: number) => any;
+    readonly audio_instrument: (a: any) => [number, number, number];
+    readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly audio_mix_apply: (a: any) => [number, number, number];
+    readonly audio_mix_asset_load_capture: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly audio_mix_asset_load_impulse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly audio_mix_asset_unload: (a: number, b: number) => [number, number];
+    readonly audio_mix_cut_tail: (a: number, b: number) => [number, number];
+    readonly audio_mix_levels: () => [number, number, number];
+    readonly audio_mix_live_push: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly audio_mix_module_state: (a: number, b: number) => [number, number, number];
+    readonly audio_mix_readings: () => [number, number, number];
+    readonly audio_mix_record_drain: (a: number, b: number) => [number, number, number];
+    readonly audio_mix_record_release: (a: number, b: number) => [number, number];
+    readonly audio_mix_record_start: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly audio_mix_record_stop: (a: number, b: number) => [number, number];
     readonly audio_render_pcm: (a: any) => [number, number, number, number];
     readonly audio_render_proxy: (a: any, b: number) => [number, number, number, number];
     readonly audio_render_proxy_mp4: (a: any, b: number, c: any, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly midiBeatAt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
+    readonly midiClockTempo: (a: number, b: number) => number;
+    readonly midiClockTicks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly midiSecondsAtBeat: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
     readonly audio_destroy_clip: (a: number, b: number) => [number, number];
     readonly audio_hold: (a: number, b: number, c: number) => [number, number, number];
     readonly audio_init: () => [number, number];
@@ -354,21 +378,9 @@ export interface InitOutput {
     readonly audio_stop: (a: number, b: number) => [number, number];
     readonly audio_stop_instance: (a: number, b: number) => [number, number];
     readonly audio_wake: () => [number, number, number];
-    readonly audio_instrument: (a: any) => [number, number, number];
-    readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly audio_mix_apply: (a: any) => [number, number, number];
-    readonly audio_mix_asset_load_capture: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly audio_mix_asset_load_impulse: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly audio_mix_asset_unload: (a: number, b: number) => [number, number];
-    readonly audio_mix_cut_tail: (a: number, b: number) => [number, number];
-    readonly audio_mix_levels: () => [number, number, number];
-    readonly audio_mix_live_push: (a: number, b: number, c: number, d: number, e: number) => [number, number];
-    readonly audio_mix_module_state: (a: number, b: number) => [number, number, number];
-    readonly audio_mix_readings: () => [number, number, number];
-    readonly audio_mix_record_drain: (a: number, b: number) => [number, number, number];
-    readonly audio_mix_record_release: (a: number, b: number) => [number, number];
-    readonly audio_mix_record_start: (a: number, b: number, c: number, d: number) => [number, number, number];
-    readonly audio_mix_record_stop: (a: number, b: number) => [number, number];
+    readonly calendarExpand: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+    readonly calendarOccurrenceEnd: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly calendarRangeOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h89f5e65ccaea8674: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

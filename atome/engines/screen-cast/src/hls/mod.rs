@@ -6,10 +6,17 @@
 //! (one second). Each finished segment is one fragmented MP4 fragment (`moof` + `mdat`), the init segment (`ftyp` +
 //! `moov`) holding the decoder configuration once. The media playlist keeps the latest segments only, like any live
 //! stream, until `finish` closes it.
+//!
+//! Its sound, when asked (`sound_rate`), is the engine's output in AAC (`aac`), on the video's own clock: the frames
+//! handed by `push_sound` fill the sound track up to the latest picture's time, silence filling what the engine did not
+//! give (an engine at rest) and what it gave too far ahead being dropped, so the two tracks never drift apart.
 
+pub mod aac;
 mod mp4;
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, target_vendor = "apple"))]
+mod tests_sound;
 
 use std::collections::VecDeque;
 
@@ -29,6 +36,31 @@ pub struct StreamConfig {
     pub timescale: u32,
     /// The AVCDecoderConfigurationRecord, as WebCodecs gives it in `decoderConfig.description`.
     pub avcc: Vec<u8>,
+    /// The rate of the stereo sound handed by `push_sound`; None for a stream without sound.
+    pub sound_rate: Option<u32>,
+}
+
+/// What the init segment declares of the sound track.
+pub(crate) struct SoundConfig {
+    pub rate: u32,
+    pub audio_specific_config: Vec<u8>,
+    pub bitrate: u32,
+}
+
+/// How far the sound may lag the picture before silence fills it (a tenth of a second), and lead it before it is
+/// dropped (a fifth), as fractions of a second.
+const SOUND_LAG_FRACTION: u64 = 10;
+const SOUND_LEAD_FRACTION: u64 = 5;
+
+/// The sound track: its encoder, the frames it was given since the stream's first picture, and its packets waiting
+/// for the open segment.
+struct Sound {
+    encoder: aac::AacEncoder,
+    rate: u32,
+    frames_fed: u64,
+    packets: Vec<Vec<u8>>,
+    /// Decode time of the first waiting packet, on the sound's clock (its rate).
+    next_tick: u64,
 }
 
 /// One encoded frame, as WebCodecs gives it with the format `avc`.
@@ -53,6 +85,8 @@ pub enum HlsError {
     NonIncreasingTime,
     /// The stream was finished.
     Ended,
+    /// The sound's encoder refused (its code).
+    Sound(String),
 }
 
 impl HlsError {
@@ -65,6 +99,7 @@ impl HlsError {
             HlsError::NonPositiveDuration => "stream_sample_duration_invalid".into(),
             HlsError::NonIncreasingTime => "stream_sample_time_not_increasing".into(),
             HlsError::Ended => "stream_ended".into(),
+            HlsError::Sound(code) => format!("stream_sound:{code}"),
         }
     }
 }
@@ -103,6 +138,7 @@ pub struct LiveStream {
     next_sequence: u32,
     longest_ticks: u64,
     ended: bool,
+    sound: Option<Sound>,
 }
 
 impl LiveStream {
@@ -124,7 +160,29 @@ impl LiveStream {
         if config.avcc[4] & 0x03 != 3 {
             return Err(HlsError::InvalidConfig("avcc_length_size"));
         }
-        let init = mp4::init_segment(&config);
+        let sound = config
+            .sound_rate
+            .map(|rate| {
+                let audio_specific_config =
+                    aac::audio_specific_config(rate).map_err(HlsError::Sound)?;
+                let encoder = aac::AacEncoder::new(rate).map_err(HlsError::Sound)?;
+                Ok::<_, HlsError>((
+                    SoundConfig {
+                        rate,
+                        audio_specific_config: audio_specific_config.to_vec(),
+                        bitrate: aac::AAC_BITRATE,
+                    },
+                    Sound {
+                        encoder,
+                        rate,
+                        frames_fed: 0,
+                        packets: Vec::new(),
+                        next_tick: 0,
+                    },
+                ))
+            })
+            .transpose()?;
+        let init = mp4::init_segment(&config, sound.as_ref().map(|(declared, _)| declared));
         Ok(Self {
             config,
             init,
@@ -135,7 +193,37 @@ impl LiveStream {
             next_sequence: 1,
             longest_ticks: 0,
             ended: false,
+            sound: sound.map(|(_, sound)| sound),
         })
+    }
+
+    /// Adds the engine's stereo output (interleaved), heard since the previous call. Before the first picture it is
+    /// dropped: the sound starts with the picture. It fills the sound track up to the latest picture's time.
+    pub fn push_sound(&mut self, interleaved: &[f32]) -> Result<(), HlsError> {
+        let Some(last_tick) = self.last_tick.filter(|_| !self.ended) else {
+            return Ok(());
+        };
+        let timescale = u64::from(self.config.timescale);
+        let Some(sound) = self.sound.as_mut() else {
+            return Ok(());
+        };
+        let rate = u64::from(sound.rate);
+        let due = last_tick * rate / timescale;
+        let given = (interleaved.len() / 2) as u64;
+        // Too far ahead of the picture (the two clocks drifting): only what fits the lead is kept.
+        let room = (due + rate / SOUND_LEAD_FRACTION).saturating_sub(sound.frames_fed);
+        let kept = given.min(room) as usize;
+        let mut frames = interleaved[..kept * 2].to_vec();
+        // Too far behind (an engine at rest gives nothing): silence up to the lag.
+        let reached = sound.frames_fed + kept as u64;
+        let floor = due.saturating_sub(rate / SOUND_LAG_FRACTION);
+        if reached < floor {
+            frames.resize(frames.len() + ((floor - reached) * 2) as usize, 0.0);
+        }
+        sound.frames_fed += (frames.len() / 2) as u64;
+        let packets = sound.encoder.encode(&frames).map_err(HlsError::Sound)?;
+        sound.packets.extend(packets);
+        Ok(())
     }
 
     fn ticks(&self, microseconds: i64) -> u64 {
@@ -203,10 +291,39 @@ impl LiveStream {
         self.next_sequence += 1;
         let duration_ticks = end_tick - base;
         self.longest_ticks = self.longest_ticks.max(duration_ticks);
+        let mut runs = vec![mp4::TrackRun {
+            track_id: mp4::TRACK_ID,
+            base_decode_time: base,
+            samples,
+        }];
+        let sound_packets = self
+            .sound
+            .as_mut()
+            .map(|sound| (sound.next_tick, std::mem::take(&mut sound.packets)));
+        if let Some((next_tick, packets)) = &sound_packets
+            && !packets.is_empty()
+        {
+            runs.push(mp4::TrackRun {
+                track_id: mp4::SOUND_TRACK_ID,
+                base_decode_time: *next_tick,
+                samples: packets
+                    .iter()
+                    .map(|packet| mp4::FragmentSample {
+                        data: packet,
+                        duration: aac::AAC_FRAMES as u32,
+                        key: true,
+                    })
+                    .collect(),
+            });
+        }
+        let bytes = mp4::fragment(sequence, &runs);
+        if let (Some(sound), Some((_, packets))) = (self.sound.as_mut(), &sound_packets) {
+            sound.next_tick += (packets.len() * aac::AAC_FRAMES) as u64;
+        }
         self.segments.push_back(Segment {
             sequence,
             duration_ticks,
-            bytes: mp4::fragment(sequence, base, &samples),
+            bytes,
         });
         while self.segments.len() > KEPT_SEGMENTS {
             self.segments.pop_front();

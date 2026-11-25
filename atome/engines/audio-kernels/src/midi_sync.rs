@@ -42,7 +42,9 @@ pub fn clock_ticks(map: &[TempoPoint], from: f64, to: f64) -> Vec<f64> {
     if !(from.is_finite() && to.is_finite()) || to <= from {
         return Vec::new();
     }
-    let first = (beat_at(map, from.max(0.0)).0 * TICKS_PER_BEAT - 1e-9).ceil().max(0.0);
+    let first = (beat_at(map, from.max(0.0)).0 * TICKS_PER_BEAT - 1e-9)
+        .ceil()
+        .max(0.0);
     let mut ticks = Vec::new();
     let mut tick = first;
     loop {
@@ -113,7 +115,9 @@ mod tests {
     #[test]
     fn a_jittered_clock_reads_its_tempo() {
         let arrivals: Vec<f64> = (0..96)
-            .map(|index| f64::from(index) * 2500.0 / 121.8 + if index % 2 == 0 { 0.8 } else { -0.8 })
+            .map(|index| {
+                f64::from(index) * 2500.0 / 121.8 + if index % 2 == 0 { 0.8 } else { -0.8 }
+            })
             .collect();
         assert!((clock_tempo(&arrivals) - 121.8).abs() < 0.05);
         assert_eq!(clock_tempo(&[0.0, 20.0]), 0.0);

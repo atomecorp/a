@@ -10,7 +10,7 @@ const TWINNED_VERBS = [
     'read', 'batch', 'transfer', 'transport.toggle', 'clip.place', 'transport.play', 'transport.stop',
     'transport.list.toggle', 'transport.list.stop', 'mix.param.set', 'history.undo', 'history.redo',
     'activity.list', 'activity.mix', 'activity.timeline', 'record.start', 'record.stop', 'record.cancel',
-    'operation', 'cells.trigger', 'cells.stop', 'cells.command', 'transport.command', 'record.prepare', 'performance.delete', 'realign', 'midi.export', 'midi.freeze', 'audio.export', 'track.import', 'media.list', 'media.add', 'media.replace', 'media.delete', 'mix.preset.list', 'mix.preset.save', 'mix.preset.load', 'mix.preset.reset',
+    'operation', 'cells.trigger', 'cells.stop', 'cells.command', 'transport.command', 'record.prepare', 'performance.delete', 'realign', 'midi.export', 'midi.freeze', 'audio.export', 'track.import', 'hardware.list', 'hardware.place', 'hardware.learn', 'multicam.regie.effect', 'multicam.camera.set', 'multicam.camera.share', 'media.list', 'media.add', 'media.replace', 'media.delete', 'mix.preset.list', 'mix.preset.save', 'mix.preset.load', 'mix.preset.reset',
     ...TIMELINE_LIVE_VERBS, ...TIMELINE_WRITE_VERBS
 ];
 

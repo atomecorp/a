@@ -197,6 +197,9 @@ export const executeRemoteCommand = async (detail = {}) => {
     return wireResult(result);
 };
 
+// Signals between the account's own devices, never announced as orders.
+const SILENT_SIGNALS = new Set([EXTERNAL_DISPLAY_RELAY_TOOL, 'ui.timeline.multicam.on_air']);
+
 export const installRemoteCommandExecutor = () => {
     if (typeof window === 'undefined' || state.executorInstalled) return false;
     state.executorInstalled = true;
@@ -211,8 +214,8 @@ export const installRemoteCommandExecutor = () => {
                 result = { ok: false, error: error?.message || String(error) };
             }
             // Shown on this device: an order from elsewhere is never silent (§11.1). A remote follower's link is no
-            // order: the follow it carries was announced.
-            if (detail.toolId !== EXTERNAL_DISPLAY_RELAY_TOOL) window.dispatchEvent(new CustomEvent('squirrel:remote-command-received', {
+            // order: the follow it carries was announced; nor is the Multicam's « à l'antenne » (a tally light, R-375 L8).
+            if (!SILENT_SIGNALS.has(detail.toolId)) window.dispatchEvent(new CustomEvent('squirrel:remote-command-received', {
                 detail: { toolId: detail.toolId, fromLabel: detail.fromLabel, fromSurfaceId: detail.fromSurfaceId, ok: result?.ok !== false }
             }));
             await send('command-result', { command_id: detail.commandId, result });

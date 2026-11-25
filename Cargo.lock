@@ -657,6 +657,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atome-blackmagic-camera"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "atome-calendar"
 version = "0.1.0"
 dependencies = [
@@ -831,6 +838,8 @@ dependencies = [
  "hkdf",
  "mdns-sd",
  "num-bigint 0.4.8",
+ "objc2-audio-toolbox",
+ "objc2-core-audio-types",
  "plist",
  "rand 0.8.8",
  "serde",
@@ -858,6 +867,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "atome-audio-kernels",
+ "atome-blackmagic-camera",
  "atome-calendar",
  "atome-health-ref",
  "atome-js-values",

@@ -124,6 +124,7 @@ pub fn render(left: &mut [f32], right: &mut [f32], host_ns: i64) -> usize {
     {
         direct.mix_planar(&mut left[..frames], &mut right[..frames]);
     }
+    super::cast_tap::write_planar(&left[..frames], &right[..frames]);
     note_output_quantum(host_ns, frames, popped);
     popped
 }

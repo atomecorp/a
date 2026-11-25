@@ -68,6 +68,15 @@ impl Host for IosHost {
     fn routes(&self) -> axum::Router<AppState> {
         axum::Router::new()
     }
+
+    // The engine this process links (atome-audio-engine), its output copied for a television (R-248).
+    fn cast_sound(&self) -> Result<local::CastSound, String> {
+        let mut tap = atome_audio_engine::cast_tap::open()?;
+        Ok(local::CastSound {
+            rate: tap.rate(),
+            read: Box::new(move |out| tap.read(out)),
+        })
+    }
 }
 
 struct Server {

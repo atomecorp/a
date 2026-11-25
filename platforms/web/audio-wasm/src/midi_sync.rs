@@ -4,7 +4,13 @@ use atome_audio_kernels::midi_sync;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = midiClockTicks)]
-pub fn midi_clock_ticks(starts: &[f64], bpms: &[f64], ramps: &[u8], from: f64, to: f64) -> Vec<f64> {
+pub fn midi_clock_ticks(
+    starts: &[f64],
+    bpms: &[f64],
+    ramps: &[u8],
+    from: f64,
+    to: f64,
+) -> Vec<f64> {
     midi_sync::clock_ticks(&midi_sync::tempo_map(starts, bpms, ramps), from, to)
 }
 

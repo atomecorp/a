@@ -8,6 +8,8 @@ mod aux_outputs;
 // Windows, the driver the engine plays through (WASAPI exclusive or ASIO); `driver` / `driver_set`.
 pub mod audio_driver;
 mod calibration;
+// The engine's output copied for a television while a view is cast (R-248).
+pub mod cast_tap;
 pub mod commands;
 pub mod direct;
 mod engine_thread;

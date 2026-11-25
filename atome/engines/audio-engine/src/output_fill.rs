@@ -3,6 +3,7 @@
 // channel pairs, and which rendered frame plays at which host instant.
 
 use super::aux_outputs::{self, SharedAuxConsumers};
+use super::cast_tap;
 use super::direct::{self, SharedDirect};
 use super::scheduled_backend::{
     CHANNELS, FIFO_FRAMES, SharedConsumer, generation, note_output_quantum_of,
@@ -68,6 +69,7 @@ impl OutputFill {
                 direct.mix_interleaved(data, device_channels);
             }
         }
+        cast_tap::write_interleaved(data, device_channels);
         aux_outputs::write_aux(
             &self.aux,
             data,

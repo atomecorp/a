@@ -1082,6 +1082,74 @@ export function lpprojRead(store, resources, name) {
 }
 
 /**
+ * @param {Float64Array} starts
+ * @param {Float64Array} bpms
+ * @param {Uint8Array} ramps
+ * @param {number} seconds
+ * @returns {number}
+ */
+export function midiBeatAt(starts, bpms, ramps, seconds) {
+    const ptr0 = passArrayF64ToWasm0(starts, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(bpms, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(ramps, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.midiBeatAt(ptr0, len0, ptr1, len1, ptr2, len2, seconds);
+    return ret;
+}
+
+/**
+ * @param {Float64Array} arrivals_ms
+ * @returns {number}
+ */
+export function midiClockTempo(arrivals_ms) {
+    const ptr0 = passArrayF64ToWasm0(arrivals_ms, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.midiClockTempo(ptr0, len0);
+    return ret;
+}
+
+/**
+ * @param {Float64Array} starts
+ * @param {Float64Array} bpms
+ * @param {Uint8Array} ramps
+ * @param {number} from
+ * @param {number} to
+ * @returns {Float64Array}
+ */
+export function midiClockTicks(starts, bpms, ramps, from, to) {
+    const ptr0 = passArrayF64ToWasm0(starts, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(bpms, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(ramps, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.midiClockTicks(ptr0, len0, ptr1, len1, ptr2, len2, from, to);
+    var v4 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v4;
+}
+
+/**
+ * @param {Float64Array} starts
+ * @param {Float64Array} bpms
+ * @param {Uint8Array} ramps
+ * @param {number} beat
+ * @returns {number}
+ */
+export function midiSecondsAtBeat(starts, bpms, ramps, beat) {
+    const ptr0 = passArrayF64ToWasm0(starts, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(bpms, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(ramps, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.midiSecondsAtBeat(ptr0, len0, ptr1, len1, ptr2, len2, beat);
+    return ret;
+}
+
+/**
  * @param {Array<any>} channels
  * @param {number} frame
  * @param {number} radius
@@ -1683,7 +1751,7 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 280, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 287, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h89f5e65ccaea8674);
             return ret;
         },

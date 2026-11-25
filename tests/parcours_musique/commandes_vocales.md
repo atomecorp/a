@@ -150,6 +150,7 @@ Les identifiants de tranche ont la forme `<track_id>:<lane>` (audio, video, midi
 | `mix.input.set` | Entrée de la tranche : piste, entrée audio en direct, ou instrument (et sa sortie). | `strip_id`, `input{kind, device_id, instrument_id, output}` | IN |
 | `mix.group.create` · `.join` · `.leave` · `.dissolve` | Groupes de tranches : créer (tranche maître et membres), rejoindre, quitter, dissoudre. | `group_id`, `master_strip_id`, `member_strip_ids` / `strip_id` | Groupes de la console |
 | `mix.preset.list` · `.save` · `.load` · `.reset` | Préréglages de tranche du compte : lister (par lane, avec leurs parties), enregistrer sous un nom les parties choisies (effets, routage, E/S ; un nom déjà pris est remplacé), appliquer les parties demandées (un lot ; VOL, PAN, Opacité restent), remettre une tranche à neuf. | `strip_id`, `name`, `preset_id`, `parts?`, `lane?` | Rail du Mixage › Enreg., Charger |
+| `hardware.list` · `.place` · `.learn` | Appareils MIDI externes (Prises › Matériel) : lister les branchés et les miens (liaisons, contrôles), poser un appareil (clé ou nom) sur une piste pour sa zone ou sous les pistes (un synthé : sa piste), apprendre le prochain contrôle bougé sur l'appareil d'une piste. | `device`, `track_id?`, `start_seconds?`, `end_seconds?`, `module_id?` | Prises › Matériel, panneau de l'appareil › Appr. |
 | `clip.output` *(par `operation` seulement)* | Envoie un seul clip vers un bus ou une piste. `null` le rend à sa piste. | `clip_id`, `destination` | Rail du clip › Sortie |
 | `clip.gain` *(par `operation` seulement)* | Gain d'un clip en dB (0 le retire). | `clip_id`, `gain_db` | Rail du clip › Gain |
 
@@ -294,3 +295,23 @@ Elles ne passaient que par `eve.timeline.operation` ; chacune a maintenant son o
 | Commande | Ce qu'elle fait | Entrées | Geste |
 |---|---|---|---|
 | `clip.tune` | Fait jouer au clip le rendu de ses notes déplacées (hauteur, dérive, formant), l'original gardé ; `clear` rend l'original. | `clip_id`, `atome_id`, `notes`, `formant_semitones` ou `clear` | Vue Notes, rail Hauteur |
+
+## 16. Synchro MIDI (R-379)
+
+| Commande | Ce qu'elle fait | Entrées | Geste |
+|---|---|---|---|
+| `midi_sync.status` | Qui donne le tempo (Interne ou un appareil), s'il suit ses départs, le tempo reçu, et pour chaque appareil de sortie ce qu'il reçoit. | — | Réglages › Avancé › Synchro |
+| `midi_sync.master` | « Synchronise-toi sur la Digitakt » : un appareil d'entrée devient maître (vide : Interne) ; `follow` : ses départs et arrêts pilotent le transport. | `port`, `follow` | rouleau « Maître », case « Suivre ses départs » |
+| `midi_sync.output` | Ce qu'un appareil de sortie reçoit : horloge, départ et arrêt, décalage (0 à 89 ms). | `name`, `clock`, `transport`, `offset_ms` | accordéon de l'appareil |
+
+## 17. Multicam (R-375)
+
+Les verbes d'édition (`ui.timeline.multicam.create`, `.remove`, `.angle.add`, `.angle.remove`, `.angle.snap`, `.angle.camera`,
+`.cut`, `.cut.update`, `.cut.remove`, `.paint`, `.pip`, `.pip.remove`, `.cuts.replace`, `.auto`) passent par `ui.timeline.operation`
+et ont chacun leur outil typé (`timeline_edit_commands.js`). Outils en direct :
+
+| Commande | Ce qu'elle fait | Entrées | Geste |
+|---|---|---|---|
+| `multicam.regie.effect` | Choisit l'effet des zones du haut F1–F3 de la Régie (fade, slide, star, blur, pip, zoom, glitch, color, black, iris), ou bascule le Latch (`latch`). | `effect` | panneau des effets live |
+| `multicam.camera.set` | Règle une caméra Blackmagic d'un angle (iris, focus, iso, shutter, white_balance, nd, lift, gamma, gain, saturation, contrast) : valeurs vérifiées par le protocole, gardées sur l'angle, envoyées par sa liaison. | `track_id`, `name`, `values` | panneau Caméra (M4) |
+| `multicam.camera.share` | Cet appareil (l'iPhone) donne sa caméra et son micro à la Multicam du compte ; un second appel arrête. | — | Capture › Multicam (sur le Dashboard la scène s'ouvre, l'aperçu montre le flux partagé, lampe rouge à l'antenne) |

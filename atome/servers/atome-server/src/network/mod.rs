@@ -4,6 +4,8 @@
 //! http_status? }`. OSC goes out only from the apps' local server (Tauri, iOS), which reaches the
 //! person's own network (`local()`); the central server refuses it (`network_osc_local_only`,
 //! ws_api/network_ops.rs) and sends HTTP to public addresses only.
+//! `protocol: "camera"` drives a Blackmagic camera of the Multicam (camera.rs, R-375 L6).
+pub mod camera;
 pub mod http;
 pub mod osc;
 
@@ -42,14 +44,14 @@ pub fn reply(message: &JsonValue, outcome: Result<Option<u16>, String>) -> JsonV
 /// The message's checked action and protocol.
 pub fn protocol_of(message: &JsonValue) -> Result<&str, String> {
     let action = message.get("action").and_then(JsonValue::as_str);
-    if action != Some("send") {
+    if action != Some("send") && !camera::is_encode(message) {
         return Err(format!(
             "network_action_unknown:{}",
             action.unwrap_or_default()
         ));
     }
     match message.get("protocol").and_then(JsonValue::as_str) {
-        Some(protocol @ ("osc" | "http")) => Ok(protocol),
+        Some(protocol @ ("osc" | "http" | camera::PROTOCOL)) => Ok(protocol),
         other => Err(format!(
             "network_protocol_unknown:{}",
             other.unwrap_or_default()
@@ -65,6 +67,7 @@ async fn send_local(message: &JsonValue) -> Result<Option<u16>, String> {
             let args = osc::args_of(message.get("value").unwrap_or(&JsonValue::Null))?;
             osc::send(&target, &args).await.map(|_| None)
         }
+        camera::PROTOCOL => camera::send_rest(message).await,
         _ => {
             let request = http::HttpRequest::from_message(message)?;
             request.send(crate::tls::http_client()?).await.map(Some)
@@ -75,6 +78,9 @@ async fn send_local(message: &JsonValue) -> Result<Option<u16>, String> {
 /// The local server's answer (an authenticated person on their own device): OSC over UDP and
 /// HTTP to any address of their network or of the world.
 pub async fn local(message: &JsonValue) -> JsonValue {
+    if camera::is_encode(message) {
+        return camera::encode_reply(message);
+    }
     reply(message, send_local(message).await)
 }
 

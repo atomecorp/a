@@ -367,3 +367,20 @@ pub fn chroma_key_spill(c: [f32; 3], key: (f32, f32), spill: f32) -> [f32; 3] {
     let g = (y - LUMA[0] * r - LUMA[2] * b) / LUMA[1];
     clamp01([r, g, b])
 }
+
+/// How much of a pixel a mask keeps (`fx_mask` of media_fx_grade.wgsl): `shape`
+/// 0 ellipse, 1 rectangle, 2 a five-pointed star with one point up (its edge from
+/// the tips to the hollows at 0.45), `q` the pixel relative to the mask's centre
+/// divided by its half size.
+pub fn mask_keep(shape: f32, q: (f32, f32), feather: f32, invert: bool) -> f32 {
+    let mut r = q.0.hypot(q.1);
+    if shape > 1.5 {
+        let turn = ((q.1.atan2(q.0) + std::f32::consts::FRAC_PI_2) * 5.0 / std::f32::consts::TAU)
+            .rem_euclid(1.0);
+        r /= 0.45 + 0.55 * (turn * 2.0 - 1.0).abs();
+    } else if shape > 0.5 {
+        r = q.0.abs().max(q.1.abs());
+    }
+    let keep = 1.0 - smoothstep(1.0 - feather.max(1e-4), 1.0, r);
+    if invert { 1.0 - keep } else { keep }
+}

@@ -10,7 +10,7 @@ import Foundation
 import CoreMIDI
 
 /// The ports listed to the page: `inputs` and `outputs`, each `["id": …, "name": …]`.
-typealias MIDIPortList = [String: [[String: String]]]
+public typealias MIDIPortList = [String: [[String: String]]]
 import os.log
 
 /// CoreMIDI capability adapter (native-bridge exception of module 05) for the app

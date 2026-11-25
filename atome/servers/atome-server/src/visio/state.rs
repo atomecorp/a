@@ -124,6 +124,14 @@ pub(super) fn cb_room(room_id: &str) -> bool {
     room_id.starts_with("cbr_")
 }
 
+/// The account whose own devices meet in `room_id` (`devices:<account>`, R-375: an iPhone filming for the Mac's
+/// Multicam), or None for another room. Only that account enters it, each of its devices a peer of its own.
+pub(super) fn devices_room_owner(room_id: &str) -> Option<&str> {
+    room_id
+        .strip_prefix("devices:")
+        .filter(|owner| !owner.is_empty())
+}
+
 /// The room and peer a connection is in (`_visioRoomId`, `_visioPeerId`), and the serial of the
 /// peer it made: a later connection of the same account taking that peer's id leaves this one no
 /// hold on it.
