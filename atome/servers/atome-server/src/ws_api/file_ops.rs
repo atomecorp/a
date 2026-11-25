@@ -196,8 +196,13 @@ async fn completed(
         size,
         file_path: Some(relative_path.clone()),
     };
-    let central = connection.ws_api.sessions.central();
-    storage::register(central, &file_name, user, registration).await?;
+    // A file whose record is refused (an atome of another account named) is not kept, as on the HTTP route.
+    if let Err(error) =
+        storage::register(&connection.ws_api.router, &file_name, user, registration).await
+    {
+        let _ = tokio::fs::remove_file(&file_path).await;
+        return Err(error);
+    }
     let snapshot = if js::truthy(message.get("debug")) {
         store.downloads_snapshot(user)
     } else {

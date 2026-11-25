@@ -6,6 +6,7 @@
 //! one uniform block both shaders read (`media_fx_stack.wgsl`). An effect left
 //! at its identity is dropped here, so it costs the GPU nothing.
 
+pub mod clock;
 pub mod grade;
 pub mod image_draw;
 pub mod lut;
@@ -74,6 +75,7 @@ pub struct AtomeMediaFxPlugin;
 impl Plugin for AtomeMediaFxPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<lut::AtomeLutLibrary>();
+        clock::build_media_fx_clock(app);
         image_draw::build_image_fx_renderer(app);
     }
 }

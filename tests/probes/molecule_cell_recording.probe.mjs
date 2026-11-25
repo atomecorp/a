@@ -18,13 +18,16 @@ const timelineWithScene = () => {
 test('a cell take starts on the start step, ends on the end step and lands at the Scene start', async () => {
     let heard = 10000;
     const anchor = { render_start_frame: 10000, sample_rate: RATE, base_context_frame: 500, context: { currentTime: 0 } };
+    // The take's input is made ready before its start step is chosen (R-295 CEL-02).
+    const order = [];
     const player = {
-        gridFrame: async (quantum) => anchor.render_start_frame + Math.ceil((heard - anchor.render_start_frame) / (quantum * RATE)) * quantum * RATE,
+        gridFrame: async (quantum) => order.push('grid') && anchor.render_start_frame + Math.ceil((heard - anchor.render_start_frame) / (quantum * RATE)) * quantum * RATE,
         holdAnchor: () => {}, releaseAnchor: () => {}, anchorNow: () => ({ ...anchor }), heardFrame: () => heard
     };
     const calls = [];
     let started = null;
     const capture = {
+        prepare: async (options) => { order.push(`prepare:${options.track_id}:${options.source_kind}`); return { ok: true }; },
         start: async (options) => { started = options; return { capture_id: 'k' }; },
         finish: async (id, options) => { calls.push(options); return { ok: true, id }; }
     };
@@ -34,6 +37,7 @@ test('a cell take starts on the start step, ends on the end step and lands at th
     heard = 10000 + 3000;
     const result = await recorder.start({ timeline, sceneId: 'A', trackId: 't', capture });
     assert.equal(result.start_frame, 10000 + 24000, 'the useful start is the next beat of the grid');
+    assert.deepEqual(order, ['prepare:t:audio', 'grid'], 'the input is opened and measured before the start step is chosen');
     // The capture's mapping: the start step is heard as the Scene's first frame.
     const placed = placeExactTake({
         playback: started.playback, timelineRate: RATE, startFrame: started.timeline_start_frame, endFrame: started.timeline_end_frame,

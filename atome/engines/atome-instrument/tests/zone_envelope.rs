@@ -1,12 +1,15 @@
 // A zone's own envelope (a bank region's ampeg_*) shapes its voices instead of
-// the instrument's settings; a zone without one keeps the instrument's.
+// the instrument's settings; a zone without one keeps the instrument's. Its delay
+// holds the note silent first, its hold keeps the peak before the decay.
 
 mod support;
 use atome_instrument::{Keymap, NoteEvent, SampleData, Segment, Zone, ZoneEnvelope};
 use support::*;
 
 const SLOW: ZoneEnvelope = ZoneEnvelope {
+    delay_ms: 0.0,
     attack_ms: 89.0,
+    hold_ms: 0.0,
     decay_ms: 1.0,
     sustain: 1.0,
     release_ms: 89.0,
@@ -63,4 +66,36 @@ fn the_tail_covers_the_longest_zone_release() {
     });
     let sampler = sampler(zones, bank(data));
     assert_eq!(sampler.tail_frames(), 96_000);
+}
+
+#[test]
+fn a_zone_delay_and_hold_shape_its_voices() {
+    let data = vec![SampleData::mono(level(0.5, 1.0), RATE)];
+    let take = Segment::whole(0, data[0].frames(), 60);
+    let mut zone = Zone::new(60, 60, vec![take]);
+    // 100 ms silent (4 800 frames), 1 ms up, held 200 ms, then down to the sustain in 10 ms.
+    zone.envelope = Some(ZoneEnvelope {
+        delay_ms: 100.0,
+        attack_ms: 1.0,
+        hold_ms: 200.0,
+        decay_ms: 10.0,
+        sustain: 0.5,
+        release_ms: 89.0,
+    });
+    let mut sampler = sampler(vec![zone], bank(data));
+    let (left, _) = render(&mut sampler, 24_000, &[NoteEvent::note_on(0, 60, 1.0)]);
+    let peak = left[6_000].abs();
+    assert!(
+        left[..4_700].iter().all(|value| *value == 0.0),
+        "silent through the delay"
+    );
+    assert!(peak > 0.1, "sounds after the delay ({peak})");
+    assert!(
+        (left[14_000].abs() - peak).abs() < 1.0e-3,
+        "held at its peak"
+    );
+    assert!(
+        (left[20_000].abs() - 0.5 * peak).abs() < 0.01,
+        "at the sustain after the hold"
+    );
 }

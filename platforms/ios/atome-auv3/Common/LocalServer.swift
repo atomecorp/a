@@ -74,6 +74,10 @@ final class LocalServer {
 
     // One `/ws/api` frame answered as the page's socket would (the native controllers).
     func answer(_ frame: [String: Any]) -> [String: Any] {
+        // The page asks for its session as soon as it loads, while `start` may still be opening
+        // the vault on `queue`: answering then gave `local_server_not_started` and the person was
+        // shown the sign-in (R-295 défaut 46). A frame waits for the opening already under way.
+        queue.sync {}
         guard let data = try? JSONSerialization.data(withJSONObject: frame),
               let reply = String(data: data, encoding: .utf8).flatMap({ atome_ios_local_server_answer($0) }),
               let text = Self.take(reply),

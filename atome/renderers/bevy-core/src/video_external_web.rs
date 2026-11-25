@@ -15,14 +15,14 @@ use bevy::{
         },
         render_resource::{
             BindGroup, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
-            BindingType, BlendState, Buffer, BufferBindingType, BufferInitDescriptor, BufferUsages,
-            ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
-            Face, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
-            RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
-            SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-            TextureSampleType, TextureViewDimension, VertexFormat, VertexState, VertexStepMode,
+            BindingType, BlendState, BufferBindingType, ColorTargetState, ColorWrites,
+            CompareFunction, DepthBiasState, DepthStencilState, Face, FragmentState,
+            MultisampleState, PipelineCache, PrimitiveState, RenderPipelineDescriptor, Sampler,
+            SamplerBindingType, SamplerDescriptor, ShaderStages, SpecializedRenderPipeline,
+            SpecializedRenderPipelines, StencilFaceState, StencilState, TextureSampleType,
+            TextureViewDimension, VertexFormat, VertexState, VertexStepMode,
         },
-        renderer::RenderDevice,
+        renderer::{RenderDevice, RenderQueue},
         sync_world::{MainEntity, MainEntityHashMap},
         texture::GpuImage,
         view::{ExtractedView, RenderVisibleEntities},
@@ -33,16 +33,19 @@ use bevy::{
     },
 };
 use std::any::TypeId;
-use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
+    frame_uniforms::FrameUniforms,
     media_fx::{
-        image_draw::{MediaFxClock, MediaFxLutPlaceholder, resolve_lut},
-        lut::AtomeLutLibrary,
+        clock::MediaFxClock,
+        image_draw::MediaFxLutPlaceholder,
+        lut::{AtomeLutLibrary, resolve_lut},
         media_fx_shader_source, media_fx_uniform_bytes,
     },
-    types::{AtomeColorFilters, AtomeTransition},
     video_external_texture::{AtomeVideoExternalTexture, AtomeVideoFxFrame},
+    video_external_web_hooks::{
+        hidden_video_source_for_id, record_video_external_event, report_video_import_refused,
+    },
 };
 
 const VIDEO_EXTERNAL_SHADER: &str = include_str!("../assets/shaders/video_external.wgsl");
@@ -70,10 +73,11 @@ struct VideoExternalTexturePipeline {
 
 struct PreparedVideoExternalTextureBindGroup {
     _external_texture: wgpu::ExternalTexture,
-    _opacity_buffer: Buffer,
-    _fx_buffer: Buffer,
     bind_group: BindGroup,
 }
+
+#[derive(Resource, Default)]
+struct VideoExternalUniforms(FrameUniforms<MainEntity>);
 
 #[derive(Resource, Default)]
 struct PreparedVideoExternalTextureBindGroups(
@@ -87,33 +91,6 @@ type DrawVideoExternalTexture2d = (
     SetVideoExternalTextureBindGroup<2>,
     DrawMesh2d,
 );
-
-// VideoParams uniform order matches video_external.wgsl.
-fn video_params_bytes(
-    opacity: f32,
-    filters: &AtomeColorFilters,
-    transition: &AtomeTransition,
-) -> [u8; 48] {
-    let values: [f32; 12] = [
-        opacity.clamp(0.0, 1.0),
-        filters.brightness,
-        filters.contrast,
-        filters.saturate,
-        filters.grayscale,
-        filters.sepia,
-        filters.invert,
-        filters.hue,
-        transition.kind,
-        transition.progress,
-        transition.role,
-        transition.softness,
-    ];
-    let mut bytes = [0u8; 48];
-    for (index, value) in values.iter().enumerate() {
-        bytes[index * 4..index * 4 + 4].copy_from_slice(&value.to_ne_bytes());
-    }
-    bytes
-}
 
 pub fn build_web_external_texture_renderer(app: &mut App) {
     let shader = {
@@ -134,6 +111,7 @@ pub fn build_web_external_texture_renderer(app: &mut App) {
             .add_render_command::<Transparent2d, DrawVideoExternalTexture2d>()
             .init_resource::<SpecializedRenderPipelines<VideoExternalTexturePipeline>>()
             .init_resource::<PreparedVideoExternalTextureBindGroups>()
+            .init_resource::<VideoExternalUniforms>()
             .add_systems(
                 RenderStartup,
                 init_video_external_texture_pipeline.after(init_mesh_2d_pipeline),
@@ -299,6 +277,8 @@ impl SpecializedRenderPipeline for VideoExternalTexturePipeline {
 
 fn prepare_video_external_texture_bind_groups(
     render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+    mut uniforms: ResMut<VideoExternalUniforms>,
     pipeline: Res<VideoExternalTexturePipeline>,
     pipeline_cache: Res<PipelineCache>,
     gpu_images: Res<RenderAssets<GpuImage>>,
@@ -324,7 +304,7 @@ fn prepare_video_external_texture_bind_groups(
         if source.width() == 0 || source.height() == 0 {
             continue;
         }
-        let external_texture = render_device.wgpu_device().create_external_texture(
+        let imported = render_device.wgpu_device().try_create_external_texture(
             &wgpu::ExternalTextureDescriptor {
                 label: Some("atome_video_external_texture"),
                 source: Some(source),
@@ -338,14 +318,17 @@ fn prepare_video_external_texture_bind_groups(
                 sample_transform: IDENTITY_SAMPLE_TRANSFORM,
                 load_transform: IDENTITY_LOAD_TRANSFORM,
             },
-            &[],
         );
-        let params_uniform = video_params_bytes(video.opacity, &video.filters, &video.transition);
-        let opacity_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("atome_video_external_texture_params"),
-            contents: &params_uniform,
-            usage: BufferUsages::UNIFORM,
-        });
+        // A source the browser refuses (a decoder iOS took back) is skipped for this frame and
+        // reported; the rest of the scene keeps drawing (R-295 défaut 44).
+        let external_texture = match imported {
+            Ok(texture) => texture,
+            Err(error) => {
+                report_video_import_refused(&video.id, &error);
+                continue;
+            }
+        };
+        let params_uniform = video.params_bytes();
         let (lut_view, lut) = match frame.fx.as_ref() {
             Some((stack, _)) => resolve_lut(stack, &luts, &gpu_images, lut_placeholder),
             None => (&lut_placeholder.texture_view, None),
@@ -356,11 +339,13 @@ fn prepare_video_external_texture_bind_groups(
             }
             None => media_fx_uniform_bytes(None, [1.0, 1.0], video.uv_rect, clock.0, None),
         };
-        let fx_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("atome_video_media_fx_params"),
-            contents: &fx_bytes,
-            usage: BufferUsages::UNIFORM,
-        });
+        let buffers = uniforms.0.write(
+            &render_device,
+            &render_queue,
+            *main_entity,
+            "atome_video_external_texture_params",
+            &[&params_uniform, &fx_bytes],
+        );
         // Both masked and unmasked videos use the same bindings.
         let mask_image = video
             .mask_texture
@@ -381,7 +366,7 @@ fn prepare_video_external_texture_bind_groups(
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: opacity_buffer.as_entire_binding(),
+                    resource: buffers[0].as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -393,7 +378,7 @@ fn prepare_video_external_texture_bind_groups(
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
-                    resource: fx_buffer.as_entire_binding(),
+                    resource: buffers[1].as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
@@ -405,13 +390,12 @@ fn prepare_video_external_texture_bind_groups(
             *main_entity,
             PreparedVideoExternalTextureBindGroup {
                 _external_texture: external_texture,
-                _opacity_buffer: opacity_buffer,
-                _fx_buffer: fx_buffer,
                 bind_group,
             },
         );
         record_video_external_event("bevy.video.external.import", &video.id);
     }
+    uniforms.0.release_unwritten();
 }
 
 fn queue_video_external_textures(
@@ -511,42 +495,4 @@ fn clear_video_external_texture_bind_groups(
     mut prepared: ResMut<PreparedVideoExternalTextureBindGroups>,
 ) {
     prepared.0.clear();
-}
-
-fn hidden_video_source_for_id(id: &str) -> Option<wgpu::ExternalImageSource> {
-    let window = web_sys::window()?;
-    let lookup = js_sys::Reflect::get(
-        window.as_ref(),
-        &JsValue::from_str("__EVE_BEVY_VIDEO_SOURCE_FOR_ID__"),
-    )
-    .ok()?
-    .dyn_into::<js_sys::Function>()
-    .ok()?;
-    let source = lookup.call1(window.as_ref(), &JsValue::from_str(id)).ok()?;
-    if let Some(video) = source.dyn_ref::<web_sys::HtmlVideoElement>() {
-        return (video.ready_state() >= web_sys::HtmlMediaElement::HAVE_CURRENT_DATA)
-            .then(|| wgpu::ExternalImageSource::HTMLVideoElement(video.clone()));
-    }
-    source
-        .dyn_into::<web_sys::VideoFrame>()
-        .ok()
-        .map(wgpu::ExternalImageSource::VideoFrame)
-}
-
-fn record_video_external_event(name: &str, id: &str) {
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let Ok(callback) = js_sys::Reflect::get(
-        window.as_ref(),
-        &JsValue::from_str("__EVE_BEVY_PERF_RECORD__"),
-    ) else {
-        return;
-    };
-    let Ok(function) = callback.dyn_into::<js_sys::Function>() else {
-        return;
-    };
-    let detail = js_sys::Object::new();
-    let _ = js_sys::Reflect::set(&detail, &JsValue::from_str("id"), &JsValue::from_str(id));
-    let _ = function.call2(window.as_ref(), &JsValue::from_str(name), detail.as_ref());
 }

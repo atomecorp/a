@@ -2,18 +2,19 @@
 // vocoder core the harmonizer and the tuner embed: one analysis feeds several
 // voices, each with its own pitch and formant ratio. Peaks keep their
 // neighbours' phases (identity phase locking, Laroche–Dolson) and a cepstral
-// envelope keeps the formants where the voice had them, unless a formant
+// envelope drawn through the harmonic peaks (never averaged with the troughs
+// between them) keeps the formants where the voice had them, unless a formant
 // shift moves them on purpose.
 
 use crate::delay::DelayLine;
+use crate::formant::FormantEnvelope;
 use crate::stft::{Overlap, Stft, wrap_phase};
 use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit};
 use realfft::num_complex::Complex;
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::TAU;
 
 // The whitening gain is limited so a silent region is never boosted into noise.
 const ENVELOPE_GAIN_LIMIT: f32 = 2.76; // ±24 dB, natural log
-const ENVELOPE_FLOOR: f32 = 1.0e-3; // −60 dB under the frame's peak
 const PEAK_FLOOR: f32 = 1.0e-4; // −80 dB under the frame's peak
 
 struct ShiftVoice {
@@ -34,19 +35,24 @@ pub struct PitchShifter {
     frequency: Vec<f32>,
     peaks: Vec<usize>,
     region_start: Vec<usize>,
-    log_envelope: Vec<f32>,
-    cepstrum: Vec<f32>,
-    cepstrum_spectrum: Vec<Complex<f32>>,
-    lifter: usize,
+    envelope: FormantEnvelope,
     voices: Vec<ShiftVoice>,
 }
 
 impl PitchShifter {
     // Allocates everything for `voices` outputs fed by one analysis.
     pub fn new(sample_rate: f32, voices: usize) -> Self {
-        let stft = Stft::new(sample_rate);
+        Self::with_stft(sample_rate, voices, Stft::new(sample_rate))
+    }
+
+    // The same on frames of `size` samples (a power of two), for a pitch that moves faster than a live effect's
+    // frames follow (atome-audio-kernels tune.rs).
+    pub fn with_frame_size(sample_rate: f32, voices: usize, size: usize) -> Self {
+        Self::with_stft(sample_rate, voices, Stft::with_size(size))
+    }
+
+    fn with_stft(sample_rate: f32, voices: usize, stft: Stft) -> Self {
         let bins = stft.bins();
-        let size = stft.size();
         let voices = (0..voices)
             .map(|_| ShiftVoice {
                 ratio: 1.0,
@@ -65,11 +71,7 @@ impl PitchShifter {
             frequency: vec![0.0; bins],
             peaks: Vec::with_capacity(bins),
             region_start: Vec::with_capacity(bins + 1),
-            log_envelope: vec![0.0; bins],
-            cepstrum: vec![0.0; size],
-            cepstrum_spectrum: stft.spectrum(),
-            // Quefrencies under 1.5 ms: the formants, not the harmonics.
-            lifter: ((sample_rate * 0.0015) as usize).clamp(8, size / 4),
+            envelope: FormantEnvelope::new(sample_rate, &stft),
             voices,
             stft,
         }
@@ -138,7 +140,8 @@ impl PitchShifter {
             .iter()
             .any(|voice| voice.ratio != 1.0 || voice.formant != 1.0);
         if shaping && !self.peaks.is_empty() {
-            self.envelope(loudest);
+            self.envelope
+                .draw(&mut self.stft, &self.magnitude, &self.peaks, loudest);
         }
         let Self {
             stft,
@@ -147,7 +150,7 @@ impl PitchShifter {
             frequency,
             peaks,
             region_start,
-            log_envelope,
+            envelope,
             voices,
             ..
         } = self;
@@ -171,8 +174,8 @@ impl PitchShifter {
                     let target = target as usize;
                     let mut level = magnitude[k];
                     if shaped {
-                        let wanted = envelope_at(log_envelope, target as f32 / formant);
-                        let gain = (wanted - log_envelope[k])
+                        let wanted = envelope.at(target as f32 / formant);
+                        let gain = (wanted - envelope.log()[k])
                             .clamp(-ENVELOPE_GAIN_LIMIT, ENVELOPE_GAIN_LIMIT)
                             .exp();
                         level *= gain;
@@ -223,45 +226,6 @@ impl PitchShifter {
         }
         self.region_start.push(bins);
     }
-
-    // Smoothed log-magnitude envelope by liftering the real cepstrum.
-    fn envelope(&mut self, loudest: f32) {
-        let floor = (loudest * ENVELOPE_FLOOR).max(1.0e-12);
-        for (value, magnitude) in self.cepstrum_spectrum.iter_mut().zip(&self.magnitude) {
-            *value = Complex::new(magnitude.max(floor).ln(), 0.0);
-        }
-        self.stft
-            .inverse(&mut self.cepstrum_spectrum, &mut self.cepstrum);
-        let size = self.cepstrum.len();
-        let lifter = self.lifter;
-        let scale = 1.0 / size as f32;
-        self.cepstrum[0] *= scale;
-        for n in 1..size / 2 + 1 {
-            let weight = if n < lifter {
-                scale * 0.5 * (1.0 + (PI * n as f32 / lifter as f32).cos())
-            } else {
-                0.0
-            };
-            self.cepstrum[n] *= weight;
-            if n < size - n {
-                self.cepstrum[size - n] *= weight;
-            }
-        }
-        self.stft
-            .forward(&mut self.cepstrum, &mut self.cepstrum_spectrum);
-        for (envelope, value) in self.log_envelope.iter_mut().zip(&self.cepstrum_spectrum) {
-            *envelope = value.re;
-        }
-    }
-}
-
-#[inline]
-fn envelope_at(envelope: &[f32], position: f32) -> f32 {
-    let last = envelope.len() - 1;
-    let position = position.clamp(0.0, last as f32);
-    let index = (position as usize).min(last - 1);
-    let fraction = position - index as f32;
-    envelope[index] + (envelope[index + 1] - envelope[index]) * fraction
 }
 
 pub fn semitones_to_ratio(semitones: f32) -> f32 {
@@ -272,20 +236,52 @@ pub const SEMITONES: u32 = 0;
 pub const CENTS: u32 = 1;
 pub const FORMANT: u32 = 2;
 pub const MIX: u32 = 3;
-pub const PARAMS: [ParamSpec; 4] = [
+pub const VIBRATO_RATE_HZ: u32 = 4;
+pub const VIBRATO_DEPTH: u32 = 5;
+pub const VIBRATO_DELAY_MS: u32 = 6;
+pub const PARAMS: [ParamSpec; 7] = [
     ParamSpec::new(SEMITONES, "semitones", -24.0, 24.0, 0.0, Unit::Semitones),
     ParamSpec::new(CENTS, "cents", -100.0, 100.0, 0.0, Unit::Plain),
     // 0 keeps the voice's own formants whatever the pitch.
     ParamSpec::new(FORMANT, "formant", -12.0, 12.0, 0.0, Unit::Semitones),
     ParamSpec::new(MIX, "mix", 0.0, 1.0, 1.0, Unit::Percent),
+    // Vibrato (R-372, validated by the user on 25 Nov. 2026): the pitch swings ± `vibrato_depth` cents around its
+    // value on a sine of `vibrato_rate_hz`; after a silence its depth grows from 0 to full over `vibrato_delay_ms`, as
+    // a singer's does on a held note. 0 cents: no vibrato. A ramp of the pitch is its automation (`semitones`).
+    ParamSpec::new(
+        VIBRATO_RATE_HZ,
+        "vibrato_rate_hz",
+        0.1,
+        13.0,
+        5.0,
+        Unit::Hertz,
+    ),
+    ParamSpec::new(VIBRATO_DEPTH, "vibrato_depth", 0.0, 200.0, 0.0, Unit::Plain),
+    ParamSpec::new(
+        VIBRATO_DELAY_MS,
+        "vibrato_delay_ms",
+        0.0,
+        3000.0,
+        0.0,
+        Unit::Milliseconds,
+    ),
 ];
+
+// Under −55 dBFS for longer than this, the voice has stopped: the vibrato's delay starts again with it.
+const SILENT_LEVEL: f32 = 1.8e-3;
+const SILENCE_SECONDS: f32 = 0.08;
 
 // Ratios follow the smoothed values once per segment.
 pub(crate) const SEGMENT: usize = 32;
 
 // Stereo pitch shifter: one core per channel, the dry path delayed to match.
 pub struct PitchShift {
-    values: [f32; 4],
+    values: [f32; 7],
+    segment_seconds: f32,
+    // The vibrato's phase (in cycles), the time since the voice started and the silence under way.
+    phase: f32,
+    sounding: f32,
+    quiet: f32,
     shifters: [PitchShifter; 2],
     dry: [DelayLine; 2],
     pitch: Smoothed,
@@ -297,6 +293,10 @@ impl PitchShift {
     pub fn new() -> Self {
         let mut shift = Self {
             values: PARAMS.map(|spec| spec.default),
+            segment_seconds: SEGMENT as f32 / 48000.0,
+            phase: 0.0,
+            sounding: 0.0,
+            quiet: 0.0,
             shifters: [PitchShifter::new(48000.0, 1), PitchShifter::new(48000.0, 1)],
             dry: [DelayLine::new(), DelayLine::new()],
             pitch: Smoothed::new(0.0, 34.0),
@@ -313,6 +313,37 @@ impl PitchShift {
             .set(v[SEMITONES as usize] + v[CENTS as usize] * 0.01);
         self.formant.set(v[FORMANT as usize]);
         self.mix.set(v[MIX as usize]);
+    }
+
+    // The vibrato's offset in semitones for the segment `left`/`right` begins, its clocks advanced by one segment.
+    fn vibrato(&mut self, left: &[f32], right: &[f32]) -> f32 {
+        let level = left
+            .iter()
+            .chain(right)
+            .fold(0.0f32, |peak, sample| peak.max(sample.abs()));
+        if level < SILENT_LEVEL {
+            self.quiet += self.segment_seconds;
+            if self.quiet >= SILENCE_SECONDS {
+                self.sounding = 0.0;
+            }
+        } else {
+            self.quiet = 0.0;
+            self.sounding += self.segment_seconds;
+        }
+        let depth = self.values[VIBRATO_DEPTH as usize];
+        if depth <= 0.0 {
+            return 0.0;
+        }
+        let delay = self.values[VIBRATO_DELAY_MS as usize] * 0.001;
+        let grown = if delay > 0.0 {
+            (self.sounding / delay).min(1.0)
+        } else {
+            1.0
+        };
+        let offset = depth * 0.01 * grown * (TAU * self.phase).sin();
+        self.phase =
+            (self.phase + self.values[VIBRATO_RATE_HZ as usize] * self.segment_seconds).fract();
+        offset
     }
 }
 
@@ -333,6 +364,7 @@ impl Processor for PitchShift {
         }
         // Smoothing advances once per segment, hence the segment rate.
         let segment_rate = sample_rate / SEGMENT as f32;
+        self.segment_seconds = 1.0 / segment_rate;
         for smoothed in [&mut self.pitch, &mut self.formant] {
             smoothed.prepare(segment_rate);
         }
@@ -347,7 +379,8 @@ impl Processor for PitchShift {
         let mut start = 0;
         while start < frames {
             let end = (start + SEGMENT).min(frames);
-            let ratio = semitones_to_ratio(self.pitch.tick());
+            let vibrato = self.vibrato(&block.left[start..end], &block.right[start..end]);
+            let ratio = semitones_to_ratio(self.pitch.tick() + vibrato);
             let formant = semitones_to_ratio(self.formant.tick());
             for shifter in &mut self.shifters {
                 shifter.set_voice(0, ratio, formant);
@@ -399,5 +432,8 @@ impl Processor for PitchShift {
         for dry in &mut self.dry {
             dry.clear();
         }
+        self.phase = 0.0;
+        self.sounding = 0.0;
+        self.quiet = 0.0;
     }
 }

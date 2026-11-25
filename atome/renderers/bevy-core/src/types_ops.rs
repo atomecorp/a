@@ -201,4 +201,30 @@ pub enum AtomeRenderOp {
     ProjectSpace(crate::project_view::AtomeProjectSpacePatch),
     /// A `.cube` file for the media effects' LUTs (`media_fx/lut.rs`).
     Lut(crate::media_fx::lut::AtomeLutPatch),
+    /// The instant the media effects are drawn at (`media_fx/clock.rs`), or the real clock back.
+    MediaClock(crate::media_fx::clock::AtomeMediaClockPatch),
+}
+
+impl AtomeRenderOp {
+    /// Whether the op is about the node `id` (an op on the whole scene is about none).
+    pub fn targets_id(&self, id: &str) -> bool {
+        match self {
+            Self::Spawn(node) => node.id == id,
+            Self::Despawn(target) => target == id,
+            Self::Transform(patch) => patch.id == id,
+            Self::Style(patch) => patch.id == id,
+            Self::Reparent(patch) => patch.id == id,
+            Self::Layer(patch) => patch.id == id,
+            Self::Visibility(patch) => patch.id == id,
+            Self::Text(patch) => patch.id == id,
+            Self::Resource(patch) => patch.id == id,
+            Self::ProjectSpace(patch) => patch.ids.iter().any(|target| target == id),
+            Self::Surface(_)
+            | Self::SurfaceBackground(_)
+            | Self::SceneEffects(_)
+            | Self::ProjectView(_)
+            | Self::Lut(_)
+            | Self::MediaClock(_) => false,
+        }
+    }
 }

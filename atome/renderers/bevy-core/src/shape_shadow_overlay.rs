@@ -8,7 +8,7 @@ use crate::{
         AtomeShapeProfile, AtomeShapeShadow, AtomeShapeShadowOverlay, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
-    shadow_texture::{alpha_shadow_margin, shadow_padding},
+    shadow_texture::alpha_shadow_margin,
     shape_sdf::AtomeShapeSilhouette,
     shape_shadow_cache::{
         PaintedAlpha, blurred_on_gpu, cached_shape_shadow_handle, painted_alpha_shadow_handle,
@@ -393,15 +393,7 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
             alpha_margin,
         ))
     } else {
-        cached_shape_shadow_handle(world, shadow, &silhouette)?.map(
-            |(handle, image_width, image_height)| {
-                (
-                    handle,
-                    Vec2::new(image_width as f32, image_height as f32),
-                    shadow.spread + shadow_padding(shadow.blur) as f32,
-                )
-            },
-        )
+        cached_shape_shadow_handle(world, shadow, &silhouette)?
     };
     let Some((handle, shadow_size, margin)) = shadow_asset else {
         return Ok(());

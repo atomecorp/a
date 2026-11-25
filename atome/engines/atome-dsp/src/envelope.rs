@@ -1,5 +1,8 @@
 // ADSR envelope applied as an amplifier (VCA), the second generator brick.
 // The gate is a parameter, so MIDI notes drive it like any other value.
+// A sampler's voice may also wait before the attack (delay) and hold the peak
+// before the decay (hold): DAHDSR, set by `set_timing` (a bank's envelope), not
+// among the brick's parameters, so a patch's envelope stays ADSR.
 
 use crate::{ParamSpec, Processor, StereoBlock, Unit};
 
@@ -40,7 +43,9 @@ pub const PARAMS: [ParamSpec; 5] = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
     Idle,
+    Delay,
     Attack,
+    Hold,
     Decay,
     Sustain,
     Release,
@@ -52,6 +57,10 @@ pub struct Envelope {
     stage: Stage,
     level: f32,
     release_step: f32,
+    delay_ms: f32,
+    hold_ms: f32,
+    // Frames spent in the delay or the hold.
+    waited: f32,
 }
 
 impl Envelope {
@@ -62,11 +71,26 @@ impl Envelope {
             stage: Stage::Idle,
             level: 0.0,
             release_step: 0.0,
+            delay_ms: 0.0,
+            hold_ms: 0.0,
+            waited: 0.0,
         }
     }
 
     fn frames(&self, id: u32) -> f32 {
         (self.values[id as usize] * 0.001 * self.sample_rate).max(1.0)
+    }
+
+    // The wait before the attack and the hold at the peak, in milliseconds (0: none), for
+    // the next gates.
+    pub fn set_timing(&mut self, delay_ms: f32, hold_ms: f32) {
+        self.delay_ms = delay_ms.max(0.0);
+        self.hold_ms = hold_ms.max(0.0);
+    }
+
+    // Whether `waited` frames have passed `ms`.
+    fn waited_past(&self, ms: f32) -> bool {
+        self.waited >= ms * 0.001 * self.sample_rate
     }
 
     pub fn is_idle(&self) -> bool {
@@ -80,10 +104,27 @@ impl Envelope {
         let sustain = self.values[SUSTAIN as usize];
         match self.stage {
             Stage::Idle => {}
+            Stage::Delay => {
+                self.waited += 1.0;
+                if self.waited_past(self.delay_ms) {
+                    self.stage = Stage::Attack;
+                }
+            }
             Stage::Attack => {
                 self.level += 1.0 / self.frames(ATTACK_MS);
                 if self.level >= 1.0 {
                     self.level = 1.0;
+                    self.waited = 0.0;
+                    self.stage = if self.hold_ms > 0.0 {
+                        Stage::Hold
+                    } else {
+                        Stage::Decay
+                    };
+                }
+            }
+            Stage::Hold => {
+                self.waited += 1.0;
+                if self.waited_past(self.hold_ms) {
                     self.stage = Stage::Decay;
                 }
             }
@@ -133,7 +174,12 @@ impl Processor for Envelope {
         let value = spec.clamp(value);
         if id == GATE {
             if value >= 0.5 {
-                self.stage = Stage::Attack;
+                self.waited = 0.0;
+                self.stage = if self.delay_ms > 0.0 {
+                    Stage::Delay
+                } else {
+                    Stage::Attack
+                };
             } else if self.stage != Stage::Idle {
                 self.stage = Stage::Release;
                 self.release_step = self.level / self.frames(RELEASE_MS);
@@ -153,5 +199,6 @@ impl Processor for Envelope {
     fn reset(&mut self) {
         self.stage = Stage::Idle;
         self.level = 0.0;
+        self.waited = 0.0;
     }
 }

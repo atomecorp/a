@@ -6,6 +6,9 @@
 // The voice's level, pan, live volume and stop are those of a Kira static sound playing a constant 1 the warped
 // frames are multiplied by, so a warped voice answers its handle like every other voice.
 // The stretcher is pure Rust: a warped voice plays the same on the Web (wasm32), Tauri and iOS.
+// A tape map (`tape`, R-367 a take's speed curve in Bande, kernel/take_speed.js): the pitch follows the speed, as a
+// tape played faster or slower — read through the map at the source's own pitch moved by the speed, the stretcher
+// keeping only the asked semitones (none: the source read directly, no stretcher).
 
 use crate::voice::{VoiceRequest, VoiceSound};
 use atome_instrument::interp::{SincTables, TAPS, dot, first_tap};
@@ -24,6 +27,8 @@ pub struct VoiceWarp {
     pub points: Vec<[f64; 2]>,
     #[serde(default)]
     pub pitch_semitones: f64,
+    #[serde(default)]
+    pub tape: bool,
 }
 
 // Speeds a window of the map may play at (kernel STRETCH_MIN_RATIO..STRETCH_MAX_RATIO), and the pitch range.
@@ -69,10 +74,10 @@ impl VoiceWarp {
     // The source seconds heard at clip time `t`, and the speed there (source seconds per clip second).
     pub fn locate(&self, t: f64) -> (f64, f64) {
         let last = self.points.len() - 1;
+        // A speed curve's map holds many windows: the one under `t` by halving.
         let index = self.points[..last]
-            .iter()
-            .rposition(|point| point[0] <= t)
-            .unwrap_or(0);
+            .partition_point(|point| point[0] <= t)
+            .saturating_sub(1);
         let [clip_from, source_from] = self.points[index];
         let [clip_to, source_to] = self.points[index + 1];
         let speed = (source_to - source_from) / (clip_to - clip_from);
@@ -150,9 +155,12 @@ pub fn warped_voice(
 
 pub fn warped_sound(level: Box<dyn Sound>, plan: WarpPlan) -> Box<dyn Sound> {
     let stretcher = VoiceStretch::new(CHUNK);
-    let capacity = stretcher.input_capacity();
+    let capacity = stretcher.input_capacity().max(CHUNK);
+    let direct = plan.warp.tape && plan.warp.pitch_semitones == 0.0;
     Box::new(WarpedSound {
         level,
+        direct,
+        tail: if direct { 0 } else { stretcher.tail_frames() },
         pitch: plan.warp.pitch_ratio(),
         clock: plan.start_seconds,
         end: plan.warp.end_seconds(),
@@ -171,6 +179,9 @@ pub fn warped_sound(level: Box<dyn Sound>, plan: WarpPlan) -> Box<dyn Sound> {
 struct WarpedSound {
     level: Box<dyn Sound>,
     plan: WarpPlan,
+    // A tape map at the source's pitch: read straight through the map, no stretcher, no tail.
+    direct: bool,
+    tail: usize,
     pitch: f64,
     // Clip seconds of the next frame heard, and of the map's end.
     clock: f64,
@@ -188,15 +199,24 @@ struct WarpedSound {
 }
 
 impl WarpedSound {
+    // The pitch the source is read at, clip time `t`: a tape's moves with the speed.
+    fn pitch_at(&self, t: f64) -> f64 {
+        let (_, speed) = self.plan.warp.locate(t.min(self.end));
+        if self.plan.warp.tape {
+            self.pitch * speed
+        } else {
+            self.pitch
+        }
+    }
+
     // The stretcher's factor at clip time `t`: output over reader frames.
     fn factor_at(&self, t: f64) -> f32 {
         let (_, speed) = self.plan.warp.locate(t.min(self.end));
-        VoiceStretch::ratio((self.pitch / speed) as f32, 1.0)
+        VoiceStretch::ratio((self.pitch_at(t) / speed) as f32, 1.0)
     }
 
-    // `frames` reader frames from the reader's place, at the pitch, into the input buffers.
-    fn read(&mut self, frames: usize, dt: f64) {
-        let step = self.pitch * self.plan.source_rate as f64 * dt;
+    // `frames` reader frames from the reader's place, `step` source frames apart, into the input buffers.
+    fn read(&mut self, frames: usize, step: f64) {
         let tables = TABLES.get_or_init(SincTables::new);
         let band = tables.band(step);
         let source = &self.plan.source;
@@ -225,9 +245,14 @@ impl WarpedSound {
     fn prime(&mut self, dt: f64) {
         let (source, _) = self.plan.warp.locate(self.clock.min(self.end));
         self.reader = source * self.plan.source_rate as f64;
+        self.primed = true;
+        if self.direct {
+            return;
+        }
         let factor = self.factor_at(self.clock);
         let (opening, ahead) = self.stretcher.priming_frames(factor);
-        self.read(opening + ahead, dt);
+        let step = self.pitch_at(self.clock) * self.plan.source_rate as f64 * dt;
+        self.read(opening + ahead, step);
         self.stretcher.prime(
             (&self.input_left[..opening], &self.input_right[..opening]),
             (
@@ -236,21 +261,54 @@ impl WarpedSound {
             ),
             factor,
         );
-        self.primed = true;
     }
 
     fn render(&mut self, frames: usize, dt: f64) {
         if !self.primed {
             self.prime(dt);
         }
-        let factor = self.factor_at(self.clock + frames as f64 * dt * 0.5);
-        let input = self.stretcher.input_for(frames, factor);
-        self.read(input, dt);
-        self.stretcher.process(
-            (&self.input_left[..input], &self.input_right[..input]),
-            &mut self.out_left[..frames],
-            &mut self.out_right[..frames],
-        );
+        if self.direct {
+            // The reader lands on the map's source at the chunk's end: the speed's ramp never drifts. Past the map's
+            // end the voice is silent.
+            let heard = (((self.end - self.clock) / dt).ceil().max(0.0) as usize).min(frames);
+            if heard > 0 {
+                let (target, _) = self
+                    .plan
+                    .warp
+                    .locate((self.clock + heard as f64 * dt).min(self.end));
+                let step = (target * self.plan.source_rate as f64 - self.reader) / heard as f64;
+                self.read(heard, step.max(0.0));
+            }
+            self.out_left[..heard].copy_from_slice(&self.input_left[..heard]);
+            self.out_right[..heard].copy_from_slice(&self.input_right[..heard]);
+            self.out_left[heard..frames].fill(0.0);
+            self.out_right[heard..frames].fill(0.0);
+        } else {
+            // What the stretcher takes now is heard its output latency later: the map is read there, and the
+            // reader lands on the source the map holds at the chunk's end + that latency (its opening still ahead,
+            // as primed), so a speed change at a marker is heard on the marker, never drifting (R-372: hits
+            // quantized by their markers were heard up to 11 ms early, tests/warp_quantize.rs).
+            let (opening, latency) = self.stretcher.priming_frames(1.0);
+            let ahead = latency as f64 * dt;
+            let middle = self.clock + frames as f64 * dt * 0.5 + ahead;
+            let step = self.pitch_at(middle) * self.plan.source_rate as f64 * dt;
+            let landing = self.clock + frames as f64 * dt + ahead;
+            let factor = if landing <= self.end {
+                let target = self.plan.warp.locate(landing).0 * self.plan.source_rate as f64
+                    + opening as f64 * step;
+                let wanted = (target - self.reader) / step;
+                VoiceStretch::ratio((frames as f64 / wanted.max(f64::EPSILON)) as f32, 1.0)
+            } else {
+                self.factor_at(middle)
+            };
+            let input = self.stretcher.input_for(frames, factor);
+            self.read(input, step);
+            self.stretcher.process(
+                (&self.input_left[..input], &self.input_right[..input]),
+                &mut self.out_left[..frames],
+                &mut self.out_right[..frames],
+            );
+        }
         self.clock += frames as f64 * dt;
         if self.clock > self.end {
             self.ringing += frames;
@@ -276,6 +334,6 @@ impl Sound for WarpedSound {
 
     // Once the map is over and the stretcher has rung out, or when the voice was stopped.
     fn finished(&self) -> bool {
-        self.level.finished() || self.ringing >= self.stretcher.tail_frames()
+        self.level.finished() || (self.clock > self.end && self.ringing >= self.tail)
     }
 }

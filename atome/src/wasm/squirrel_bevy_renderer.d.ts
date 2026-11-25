@@ -131,6 +131,11 @@ export function run_atome_bevy_renderer(canvas_selector: string, width: number, 
 export function set_atome_bevy_frame_hook(hook: any): void;
 
 /**
+ * The instant the media effects are drawn at, in seconds (an MP4 proxy's image, R-349); none: the real clock.
+ */
+export function set_atome_bevy_media_clock(seconds?: number | null): void;
+
+/**
  * The atomes despawned since the last call while a frame hook was set: the glue frees what it kept for them.
  */
 export function take_atome_bevy_gone_browser_textures(): string[];
@@ -188,23 +193,24 @@ export interface InitOutput {
     readonly rest_atome_bevy_linear_lens: (a: number, b: number, c: number) => void;
     readonly run_atome_bevy_preview_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly set_atome_bevy_frame_hook: (a: number, b: number) => void;
+    readonly set_atome_bevy_media_clock: (a: number, b: number) => void;
     readonly take_atome_bevy_gone_browser_textures: (a: number) => void;
     readonly wheel_atome_bevy_scroll: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly run_atome_bevy_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-    readonly __wasm_bindgen_func_elem_146788: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_15107: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_72296: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_132727: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_5: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_6: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_7: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_72296_8: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_9: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_10: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_11: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15106_12: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_15105: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_146888: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_15207: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_72396: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_132827: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_5: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_6: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_7: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_72396_8: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_9: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_10: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_11: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15206_12: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_15205: (a: number, b: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

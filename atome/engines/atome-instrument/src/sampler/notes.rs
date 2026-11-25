@@ -2,7 +2,8 @@
 // legato keep a stack of held notes (the last one sounds, legato glides to it);
 // a zone's cuts choke what they name; the key let go sounds its release take,
 // quieter the longer it was held. A keyswitch key chooses which switched zones
-// sound and plays nothing unless a zone covers it; a one-shot zone ignores the
+// sound and plays nothing unless a zone covers it, the controllers' values which
+// zones waiting for one; a one-shot zone ignores the
 // key let go; a zone's filter is set on each voice it starts, its envelope
 // (else the instrument's) shapes them.
 use super::{HELD_NOTES, POLYPHONY, Sampler, TUNE_CENTS, VoiceMode};
@@ -125,13 +126,7 @@ impl Sampler {
         let midi = midi_velocity(velocity);
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
         for zone in 0..self.keymap.len() {
-            if !self.keymap.zone(zone).contains(note, midi)
-                || self
-                    .keymap
-                    .zone(zone)
-                    .switch
-                    .is_some_and(|key| key != self.switch)
-            {
+            if !self.keymap.zone(zone).contains(note, midi) || !self.chosen(zone) {
                 continue;
             }
             for cut in 0..self.keymap.zone(zone).cuts.len() {
@@ -211,10 +206,19 @@ impl Sampler {
         }
     }
 
-    // Some zone (for the current keyswitch) plays this note, at this velocity or at any.
+    // Whether the current keyswitch and controllers choose `zone`.
+    fn chosen(&self, zone: usize) -> bool {
+        let zone = self.keymap.zone(zone);
+        zone.switch.is_none_or(|key| key == self.switch)
+            && zone
+                .controller
+                .is_none_or(|cc| cc.admits(&self.controllers))
+    }
+
+    // Some zone (for the current keyswitch and controllers) plays this note, at this velocity or at any.
     fn sounds(&self, note: u8, velocity: Option<f32>) -> bool {
-        self.keymap.zones().iter().any(|zone| {
-            zone.switch.is_none_or(|key| key == self.switch)
+        self.keymap.zones().iter().enumerate().any(|(index, zone)| {
+            self.chosen(index)
                 && match velocity {
                     Some(velocity) => zone.contains(note, midi_velocity(velocity)),
                     None => (zone.key_low..=zone.key_high).contains(&note),

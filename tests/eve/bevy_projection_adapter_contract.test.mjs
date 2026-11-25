@@ -300,7 +300,9 @@ test('temporal crop keeps full waveform data and projects a bounded horizontal s
         }
     });
     assert.deepEqual(normalized.content.peaks, [0, 0.25, 0.75, 1]);
-    assert.deepEqual(normalized.content.uvRect, [0.2, 0, 0.4, 1]);
+    // A sound's crop is the part its raster draws (bevy_audio_waveform.js), never a cut of the whole sound's raster.
+    assert.equal(normalized.content.uvRect, undefined);
+    assert.deepEqual(normalized.content.peaksWindow.map(value => Math.round(value * 1e9) / 1e9), [0.2, 0.6]);
     const waveform = {
         id: 'waveform_crop', kind: 'audio_waveform',
         bounds: { x: 0, y: 0, width: 240, height: 48 }, renderLayer: 1,

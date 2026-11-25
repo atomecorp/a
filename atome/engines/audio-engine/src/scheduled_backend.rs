@@ -540,7 +540,14 @@ fn spawn_render_thread(
                 && producer.vacant_len() >= block.len()
             {
                 block.iter_mut().for_each(|sample| *sample = 0.0);
+                let started = std::time::Instant::now();
                 render_block(&mut renderer, &mut block);
+                // The engine's load (R-370): this block's render against the sound it makes.
+                atome_mix_graph::load_meter::LoadMeter::global().note_block(
+                    started.elapsed().as_nanos() as u64,
+                    BLOCK_FRAMES,
+                    SAMPLE_RATE.load(Ordering::Relaxed),
+                );
                 producer.push_slice(&block);
                 aux_feeder.feed();
                 FRAMES_RENDERED.fetch_add(BLOCK_FRAMES as u64, Ordering::AcqRel);

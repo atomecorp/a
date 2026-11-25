@@ -18,7 +18,7 @@ use atome_instrument::synth::BrickKind;
 use atome_instrument::{EventKind, NoteEvent, SampleData};
 use kira::Frame;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 const RING_EVENTS: usize = 1024;
@@ -122,6 +122,16 @@ impl EventRing {
         }
         self.read.store(read, Ordering::Release);
     }
+
+    // Every event due before `until` let pass unplayed (an instrument heard only through stems, R-370).
+    fn discard(&self, until: u64) {
+        let written = self.written.load(Ordering::Acquire);
+        let mut read = self.read.load(Ordering::Relaxed);
+        while read != written && self.frames[read % RING_EVENTS].load(Ordering::Relaxed) < until {
+            read = read.wrapping_add(1);
+        }
+        self.read.store(read, Ordering::Release);
+    }
 }
 
 // Its outputs side by side: bus `b` of a block of `frames` is [b * frames, (b + 1) * frames).
@@ -138,6 +148,8 @@ pub struct InstrumentSlot {
     dated: EventRing,
     params: Box<[AtomicParam]>,
     rendered: AtomicU64,
+    // Its notes passed unplayed since it was last rendered (skip): its voices are released when it plays again.
+    resting: AtomicBool,
     pending: Mutex<Option<Box<Playing>>>,
     active: Mutex<Option<Box<Playing>>>,
     // Boxes, not values: the render thread hands a retired player over by its
@@ -159,6 +171,7 @@ impl InstrumentSlot {
                 .map(|param| AtomicParam::new(param.default))
                 .collect(),
             rendered: AtomicU64::new(0),
+            resting: AtomicBool::new(false),
             pending: Mutex::new(None),
             active: Mutex::new(None),
             retired: Mutex::new(Vec::with_capacity(4)),
@@ -214,6 +227,17 @@ impl InstrumentSlot {
         }
     }
 
+    // A block of `frames` frames nobody hears live (R-370: every strip reading it is frozen): its clock moves on and
+    // its notes pass, so dated notes keep their frames and the ring never fills; nothing is computed.
+    pub fn skip(&self, frames: usize) {
+        let rendered = self.rendered.load(Ordering::Relaxed);
+        self.now.discard(u64::MAX);
+        self.dated.discard(rendered + frames as u64);
+        self.resting.store(true, Ordering::Relaxed);
+        self.rendered
+            .store(rendered + frames as u64, Ordering::Release);
+    }
+
     // One block of `frames` frames of the instrument, output `b` into `buses[b]`
     // (render thread; the graph holds a bus per output its program reads).
     pub fn render(&self, buses: &mut [Vec<Frame>], frames: usize) {
@@ -243,6 +267,13 @@ impl InstrumentSlot {
             }
         }
         let rendered = self.rendered.load(Ordering::Relaxed);
+        if self.resting.swap(false, Ordering::Relaxed) {
+            // Voices left held while it rested would never hear their note's end.
+            engine.schedule(NoteEvent {
+                offset: 0,
+                kind: EventKind::AllNotesOff,
+            });
+        }
         self.now.drain(u64::MAX, u64::MAX, engine);
         self.dated.drain(rendered, rendered + frames as u64, engine);
         let span = frames * *outputs;
@@ -287,6 +318,11 @@ impl Instruments {
 
     pub fn has_sample(&self, sample_id: &str) -> bool {
         self.samples.contains_key(sample_id)
+    }
+
+    // Every sample loaded, by id (an offline render plays them with its own instruments).
+    pub fn samples(&self) -> &HashMap<String, SampleData> {
+        &self.samples
     }
 
     // A new description: a strip already playing the instrument takes the rebuilt sampler.

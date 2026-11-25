@@ -165,6 +165,20 @@ async fn ask_owner(connection: &Connection, grant: &JsonValue, user: &str) -> Re
             ("surface_label", surface_label),
         ],
     );
+    // The request lies in the owner's notification stack, where their inbox answers it on any of their devices, even
+    // one that was closed when it came (rule 21); the push below tells a device open now at once.
+    let card = json!({
+        "id": format!("surface_grant_{}", js::string(&grant["grant_id"])),
+        "kind": "surface-grant-request",
+        "subject": named["surface_label"],
+        "extra": { "grant_id": grant["grant_id"], "capabilities": grant["capabilities"], "surface_id": grant["surface_id"] },
+    });
+    connection
+        .ws_api
+        .social
+        .notifier
+        .notify(&owner, Some(user), &card)
+        .await?;
     let asking = json!({ "type": "surface-grant-request", "grant": named, "from_user_id": user });
     notify(&owner, asking).await;
     Ok(())

@@ -219,10 +219,12 @@ pub(super) async fn handle_list(
         .unwrap_or_default();
 
     let mut atomes = Vec::new();
+    // The reader is always the session's account, whatever owner the request names or `*` (R-246 retest
+    // BUG-0031: the named owner was taken as the reader, so any account listed another's atomes); the public
+    // directory of people (`user`, visibility public) is the one list read without it.
+    let public_directory = atome_type == Some("user");
     for id in atome_ids {
-        if let Some(owner) = effective_owner
-            && !can_read(&db, &id, owner)
-        {
+        if !public_directory && !can_read(&db, &id, user_id) {
             continue;
         }
         if let Ok(atome) = load_atome_with_deleted_excluding(

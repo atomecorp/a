@@ -11,10 +11,14 @@ use bevy::{
     prelude::*,
     render::{
         extract_resource::ExtractResource,
+        render_asset::RenderAssets,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
+        texture::GpuImage,
     },
 };
 use serde::Deserialize;
+
+use super::{MediaFxLutBinding, MediaFxStack};
 
 /// The largest edge accepted (a 65-point cube is the usual maximum).
 pub const LUT_MAX_SIZE: usize = 129;
@@ -239,4 +243,33 @@ pub fn apply_lut(world: &mut World, patch: AtomeLutPatch) -> Result<(), String> 
         },
     );
     Ok(())
+}
+
+/// The LUT texture a chain binds: its file once uploaded, else the identity
+/// placeholder with no binding (the slot waits for its file).
+pub(crate) fn resolve_lut<'a>(
+    stack: &MediaFxStack,
+    luts: &AtomeLutLibrary,
+    gpu_images: &'a RenderAssets<GpuImage>,
+    placeholder: &'a GpuImage,
+) -> (
+    &'a bevy::render::render_resource::TextureView,
+    Option<MediaFxLutBinding>,
+) {
+    let loaded = stack
+        .lut_asset
+        .as_ref()
+        .and_then(|asset| luts.0.get(asset))
+        .and_then(|lut| gpu_images.get(&lut.image).map(|image| (lut, image)));
+    match loaded {
+        Some((lut, image)) => (
+            &image.texture_view,
+            Some(MediaFxLutBinding {
+                size: lut.size,
+                domain_min: lut.domain_min,
+                domain_max: lut.domain_max,
+            }),
+        ),
+        None => (&placeholder.texture_view, None),
+    }
 }

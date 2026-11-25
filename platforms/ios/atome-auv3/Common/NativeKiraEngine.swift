@@ -12,6 +12,8 @@ enum NativeKiraEngine {
         "audio_schedule_instances", "audio_render_clock", "audio_output_hold", "audio_measure_input_latency",
         "audio_mix_apply", "audio_mix_levels", "audio_mix_readings", "audio_mix_devices", "audio_mix_cut_tail", "audio_mix_asset_load", "audio_mix_asset_unload", "audio_mix_module_state",
         "audio_instrument_sample_load", "audio_instrument",
+        // Track freeze (R-370): stems rendered on the engine's own low-priority thread, the load read.
+        "audio_freeze_render", "audio_freeze_apply", "audio_freeze_thaw", "audio_freeze_status", "audio_freeze_reset_peak", "audio_freeze_retain",
         "audio_direct_apply", "audio_direct_levels", "audio_direct_readings", "audio_direct_cut_tail", "audio_direct_module_state", "audio_direct_measure_latency",
         // A take of a strip's REC point (R-183): the engine records it on its own (recorder_strip.rs).
         "audio_record_strip_start", "audio_record_strip_stop",

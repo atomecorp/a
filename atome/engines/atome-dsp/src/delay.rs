@@ -2,9 +2,11 @@
 // ring is sized once in `prepare`; changing the time never reallocates. The
 // echo runs free or on the project tempo, clean (digital), worn (tape: wow,
 // flutter, saturated and darkening repeats) or bouncing between the sides.
+// Synced, it follows the song's tempo where the transport plays (its tempo map,
+// R-367), else the host's `tempo_bpm`.
 
 use crate::biquad::{Coefficients, Section, Shape};
-use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Transport, Unit, db_to_amplitude};
 
 pub struct DelayLine {
     ring: Vec<f32>,
@@ -154,6 +156,8 @@ pub struct Echo {
     free_ms: f32,
     sync: usize,
     tempo_bpm: f32,
+    // The tempo where the transport plays now; none while it is stopped.
+    playing_bpm: Option<f32>,
     feedback: f32,
     mix: Smoothed,
     damping: Coefficients,
@@ -179,6 +183,7 @@ impl Echo {
             free_ms: PARAMS[0].default,
             sync: PARAMS[4].default as usize,
             tempo_bpm: PARAMS[5].default,
+            playing_bpm: None,
             feedback: db_to_amplitude(PARAMS[1].default),
             mix: Smoothed::new(PARAMS[3].default, 10.0),
             damping: Coefficients::default(),
@@ -211,7 +216,9 @@ impl Echo {
     fn time_ms(&self) -> f32 {
         match SYNC_BEATS[self.sync] {
             0.0 => self.free_ms,
-            beats => (60000.0 / self.tempo_bpm * beats).min(MAX_TIME_MS),
+            beats => {
+                (60000.0 / self.playing_bpm.unwrap_or(self.tempo_bpm) * beats).min(MAX_TIME_MS)
+            }
         }
     }
 
@@ -338,6 +345,17 @@ impl Processor for Echo {
         &PARAMS
     }
 
+    fn set_transport(&mut self, transport: &Transport) {
+        let bpm = transport
+            .playing
+            .then_some((transport.beats_per_second * 60.0) as f32)
+            .filter(|bpm| bpm.is_finite() && *bpm > 0.0);
+        if bpm != self.playing_bpm {
+            self.playing_bpm = bpm;
+            self.time.set(self.time_ms());
+        }
+    }
+
     // The echo rings until its feedback has fallen 60 dB.
     fn tail_frames(&self) -> u32 {
         let repeats = (-60.0 / PARAMS[1].clamp(crate::amplitude_to_db(self.feedback)))
@@ -358,5 +376,33 @@ impl Processor for Echo {
         for filter in &mut self.filters {
             filter.reset();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A quarter note synced: the host's tempo at rest, the song's while it plays.
+    #[test]
+    fn a_synced_echo_follows_the_tempo_where_the_song_plays() {
+        let mut echo = Echo::new();
+        echo.set_param(SYNC, 1.0);
+        echo.set_param(TEMPO_BPM, 120.0);
+        assert_eq!(echo.time.target(), 500.0);
+        let playing = |bpm: f64| Transport {
+            playing: true,
+            beat: 0.0,
+            beats_per_second: bpm / 60.0,
+        };
+        echo.set_transport(&playing(60.0));
+        assert_eq!(echo.time.target(), 1000.0);
+        echo.set_transport(&playing(90.0));
+        assert!((echo.time.target() - 666.666_7).abs() < 0.01);
+        echo.set_transport(&Transport {
+            playing: false,
+            ..playing(90.0)
+        });
+        assert_eq!(echo.time.target(), 500.0);
     }
 }

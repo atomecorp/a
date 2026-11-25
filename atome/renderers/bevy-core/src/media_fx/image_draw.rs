@@ -23,15 +23,14 @@ use bevy::{
         },
         render_resource::{
             BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries,
-            BlendState, BufferInitDescriptor, BufferUsages, ColorTargetState, ColorWrites,
-            CompareFunction, DepthBiasState, DepthStencilState, FilterMode, FragmentState,
-            MultisampleState, PipelineCache, PrimitiveState, RenderPipelineDescriptor, Sampler,
-            SamplerBindingType, SamplerDescriptor, ShaderStages, SpecializedRenderPipeline,
-            SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat,
-            TextureSampleType, VertexState,
+            BlendState, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState,
+            DepthStencilState, FilterMode, FragmentState, MultisampleState, PipelineCache,
+            PrimitiveState, RenderPipelineDescriptor, Sampler, SamplerBindingType,
+            SamplerDescriptor, ShaderStages, SpecializedRenderPipeline, SpecializedRenderPipelines,
+            StencilFaceState, StencilState, TextureFormat, TextureSampleType, VertexState,
             binding_types::{sampler, texture_2d, texture_3d, uniform_buffer_sized},
         },
-        renderer::RenderDevice,
+        renderer::{RenderDevice, RenderQueue},
         sync_world::MainEntity,
         texture::GpuImage,
         view::{ExtractedView, RenderVisibleEntities},
@@ -42,17 +41,16 @@ use bevy::{
     },
 };
 
+use crate::frame_uniforms::FrameUniforms;
+
 use super::{
-    AtomeMediaFx, MediaFxLutBinding, MediaFxStack,
-    lut::{AtomeLutLibrary, CubeLut},
+    AtomeMediaFx, MediaFxStack,
+    clock::MediaFxClock,
+    lut::{AtomeLutLibrary, CubeLut, resolve_lut},
     media_fx_shader_source, media_fx_uniform_bytes,
 };
 
 const IMAGE_FX_SHADER: &str = include_str!("../../assets/shaders/media_fx_image.wgsl");
-
-/// The renderer's clock for the animated effects (grain), wrapped to keep its precision.
-#[derive(Resource, Clone, Copy, Default)]
-pub(crate) struct MediaFxClock(pub f32);
 
 /// The 2×2×2 identity cube bound where a draw has no LUT: the `lut` slot reads
 /// `info.z` and leaves the colour as it is until the chain's file is loaded.
@@ -81,6 +79,9 @@ struct ExtractedImageFxDraws(Vec<ExtractedImageFx>);
 
 #[derive(Resource, Default)]
 struct PreparedImageFx(bevy::platform::collections::HashMap<MainEntity, BindGroup>);
+
+#[derive(Resource, Default)]
+struct ImageFxUniforms(FrameUniforms<MainEntity>);
 
 #[derive(Resource)]
 struct ImageFxPipeline {
@@ -140,9 +141,9 @@ pub(crate) fn build_image_fx_renderer(app: &mut App) {
     render_app
         .insert_resource(ImageFxShader(shader))
         .insert_resource(MediaFxLutPlaceholder(placeholder))
-        .init_resource::<MediaFxClock>()
         .init_resource::<ExtractedImageFxDraws>()
         .init_resource::<PreparedImageFx>()
+        .init_resource::<ImageFxUniforms>()
         .init_resource::<SpecializedRenderPipelines<ImageFxPipeline>>()
         .add_render_command::<Transparent2d, DrawImageFx>()
         .add_systems(
@@ -151,10 +152,7 @@ pub(crate) fn build_image_fx_renderer(app: &mut App) {
         )
         .add_systems(
             ExtractSchedule,
-            (
-                extract_media_fx_clock,
-                extract_image_fx.after(SpriteSystems::ExtractSprites),
-            ),
+            extract_image_fx.after(SpriteSystems::ExtractSprites),
         )
         .add_systems(
             Render,
@@ -163,10 +161,6 @@ pub(crate) fn build_image_fx_renderer(app: &mut App) {
                 prepare_image_fx.in_set(RenderSystems::PrepareBindGroups),
             ),
         );
-}
-
-fn extract_media_fx_clock(mut clock: ResMut<MediaFxClock>, time: Extract<Res<Time<Real>>>) {
-    clock.0 = (time.elapsed_secs_f64() % 3600.0) as f32;
 }
 
 /// Takes the images carrying effects out of the sprite pipeline's list.
@@ -376,6 +370,8 @@ fn image_quad(draw: &ExtractedImageFx, image_size: Vec2) -> (Mat4, Vec4, Vec2, [
 
 fn prepare_image_fx(
     render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+    mut uniforms: ResMut<ImageFxUniforms>,
     pipeline: Option<Res<ImageFxPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     gpu_images: Res<RenderAssets<GpuImage>>,
@@ -400,17 +396,8 @@ fn prepare_image_fx(
         };
         let (world_from_local, uv, size, shown) = image_quad(draw, image.size_2d().as_vec2());
         let (lut_view, lut) = resolve_lut(&draw.stack, &luts, &gpu_images, placeholder);
-        let fx_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("atome_image_fx_params"),
-            contents: &media_fx_uniform_bytes(
-                Some(&draw.stack),
-                size.to_array(),
-                shown,
-                clock.0,
-                lut,
-            ),
-            usage: BufferUsages::UNIFORM,
-        });
+        let fx_bytes =
+            media_fx_uniform_bytes(Some(&draw.stack), size.to_array(), shown, clock.0, lut);
         let mut instance = Vec::with_capacity(24);
         instance.extend_from_slice(&world_from_local.to_cols_array());
         instance.extend_from_slice(&uv.to_array());
@@ -419,54 +406,28 @@ fn prepare_image_fx(
             .iter()
             .flat_map(|value| value.to_ne_bytes())
             .collect();
-        let instance_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("atome_image_fx_instance"),
-            contents: &instance_bytes,
-            usage: BufferUsages::UNIFORM,
-        });
+        let buffers = uniforms.0.write(
+            &render_device,
+            &render_queue,
+            draw.main_entity,
+            "atome_image_fx_params",
+            &[&fx_bytes, &instance_bytes],
+        );
         let bind_group = render_device.create_bind_group(
             "atome_image_fx_bind_group",
             &layout,
             &BindGroupEntries::sequential((
                 &image.texture_view,
                 &image.sampler,
-                fx_buffer.as_entire_binding(),
+                buffers[0].as_entire_binding(),
                 lut_view,
                 &pipeline.lut_sampler,
-                instance_buffer.as_entire_binding(),
+                buffers[1].as_entire_binding(),
             )),
         );
         prepared.0.insert(draw.main_entity, bind_group);
     }
-}
-
-/// The LUT texture a chain binds: its file once uploaded, else the identity
-/// placeholder with no binding (the slot waits for its file).
-pub(crate) fn resolve_lut<'a>(
-    stack: &MediaFxStack,
-    luts: &AtomeLutLibrary,
-    gpu_images: &'a RenderAssets<GpuImage>,
-    placeholder: &'a GpuImage,
-) -> (
-    &'a bevy::render::render_resource::TextureView,
-    Option<MediaFxLutBinding>,
-) {
-    let loaded = stack
-        .lut_asset
-        .as_ref()
-        .and_then(|asset| luts.0.get(asset))
-        .and_then(|lut| gpu_images.get(&lut.image).map(|image| (lut, image)));
-    match loaded {
-        Some((lut, image)) => (
-            &image.texture_view,
-            Some(MediaFxLutBinding {
-                size: lut.size,
-                domain_min: lut.domain_min,
-                domain_max: lut.domain_max,
-            }),
-        ),
-        None => (&placeholder.texture_view, None),
-    }
+    uniforms.0.release_unwritten();
 }
 
 struct SetImageFxBindGroup<const I: usize>;

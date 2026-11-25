@@ -8,6 +8,8 @@ pub mod clean;
 #[cfg(unix)]
 pub mod downloads;
 #[cfg(unix)]
+mod file_record;
+#[cfg(unix)]
 pub mod files;
 pub mod metadata_strip;
 pub mod playback;

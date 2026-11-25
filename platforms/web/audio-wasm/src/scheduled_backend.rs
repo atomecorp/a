@@ -383,6 +383,7 @@ fn render_ahead() {
             // The block is rendered in pieces split at the frames where scheduled
             // voices are due: each starts exactly on its frame.
             let block_start = clock.frames_rendered;
+            let started = crate::freeze::now_ns();
             let mut cursor = block_start;
             for due in due_frames(block_start, block_start + BLOCK_FRAMES as u64) {
                 if due > cursor {
@@ -397,6 +398,12 @@ fn render_ahead() {
             let from = (cursor - block_start) as usize * CHANNELS;
             renderer.on_start_processing();
             renderer.process(&mut interleaved[from..], CHANNELS as u16);
+            // The engine's load (R-370): this block's render against the sound it makes.
+            atome_mix_graph::load_meter::LoadMeter::global().note_block(
+                crate::freeze::now_ns().saturating_sub(started),
+                BLOCK_FRAMES,
+                clock.sample_rate as u32,
+            );
             for frame in 0..BLOCK_FRAMES {
                 left[frame] = interleaved[frame * CHANNELS];
                 right[frame] = interleaved[frame * CHANNELS + 1];

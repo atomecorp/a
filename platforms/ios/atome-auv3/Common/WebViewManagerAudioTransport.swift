@@ -144,10 +144,10 @@ extension WebViewManager {
         )
     }
 
-    /// Publishes the MIDI input list after a setup change (hot-plug, virtual
-    /// sources); `start_native_midi` answers the same list on request.
-    static func publishMIDIInputsToJS(_ inputs: [[String: String]]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: ["inputs": inputs], options: [.sortedKeys]),
+    /// Publishes the MIDI ports (inputs and outputs) after a setup change (hot-plug,
+    /// virtual sources); `start_native_midi` answers the same lists on request.
+    static func publishMIDIPortsToJS(_ ports: MIDIPortList) {
+        guard let data = try? JSONSerialization.data(withJSONObject: ports, options: [.sortedKeys]),
               let detail = String(data: data, encoding: .utf8) else { return }
         evaluateJS(
             "window.dispatchEvent(new CustomEvent('eve:midi-native-ports',{detail:\(detail)}));",

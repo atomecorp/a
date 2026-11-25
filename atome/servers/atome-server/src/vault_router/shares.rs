@@ -64,26 +64,60 @@ pub struct Rights {
     pub create: bool,
     pub delete: bool,
     pub reshare: bool,
+    // R-349: the project's proxy alone (social/sharing/rights.rs), `read` bringing it along.
+    pub listen: bool,
 }
 
-// Every historical spelling of a capability (`alter`, `can_write`, `share`…).
+// Every historical spelling of a capability (`alter`, `can_write`, `share`…), read by the one
+// owner of a share's rights (social/sharing/rights.rs#normalized).
 pub fn rights(share: Option<&JsonValue>) -> Rights {
     let permissions = parse_json(share.and_then(|share| share.get("permissions_json")))
         .unwrap_or_else(|| json!({}));
-    let has = |keys: &[&str]| {
-        keys.iter().any(|key| match permissions.get(*key) {
-            Some(JsonValue::Bool(flag)) => *flag,
-            Some(JsonValue::Number(number)) => number.as_f64() == Some(1.0),
-            _ => false,
-        })
-    };
+    let [read, write, create, delete, reshare, _manage, listen] =
+        crate::social::sharing::rights::normalized(&permissions);
     Rights {
-        read: has(&["read", "can_read"]),
-        write: has(&["write", "can_write", "alter"]),
-        create: has(&["create", "can_create"]),
-        delete: has(&["delete", "can_delete"]),
-        reshare: has(&["reshare", "share", "can_share", "can_reshare"]),
+        read,
+        write,
+        create,
+        delete,
+        reshare,
+        listen,
     }
+}
+
+/// A listener's read of what a project shared at « Écoute » keeps from them (its tracks, its
+/// events): refused by name (R-349).
+pub const LISTEN_ONLY: &str = "share_access_listen_only";
+// The key by which a media atome marks itself the light proxy of a project (R-349 lot 3 renders
+// it): `properties.proxy_of` = the project's id. The store's `meta` holds only its own fields, so
+// the mark is a property, committed with the media as every property is.
+const PROXY_KEY: &str = "proxy_of";
+// What a listener reads of the project atome itself: what names it, never its content.
+const LISTEN_ROOT_PROPERTIES: [&str; 3] = ["name", "type", "kind"];
+
+/// Whether `state` is a proxy of the project `root` (`properties.proxy_of`).
+pub fn is_proxy_of(state: &JsonValue, root: &str) -> bool {
+    !root.is_empty()
+        && state
+            .get("properties")
+            .and_then(|properties| properties.get(PROXY_KEY))
+            .is_some_and(|mark| js::id(Some(mark)) == root)
+}
+
+/// A share at « Écoute »: it holds `listen` without `read` (R-349).
+pub fn listens_only(share: &JsonValue) -> bool {
+    let rights = rights(Some(share));
+    rights.listen && !rights.read
+}
+
+/// Whether `share` reaches `state`, an atome of its branch: a share reaches all of it (its rights
+/// then say what it may do there), a listener only its root (its name) and its proxy.
+pub fn reaches(share: &JsonValue, state: &JsonValue) -> bool {
+    if !listens_only(share) {
+        return true;
+    }
+    let root = js::id(share.get("atome_id"));
+    js::id(state_atome_id(state)) == root || is_proxy_of(state, &root)
 }
 
 // What the recipient SEES and what it may CHANGE (D8); `allowed_properties_json`
@@ -169,15 +203,33 @@ pub fn filter_properties(properties: Option<&JsonValue>, share: &JsonValue) -> J
     JsonValue::Object(kept)
 }
 
+/// The properties of `atome_id` a share shows: its readable ones, and of the project itself a
+/// listener reads only what names it (R-349).
+pub fn shown_properties(
+    properties: Option<&JsonValue>,
+    share: &JsonValue,
+    atome_id: &str,
+) -> JsonValue {
+    let mut shown = filter_properties(properties, share);
+    if listens_only(share)
+        && atome_id == js::id(share.get("atome_id")).as_str()
+        && let Some(fields) = shown.as_object_mut()
+    {
+        fields.retain(|key, _| LISTEN_ROOT_PROPERTIES.contains(&key.as_str()));
+    }
+    shown
+}
+
 // Another vault's state through an active share: its readable properties, the share's rights.
 pub fn project_shared_state(state: &JsonValue, share: &JsonValue) -> JsonValue {
     let rights = rights(Some(share));
+    let atome_id = js::id(state_atome_id(state));
     js::with(
         state,
         [
             (
                 "properties",
-                filter_properties(state.get("properties"), share),
+                shown_properties(state.get("properties"), share, &atome_id),
             ),
             (
                 "vault_principal_id",
@@ -344,23 +396,45 @@ impl VaultRouter {
             .await
     }
 
+    // The share through which `principal` reaches `atome_id`; a share whose branch holds it but
+    // that only listens (R-349) refuses it by name, unless another share reaches it.
     async fn find_share(
         &self,
         principal: &str,
         owner: &str,
         atome_id: &str,
     ) -> Result<Option<JsonValue>, String> {
+        let mut listened = false;
         for share in self.active_shares(principal, Some(owner)).await? {
             let share_owner = js::id(share.get("owner_id"));
             let root = js::id(share.get("atome_id"));
-            if self
+            if !self
                 .within_shared_root(&share_owner, atome_id, &root)
                 .await?
             {
+                continue;
+            }
+            if self.share_reaches(&share, atome_id).await? {
                 return Ok(Some(share));
             }
+            listened = true;
+        }
+        if listened {
+            return Err(LISTEN_ONLY.into());
         }
         Ok(None)
+    }
+
+    /// Whether `share` reaches `atome_id` of its branch (`reaches`, the state read only when the
+    /// share listens and the atome is not its root).
+    pub async fn share_reaches(&self, share: &JsonValue, atome_id: &str) -> Result<bool, String> {
+        if !listens_only(share) || atome_id == js::id(share.get("atome_id")) {
+            return Ok(true);
+        }
+        let state = self
+            .state_of(&js::id(share.get("owner_id")), atome_id)
+            .await?;
+        Ok(reaches(share, &state))
     }
 
     pub async fn share_for_atome(
@@ -503,5 +577,93 @@ impl VaultRouter {
             return Err("property_write_denied".into());
         }
         Ok(())
+    }
+}
+
+// R-349: the three access levels of a project shared live, as a share row carries them.
+#[cfg(test)]
+mod access_levels {
+    use super::*;
+
+    const PROJECT: &str = "project_concert";
+
+    fn share(permissions: JsonValue) -> JsonValue {
+        json!({ "share_id": "s1", "owner_id": "alice", "atome_id": PROJECT,
+            "permissions_json": permissions.to_string() })
+    }
+
+    fn state(id: &str, properties: JsonValue) -> JsonValue {
+        json!({ "atome_id": id, "properties": properties })
+    }
+
+    #[test]
+    fn a_listener_reaches_the_project_and_its_proxy_never_a_track() {
+        let listener = share(json!({ "can_listen": true }));
+        let project = state(
+            PROJECT,
+            json!({ "name": "Concert", "uses_media": ["m1"], "timeline": { "bpm": 120 } }),
+        );
+        // Lot 3 renders the proxy; one made by hand carries the mark it will carry.
+        let proxy = state(
+            "proxy_1",
+            json!({ "type": "audio", "proxy_of": PROJECT, "file_name": "concert.ogg" }),
+        );
+        let track = state("track_1", json!({ "type": "audio", "parent_id": PROJECT }));
+        let other_proxy = state("proxy_2", json!({ "proxy_of": "another_project" }));
+        assert!(reaches(&listener, &project));
+        assert!(reaches(&listener, &proxy));
+        assert!(!reaches(&listener, &track));
+        assert!(!reaches(&listener, &other_proxy));
+        // Of the project itself, what names it alone.
+        let shown = project_shared_state(&project, &listener);
+        assert_eq!(shown["properties"], json!({ "name": "Concert" }));
+        // The proxy keeps what plays it.
+        assert_eq!(
+            project_shared_state(&proxy, &listener)["properties"]["file_name"],
+            json!("concert.ogg")
+        );
+        let rights = rights(Some(&listener));
+        assert!(rights.listen && !rights.read && !rights.write && !rights.create && !rights.delete);
+    }
+
+    #[test]
+    fn a_reader_reaches_every_track_and_writes_none() {
+        // A share made read only before R-349 (`{ read }`) reads as one now: `read` brings `listen` along.
+        for permissions in [json!({ "read": true }), json!({ "can_read": 1 })] {
+            let reader = share(permissions);
+            let track = state("track_1", json!({ "type": "audio", "parent_id": PROJECT }));
+            assert!(reaches(&reader, &track));
+            let rights = rights(Some(&reader));
+            assert!(
+                rights.read && rights.listen && !rights.write && !rights.delete && !rights.create
+            );
+            assert_eq!(
+                project_shared_state(
+                    &state(PROJECT, json!({ "name": "Concert", "bpm": 120 })),
+                    &reader
+                )["properties"]["bpm"],
+                json!(120)
+            );
+        }
+    }
+
+    #[test]
+    fn a_writer_reaches_and_writes_everything() {
+        let writer = share(json!({ "read": true, "write": true, "create": true, "delete": true }));
+        let track = state("track_1", json!({ "parent_id": PROJECT }));
+        assert!(reaches(&writer, &track));
+        let rights = rights(Some(&writer));
+        assert!(rights.read && rights.write && rights.create && rights.delete && rights.listen);
+        assert!(!listens_only(&writer));
+    }
+
+    #[test]
+    fn a_proxy_is_marked_by_its_project_alone() {
+        assert!(is_proxy_of(
+            &state("p", json!({ "proxy_of": PROJECT })),
+            PROJECT
+        ));
+        assert!(!is_proxy_of(&state("p", json!({})), PROJECT));
+        assert!(!is_proxy_of(&state("p", json!({ "proxy_of": "" })), ""));
     }
 }

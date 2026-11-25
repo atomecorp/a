@@ -5,13 +5,13 @@
 // preallocated and reused; starting, releasing and choking it never allocates.
 
 mod composed_play;
+mod context;
 
-use crate::action_queue::{ActionQueue, FiredMarker};
-use crate::interp::SincTables;
-use crate::keymap::{Keymap, Pick};
+pub use context::Context;
+
+use crate::keymap::Pick;
 use crate::markers::Hits;
-use crate::reading::Source;
-use crate::sample::{SampleBank, SampleData};
+use crate::sample::SampleData;
 use crate::segment::{LoopMode, SegmentPlayer};
 use crate::stretch::VoiceStretch;
 use crate::zone::{MAX_PLAYERS, ZoneFilter};
@@ -24,43 +24,6 @@ use composed_play::Composition;
 pub const CONTROL_FRAMES: usize = 32;
 const CHOKE_MS: f32 = 3.0;
 
-// What a voice reads and reports to while it renders.
-pub struct Context<'a> {
-    pub bank: &'a SampleBank,
-    pub tables: &'a SincTables,
-    pub keymap: &'a mut Keymap,
-    pub actions: &'a ActionQueue,
-    pub generation: u16,
-    pub controllers: &'a [f32; 128],
-    // The instrument's rendered-frame clock at the first frame rendered.
-    pub now: u64,
-}
-
-impl<'a> Context<'a> {
-    // How a player reads `sample` through its ring `ring`.
-    pub fn source(&self, sample: usize, ring: usize) -> Source<'a> {
-        self.bank.source(sample, ring, self.actions)
-    }
-
-    // A marker crossed at `frame` by note `note`: counted in the note's
-    // `crossings`; when « When » lets it fire, reported if it names a command.
-    // Answers its label when it fired.
-    fn fire(&mut self, crossings: &mut [u32], marker: usize, note: u8, frame: u64) -> Option<u16> {
-        let count = self.keymap.markers_mut().fires(marker, crossings)?;
-        let fired = *self.keymap.markers().get(marker);
-        if fired.reports {
-            self.actions.push(FiredMarker {
-                marker: marker as u32,
-                generation: self.generation,
-                note,
-                count,
-                frame,
-            });
-        }
-        Some(fired.label)
-    }
-}
-
 // The reading step of `segment`'s sample for a pitch in semitones.
 fn reading_step(data: &SampleData, sample_rate: f32, pitch: f32, root: u8, tune_cents: f32) -> f64 {
     data.sample_rate as f64 / sample_rate as f64
@@ -69,7 +32,9 @@ fn reading_step(data: &SampleData, sample_rate: f32, pitch: f32, root: u8, tune_
 
 #[derive(Debug, Clone, Copy)]
 pub struct Shape {
+    pub delay_ms: f32,
     pub attack_ms: f32,
+    pub hold_ms: f32,
     pub decay_ms: f32,
     pub sustain: f32,
     pub release_ms: f32,
@@ -210,11 +175,18 @@ impl Voice {
         self.pitch = Smoothed::new(note as f32, shape.glide_ms.max(0.1));
         self.pitch.prepare(self.sample_rate);
         self.envelope.reset();
-        let (attack, decay, sustain) = if one_shot {
-            (0.1, 1.0, 1.0)
+        let (delay, attack, hold, decay, sustain) = if one_shot {
+            (0.0, 0.1, 0.0, 1.0, 1.0)
         } else {
-            (shape.attack_ms, shape.decay_ms, shape.sustain)
+            (
+                shape.delay_ms,
+                shape.attack_ms,
+                shape.hold_ms,
+                shape.decay_ms,
+                shape.sustain,
+            )
         };
+        self.envelope.set_timing(delay, hold);
         self.envelope.set_param(envelope::ATTACK_MS, attack);
         self.envelope.set_param(envelope::DECAY_MS, decay);
         self.envelope.set_param(envelope::SUSTAIN, sustain);
@@ -380,7 +352,7 @@ impl Voice {
             let step = reading_step(
                 source.data(),
                 self.sample_rate,
-                pitch,
+                segment.heard_pitch(pitch, self.note),
                 segment.root,
                 segment.tune_cents,
             );
@@ -428,7 +400,8 @@ impl Voice {
 
     // How fast the first take is read at this pitch, relative to its own rate.
     fn speed(&self, pitch: f32) -> f32 {
-        2f32.powf((pitch - self.root as f32) / 12.0)
+        let heard = self.players[0].segment().heard_pitch(pitch, self.note);
+        2f32.powf((heard - self.root as f32) / 12.0)
     }
 
     fn prime(&mut self, context: &mut Context, pitch: f32) {

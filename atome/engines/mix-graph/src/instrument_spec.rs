@@ -11,7 +11,7 @@ use atome_instrument::sampler::{PARAMS, POLYPHONY};
 use atome_instrument::zone::MAX_OUTPUTS;
 use atome_instrument::{
     Draw, Keymap, LoopMode, LoopSpec, Playback, SampleBank, SampleData, Sampler, Segment, Stack,
-    Switches, Zone, ZoneEnvelope, ZoneFilter,
+    Switches, Zone, ZoneController, ZoneEnvelope, ZoneFilter,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -63,6 +63,10 @@ fn one() -> usize {
     1
 }
 
+fn follows_key() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub enum ParamValue {
@@ -92,6 +96,9 @@ pub struct ZoneSpec {
     pub one_shot: bool,
     #[serde(default)]
     pub switch: Option<u8>,
+    // The MIDI controller whose value chooses it (an EXS group by a pedal, SFZ locc/hicc).
+    #[serde(default)]
+    pub controller: Option<ControllerSpec>,
     #[serde(default)]
     pub filter: Option<FilterSpec>,
     // Its own amplitude envelope (a bank region's); none: the instrument's params.
@@ -101,10 +108,20 @@ pub struct ZoneSpec {
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct EnvelopeSpec {
+    #[serde(default)]
+    pub delay_ms: f32,
     pub attack_ms: f32,
+    #[serde(default)]
+    pub hold_ms: f32,
     pub decay_ms: f32,
     pub sustain: f32,
     pub release_ms: f32,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct ControllerSpec {
+    pub number: u8,
+    pub range: [u8; 2],
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -133,6 +150,12 @@ pub struct SegmentSpec {
     #[serde(rename = "loop")]
     pub looping: Option<LoopSpecJson>,
     pub stretch: f32,
+    // Its duration kept whatever the pitch (atome-instrument segment.rs).
+    #[serde(default)]
+    pub hold: bool,
+    // False: played at its own pitch on every key (atome-instrument segment.rs).
+    #[serde(default = "follows_key")]
+    pub key_track: bool,
     #[serde(default)]
     pub markers: Vec<MarkerSpec>,
 }
@@ -183,6 +206,8 @@ fn segment(
         pan: spec.pan,
         looping,
         stretch: spec.stretch,
+        hold: spec.hold,
+        key_track: spec.key_track,
         markers: span,
         playback: if spec.playback == "reverse" {
             Playback::Reverse
@@ -351,9 +376,16 @@ pub fn build_sampler(
             built.output = zone.output;
             built.one_shot = zone.one_shot;
             built.switch = zone.switch;
+            built.controller = zone.controller.map(|cc| ZoneController {
+                number: cc.number,
+                low: cc.range[0],
+                high: cc.range[1],
+            });
             built.filter = zone.filter.as_ref().map(filter).transpose()?;
             built.envelope = zone.envelope.map(|own| ZoneEnvelope {
+                delay_ms: own.delay_ms,
                 attack_ms: own.attack_ms,
+                hold_ms: own.hold_ms,
                 decay_ms: own.decay_ms,
                 sustain: own.sustain,
                 release_ms: own.release_ms,

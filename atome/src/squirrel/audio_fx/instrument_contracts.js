@@ -77,8 +77,9 @@ const definitions = {
     params_set: [{ instrument_id: text, gain_db: { type: 'number', minimum: -60, maximum: 12 }, attack_ms: { type: 'number', minimum: 0.1, maximum: 10000 },
         decay_ms: { type: 'number', minimum: 1, maximum: 10000 }, sustain: { type: 'number', minimum: 0, maximum: 1 }, release_ms: { type: 'number', minimum: 1, maximum: 20000 },
         velocity_sense: { type: 'number', minimum: 0, maximum: 1 }, tune_cents: { type: 'number', minimum: -1200, maximum: 1200 }, glide_ms: { type: 'number', minimum: 0, maximum: 5000 },
-        polyphony: { type: 'integer', minimum: 1, maximum: 128 }, mode: { type: 'string', enum: ['poly', 'mono', 'legato'] }, bend_range: { type: 'number', minimum: 0, maximum: 48 } },
-        ['instrument_id'], 'Set the instrument\'s own settings: level, envelope (attack, decay, sustain, release), velocity sensitivity, tuning, glide, polyphony, voice mode (poly, mono, legato) and pitch-bend range.', true, 'write'],
+        polyphony: { type: 'integer', minimum: 1, maximum: 128 }, mode: { type: 'string', enum: ['poly', 'mono', 'legato'] }, bend_range: { type: 'number', minimum: 0, maximum: 48 },
+        delay_ms: { type: 'number', minimum: 0, maximum: 20000 }, hold_ms: { type: 'number', minimum: 0, maximum: 20000 } },
+        ['instrument_id'], 'Set the instrument\'s own settings: level, envelope (delay, attack, hold, decay, sustain, release), velocity sensitivity, tuning, glide, polyphony, voice mode (poly, mono, legato) and pitch-bend range.', true, 'write'],
     facade_set: [{ instrument_id: text, facade: { type: 'array', maxItems: 13, items: { type: 'object', properties: {
         param: { type: 'string', enum: ['gain_db', 'attack_ms', 'decay_ms', 'sustain', 'release_ms', 'velocity_sense', 'tune_cents', 'glide_ms', 'polyphony', 'bend_range'] },
         macro: { type: 'object', required: ['name', 'targets'], properties: { name: text, targets: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'object',

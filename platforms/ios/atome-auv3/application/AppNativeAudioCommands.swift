@@ -49,6 +49,19 @@ extension AppNativeAudioController {
                 case "audio_wake_stop":
                     self.stopWakeCapture()
                     self.complete(completion, payload: ["active": false])
+                // A shared project's proxy (R-349): the engine renders its plan offline, off the audio
+                // queue (a long project takes seconds), and answers its Ogg Opus file in base64.
+                case "audio_render_proxy":
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let (result, error) = NativeKiraEngine.run("audio_render_proxy", payload)
+                        self.complete(completion, payload: result, error: error)
+                    }
+                // A plan rendered uncoded (R-370: a MIDI clip « Figer »), off the audio queue too.
+                case "audio_render_pcm":
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let (result, error) = NativeKiraEngine.run("audio_render_pcm", payload)
+                        self.complete(completion, payload: result, error: error)
+                    }
                 case "audio_record_start":
                     self.startAudioRecording(payload: payload, completion: completion)
                 case "audio_record_stop":

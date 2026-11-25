@@ -317,3 +317,33 @@ test('Home tool keeps its active state and blocks navigation when its panel refu
         bevyPanelRuntimeState.runtime=oldRuntime;globalThis.window=oldWindow;globalThis.document=oldDocument;dom.window.close();
     }
 });
+
+test('a panel opened again while its closing is still under way stays open (R-295)', async () => {
+    const oldWindow = globalThis.window, oldDocument = globalThis.document, oldRuntime = bevyPanelRuntimeState.runtime;
+    const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    dom.window.__eveWorkspaceMode = { mode: 'dashboard' }; dom.window.__eveDashboardMainMenuSuspended = true;
+    dom.window.document.querySelector('canvas').getBoundingClientRect = () => ({ width: 800, height: 600 });
+    bevyPanelRuntimeState.runtime = { ...noRender, unmountTree: async () => {} };
+    let finishClose;
+    let slow = true;
+    registerBevyPanelSurface({ surfaceKey: 'reopen_fixture', title: 'Reopen', buildContent: () => [],
+        onClose: () => (slow ? new Promise((resolve) => { finishClose = resolve; }) : null) });
+    try {
+        await openBevyPanelSurface('reopen_fixture');
+        const closing = closeBevyPanelSurface('reopen_fixture');
+        await new Promise((resolve) => { setTimeout(resolve, 0); });
+        const reopening = openBevyPanelSurface('reopen_fixture');
+        // The opening runs its course before the slow closing ends, as on the iPad.
+        await new Promise((resolve) => { setTimeout(resolve, 30); });
+        finishClose();
+        await closing;
+        assert.equal((await reopening).ok, true);
+        assert.equal(bevyPanelRuntimeState.mounted.has('reopen_fixture'), true, 'the late closing left the new panel open');
+    } finally {
+        slow = false;
+        await closeBevyPanelSurface('reopen_fixture');
+        bevyPanelRuntimeState.definitions.delete('reopen_fixture');
+        bevyPanelRuntimeState.runtime = oldRuntime; globalThis.window = oldWindow; globalThis.document = oldDocument; dom.window.close();
+    }
+});

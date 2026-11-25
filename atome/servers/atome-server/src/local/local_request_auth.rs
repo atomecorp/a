@@ -90,31 +90,52 @@ pub(super) fn extract_user_id_from_media_query(query: &MediaTokenQuery) -> Optio
     })
 }
 
+// A media read names its folder (`media_user_id`, `X-User-Id`): synced media lie in their owner's folder
+// (local_atome_sync_media.rs#local_media_owner). The reader is always the verified session's (a bearer, else the
+// `token` of a media element's URL); a name alone is no identity (R-246 BUG-0031), and the folder named is never
+// another account of this device.
 pub(super) fn resolve_media_authenticated_user(
     headers: &HeaderMap,
     query: &MediaTokenQuery,
     auth_state: &local_auth::LocalAuthState,
 ) -> Option<String> {
     let token = extract_bearer_token(headers).or_else(|| extract_token_from_media_query(query));
-    let token_user_id = local_auth::extract_user_id_from_token(auth_state, token.as_deref());
-    if token_user_id != "anonymous" {
-        return extract_user_id_from_media_query(query)
-            .or_else(|| extract_user_id_from_headers(headers))
-            .or(Some(token_user_id));
-    }
-    extract_user_id_from_headers(headers).or_else(|| extract_user_id_from_media_query(query))
+    let reader = local_auth::verified_user_id_from_token(auth_state, token.as_deref())?;
+    let folder = extract_user_id_from_media_query(query)
+        .or_else(|| extract_user_id_from_headers(headers))
+        .unwrap_or_else(|| reader.clone());
+    folder_readable_by(auth_state, &reader, &folder).then_some(folder)
 }
 
+// The reader's own folder (its local principal or the remote one its grant links), or one that no other
+// account of this device holds: a synced owner's.
+pub(super) fn folder_readable_by(
+    auth_state: &local_auth::LocalAuthState,
+    reader: &str,
+    folder: &str,
+) -> bool {
+    if folder == sanitize_user_segment(reader) {
+        return true;
+    }
+    let Ok(db) = auth_state.db.lock() else {
+        return false;
+    };
+    db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM auth_local_grants WHERE local_principal = ?2 AND remote_principal = ?1)
+             OR NOT (EXISTS (SELECT 1 FROM auth_local_grants WHERE local_principal = ?1 OR remote_principal = ?1)
+                 OR EXISTS (SELECT 1 FROM guest_workspace_principals WHERE guest_principal_id = ?1))",
+        [folder, reader],
+        |row| row.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
+}
+
+/// The verified session's account; a request naming an account without a session is refused (R-246 BUG-0031).
 pub fn resolve_authenticated_user(
     headers: &HeaderMap,
     auth_state: &local_auth::LocalAuthState,
 ) -> Option<String> {
-    let token = extract_bearer_token(headers);
-    let token_user_id = local_auth::extract_user_id_from_token(auth_state, token.as_deref());
-    if token_user_id != "anonymous" {
-        return Some(token_user_id);
-    }
-    extract_user_id_from_headers(headers)
+    local_auth::verified_user_id_from_token(auth_state, extract_bearer_token(headers).as_deref())
 }
 
 pub fn json_error(status: StatusCode, message: &str) -> (StatusCode, Json<JsonValue>) {
@@ -146,3 +167,7 @@ pub(super) fn require_atome_state(
         )
     })
 }
+
+#[cfg(test)]
+#[path = "local_request_session_tests.rs"]
+mod session_tests;

@@ -1,13 +1,15 @@
 // The console's Scope (R-290): the signal goes through untouched, the readings carry its measures.
 use atome_dsp::catalog::{ModuleAsset, ModuleKind};
-use atome_dsp::scope::{BINS, COLUMNS, READINGS, READING_COUNT, VECTOR_SIDE};
+use atome_dsp::scope::{BINS, COLUMNS, READING_COUNT, READINGS, VECTOR_SIDE};
 use atome_dsp::{Processor, StereoBlock};
 
 const RATE: f32 = 48000.0;
 const WINDOW: usize = 2400;
 
 fn scope() -> Box<dyn Processor> {
-    let mut scope = ModuleKind::Scope.build(ModuleAsset::None).expect("the scope builds");
+    let mut scope = ModuleKind::Scope
+        .build(ModuleAsset::None)
+        .expect("the scope builds");
     scope.prepare(RATE, 512);
     scope
 }
@@ -23,7 +25,10 @@ fn run(scope: &mut dyn Processor, left: &[f32], right: &[f32]) -> Vec<f32> {
 }
 
 fn key(name: &str) -> usize {
-    READINGS.iter().position(|reading| *reading == name).expect(name)
+    READINGS
+        .iter()
+        .position(|reading| *reading == name)
+        .expect(name)
 }
 
 #[test]
@@ -47,14 +52,22 @@ fn a_mono_sine_draws_a_vertical_line_and_fills_its_histogram() {
             }
         }
     }
-    let top: f32 = (0..VECTOR_SIDE * VECTOR_SIDE).map(|i| readings[key(&format!("vecto_{i}"))]).fold(0.0, f32::max);
+    let top: f32 = (0..VECTOR_SIDE * VECTOR_SIDE)
+        .map(|i| readings[key(&format!("vecto_{i}"))])
+        .fold(0.0, f32::max);
     assert!((top - 1.0).abs() < 1e-6, "the densest cell is 1");
     // Every column of the waveform saw the sine, both channels' histograms are the same.
     for column in 0..COLUMNS {
-        assert!(readings[key(&format!("wave_max_{column}"))] >= readings[key(&format!("wave_min_{column}"))]);
+        assert!(
+            readings[key(&format!("wave_max_{column}"))]
+                >= readings[key(&format!("wave_min_{column}"))]
+        );
     }
     for bin in 0..BINS {
-        assert_eq!(readings[key(&format!("histo_left_{bin}"))], readings[key(&format!("histo_right_{bin}"))]);
+        assert_eq!(
+            readings[key(&format!("histo_left_{bin}"))],
+            readings[key(&format!("histo_right_{bin}"))]
+        );
     }
 }
 
@@ -68,8 +81,13 @@ fn a_hard_panned_signal_leaves_the_centre_column() {
         .filter(|i| readings[key(&format!("vecto_{i}"))] > 0.0)
         .map(|i| i % VECTOR_SIDE)
         .collect::<std::collections::BTreeSet<_>>();
-    assert!(wide.len() > 4, "a panned signal spreads across columns, got {wide:?}");
-    let right_filled = (0..BINS).filter(|bin| readings[key(&format!("histo_right_{bin}"))] > 0.0).count();
+    assert!(
+        wide.len() > 4,
+        "a panned signal spreads across columns, got {wide:?}"
+    );
+    let right_filled = (0..BINS)
+        .filter(|bin| readings[key(&format!("histo_right_{bin}"))] > 0.0)
+        .count();
     assert_eq!(right_filled, 1, "a silent channel sits in one bin");
 }
 

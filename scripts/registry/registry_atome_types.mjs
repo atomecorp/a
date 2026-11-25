@@ -24,7 +24,8 @@ export async function atomeTypesDocument() {
             schema: definition.schema,
             traits: registered.traits,
             default_capabilities: registered.default_capabilities,
-            default_policy: registered.default_policy
+            default_policy: registered.default_policy,
+            ...(definition.owner_only === true ? { owner_only: true } : {})
         }];
     }));
     return stable({

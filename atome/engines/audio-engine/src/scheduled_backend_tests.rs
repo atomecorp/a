@@ -213,18 +213,23 @@ fn live_input_follows_the_output_rate_and_refuses_unknown_devices() {
     playback::init().expect("audio engine init");
     let clock = started_clock();
     let input = atome_mix_graph::shared::LiveInput::new(clock.sample_rate as usize * 4);
+    // An unknown device is named, never opened in another's place, and the call itself succeeds (R-295).
     let unknown =
         super::live_input::sync_console(vec![("no such microphone".into(), input.clone())])
-            .unwrap_err();
+            .expect("the programs apply");
     assert!(
-        unknown.contains("audio_input_device_not_found"),
-        "{unknown}"
+        unknown.len() == 1
+            && unknown[0].device_id == "no such microphone"
+            && unknown[0].error.contains("audio_input_device_not_found"),
+        "{unknown:?}"
     );
     let name = cpal::default_host()
         .default_input_device()
         .and_then(|device| super::recorder::device_name(&device).ok())
         .expect("default input");
-    super::live_input::sync_console(vec![(name, input.clone())]).expect("open live input");
+    let opened =
+        super::live_input::sync_console(vec![(name, input.clone())]).expect("open live input");
+    assert!(opened.is_empty(), "{opened:?}");
     std::thread::sleep(Duration::from_millis(300));
     let mut drain = vec![kira::Frame::ZERO; input.available()];
     input.pull(&mut drain);

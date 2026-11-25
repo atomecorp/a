@@ -28,6 +28,8 @@ pub mod local;
 #[cfg(unix)]
 pub mod mail;
 pub mod media;
+// A control's message to the network: OSC over UDP, HTTP sent by the server (R-347 L12).
+pub mod network;
 // The one signed OVHcloud API client (SMS, domain registrar).
 #[cfg(unix)]
 pub mod ovh;

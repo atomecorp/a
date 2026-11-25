@@ -28,6 +28,59 @@ struct LiveStream {
     stop: Arc<AtomicBool>,
     inputs: Vec<Arc<LiveInput>>,
     small: bool,
+    // Its listeners the interface could not give their channels: they hear nothing, the others are heard.
+    unavailable: Vec<UnavailableInput>,
+}
+
+// A live input the programs ask for that cannot be heard (R-295): its device absent, or a channel its interface lacks
+// (R-286). It hears nothing, never another device or channel; the other inputs open, and the programs still apply.
+#[derive(Clone, serde::Serialize)]
+pub struct UnavailableInput {
+    pub device_id: String,
+    // The channels it takes, counted from 1 as the person chose them (empty: the interface's first two).
+    pub channels: Vec<u16>,
+    pub error: String,
+    #[serde(skip)]
+    input: Arc<LiveInput>,
+}
+
+impl std::fmt::Debug for UnavailableInput {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("UnavailableInput")
+            .field("device_id", &self.device_id)
+            .field("channels", &self.channels)
+            .field("error", &self.error)
+            .finish()
+    }
+}
+
+impl UnavailableInput {
+    fn new(device_id: &str, input: &Arc<LiveInput>, error: String) -> Self {
+        Self {
+            device_id: device_id.to_string(),
+            channels: input.channels().iter().map(|channel| channel + 1).collect(),
+            error,
+            input: Arc::clone(input),
+        }
+    }
+}
+
+// Splits listeners into those `width` channels hold and the others, named.
+fn fitting(
+    device_id: &str,
+    inputs: &[Arc<LiveInput>],
+    width: usize,
+) -> (Vec<Arc<LiveInput>>, Vec<UnavailableInput>) {
+    let mut heard = Vec::new();
+    let mut unavailable = Vec::new();
+    for input in inputs {
+        match input.fits(width) {
+            Ok(()) => heard.push(Arc::clone(input)),
+            Err(error) => unavailable.push(UnavailableInput::new(device_id, input, error)),
+        }
+    }
+    (heard, unavailable)
 }
 
 #[derive(Default)]
@@ -191,6 +244,7 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
         stop: Arc::new(AtomicBool::new(false)),
         inputs,
         small,
+        unavailable: Vec::new(),
     })
 }
 
@@ -199,7 +253,8 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
     let stop = Arc::new(AtomicBool::new(false));
     let thread_stop = Arc::clone(&stop);
     let stream_inputs = inputs.clone();
-    let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
+    let stream_device = device_id.clone();
+    let (ready_tx, ready_rx) = mpsc::channel::<Result<Vec<UnavailableInput>, String>>();
     // A cpal stream is not Send: the thread that builds it owns it.
     crate::engine_thread::spawn(move || {
         let built = (|| {
@@ -208,10 +263,9 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
                 super::scheduled_backend::render_clock().map(|clock| clock.sample_rate);
             let config = input_config(&device, output_rate)?;
             let channels = usize::from(config.channels());
-            // A listener taking a channel the interface does not expose is an error, never another channel (R-286).
-            for input in &stream_inputs {
-                input.fits(channels)?;
-            }
+            // A listener taking a channel the interface does not expose hears nothing, never another channel (R-286);
+            // the interface's other listeners are heard (R-295).
+            let (stream_inputs, unavailable) = fitting(&stream_device, &stream_inputs, channels);
             let rates = (
                 config.sample_rate(),
                 output_rate.unwrap_or(config.sample_rate()),
@@ -247,11 +301,11 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
             stream
                 .play()
                 .map_err(|error| format!("live_input_play: {error}"))?;
-            Ok(stream)
+            Ok((stream, unavailable))
         })();
         match built {
-            Ok(stream) => {
-                let _ = ready_tx.send(Ok(()));
+            Ok((stream, unavailable)) => {
+                let _ = ready_tx.send(Ok(unavailable));
                 while !thread_stop.load(Ordering::Acquire) {
                     std::thread::sleep(Duration::from_millis(100));
                 }
@@ -262,13 +316,14 @@ fn open(device_id: String, inputs: Vec<Arc<LiveInput>>, small: bool) -> Result<L
             }
         }
     });
-    ready_rx
+    let unavailable = ready_rx
         .recv()
         .map_err(|_| "live_input_thread_failed".to_string())??;
     Ok(LiveStream {
         stop,
         inputs,
         small,
+        unavailable,
     })
 }
 
@@ -280,8 +335,10 @@ pub fn is_open() -> bool {
 }
 
 // Opens the inputs the programs now monitor and closes the others; a device
-// whose listeners or buffer changed is opened again.
-fn reconcile(wanted: &Wanted) -> Result<(), String> {
+// whose listeners or buffer changed is opened again. A device that cannot open
+// (or a listener its channels miss) is named, never in the way of the others;
+// it is tried again at the next change.
+fn reconcile(wanted: &Wanted) -> Result<Vec<UnavailableInput>, String> {
     let mut devices: HashMap<&str, (Vec<Arc<LiveInput>>, bool)> = HashMap::new();
     for (device, input, small) in wanted
         .console
@@ -298,13 +355,14 @@ fn reconcile(wanted: &Wanted) -> Result<(), String> {
         entry.0.push(Arc::clone(input));
         entry.1 |= small;
     }
-    // The host's input is no device to open: its listeners are handed to the render block.
-    super::host_output::listen_host_input(
-        devices
-            .remove(super::host_output::HOST_INPUT_ID)
-            .map(|(inputs, _)| inputs)
-            .unwrap_or_default(),
-    )?;
+    // The host's input is no device to open: its listeners are handed to the render block (a stereo pair).
+    let host_id = super::host_output::HOST_INPUT_ID;
+    let host = devices
+        .remove(host_id)
+        .map(|(inputs, _)| inputs)
+        .unwrap_or_default();
+    let (host_heard, mut unavailable) = fitting(host_id, &host, 2);
+    super::host_output::listen_host_input(host_heard)?;
     let mut guard = STREAMS
         .lock()
         .map_err(|error| format!("Lock error: {error}"))?;
@@ -328,14 +386,26 @@ fn reconcile(wanted: &Wanted) -> Result<(), String> {
         keep
     });
     for (device, (inputs, small)) in devices {
-        if !streams.contains_key(device) {
-            streams.insert(device.to_string(), open(device.to_string(), inputs, small)?);
+        if let Some(stream) = streams.get(device) {
+            unavailable.extend(stream.unavailable.iter().cloned());
+            continue;
+        }
+        match open(device.to_string(), inputs.clone(), small) {
+            Ok(stream) => {
+                unavailable.extend(stream.unavailable.iter().cloned());
+                streams.insert(device.to_string(), stream);
+            }
+            Err(error) => unavailable.extend(
+                inputs
+                    .iter()
+                    .map(|input| UnavailableInput::new(device, input, error.clone())),
+            ),
         }
     }
-    Ok(())
+    Ok(unavailable)
 }
 
-fn sync(update: impl FnOnce(&mut Wanted)) -> Result<(), String> {
+fn sync(update: impl FnOnce(&mut Wanted)) -> Result<Vec<UnavailableInput>, String> {
     let mut guard = WANTED
         .lock()
         .map_err(|error| format!("Lock error: {error}"))?;
@@ -345,7 +415,7 @@ fn sync(update: impl FnOnce(&mut Wanted)) -> Result<(), String> {
 }
 
 // The system's input route changed (an iPadOS port routed, its channels with it): every open input is opened again.
-pub fn reopen() -> Result<(), String> {
+pub fn reopen() -> Result<Vec<UnavailableInput>, String> {
     if let Ok(mut streams) = STREAMS.lock() {
         for (_, stream) in streams.get_or_insert_with(HashMap::new).drain() {
             stream.stop.store(true, Ordering::Release);
@@ -354,10 +424,27 @@ pub fn reopen() -> Result<(), String> {
     sync(|_| {})
 }
 
-pub fn sync_console(inputs: Vec<(String, Arc<LiveInput>)>) -> Result<(), String> {
-    sync(|wanted| wanted.console = inputs)
+// The console's inputs that cannot be heard are named; the programs apply all the same.
+pub fn sync_console(
+    inputs: Vec<(String, Arc<LiveInput>)>,
+) -> Result<Vec<UnavailableInput>, String> {
+    let asked: Vec<Arc<LiveInput>> = inputs.iter().map(|(_, input)| Arc::clone(input)).collect();
+    let unavailable = sync(|wanted| wanted.console = inputs)?;
+    Ok(unavailable
+        .into_iter()
+        .filter(|entry| asked.iter().any(|input| Arc::ptr_eq(input, &entry.input)))
+        .collect())
 }
 
+// The direct path plays one input live: one it cannot hear is an error.
 pub fn sync_direct(inputs: Vec<(String, Arc<LiveInput>)>) -> Result<(), String> {
-    sync(|wanted| wanted.direct = inputs)
+    let asked: Vec<Arc<LiveInput>> = inputs.iter().map(|(_, input)| Arc::clone(input)).collect();
+    let unavailable = sync(|wanted| wanted.direct = inputs)?;
+    match unavailable
+        .into_iter()
+        .find(|entry| asked.iter().any(|input| Arc::ptr_eq(input, &entry.input)))
+    {
+        Some(entry) => Err(entry.error),
+        None => Ok(()),
+    }
 }

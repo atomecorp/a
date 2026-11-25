@@ -29,9 +29,9 @@ impl Default for TweenConfig {
     }
 }
 
-struct ClipEntry {
+pub(super) struct ClipEntry {
     /// Shared reference — play() can clone the Arc (cheap) instead of the full data.
-    data: Arc<StaticSoundData>,
+    pub(super) data: Arc<StaticSoundData>,
 }
 
 #[derive(Clone, Debug)]
@@ -65,7 +65,7 @@ pub(super) struct VoiceEntry {
 pub struct PlaybackEngine {
     pub(super) manager: AudioManager<ScheduledCpalBackend>,
     pub(super) mix: atome_mix_graph::host::MixHost,
-    clips: HashMap<String, ClipEntry>,
+    pub(super) clips: HashMap<String, ClipEntry>,
     voices: HashMap<String, VoiceEntry>,
     tween_config: TweenConfig,
 }
@@ -326,6 +326,7 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
     if guard.is_some() {
         return Ok(()); // already init
     }
+    super::freeze::install_clock();
     let mix = atome_mix_graph::host::MixHost::new();
     super::aux_outputs::install_aux_source(mix.aux_outputs());
     let settings = AudioManagerSettings {

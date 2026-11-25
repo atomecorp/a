@@ -189,6 +189,7 @@ extension AppNativeAudioController {
             return
         }
 
+        publishTake(atPath: absolutePath)
         complete(completion, payload: [
             "success": true,
             "session_id": sessionId,

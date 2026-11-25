@@ -8,7 +8,7 @@ use js_sys::{Array, Float32Array, Int32Array, Object, Reflect, Uint8Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
-fn refusal(error: KernelError) -> JsValue {
+pub(crate) fn refusal(error: KernelError) -> JsValue {
     let out = js_sys::Error::new(&error.to_string());
     // A property set on a fresh Error object always lands.
     let _ = Reflect::set(&out, &"code".into(), &error.code.into());
@@ -16,7 +16,7 @@ fn refusal(error: KernelError) -> JsValue {
 }
 
 // Each channel a Float32Array, else an explicit refusal (never a conversion).
-fn floats(channels: &Array) -> Result<Vec<Vec<f32>>, JsValue> {
+pub(crate) fn floats(channels: &Array) -> Result<Vec<Vec<f32>>, JsValue> {
     channels
         .iter()
         .map(|channel| {
@@ -48,10 +48,10 @@ fn integers(channels: &Array) -> Result<Vec<Vec<i32>>, JsValue> {
             ))
         })
 }
-fn slices<T>(channels: &[Vec<T>]) -> Vec<&[T]> {
+pub(crate) fn slices<T>(channels: &[Vec<T>]) -> Vec<&[T]> {
     channels.iter().map(Vec::as_slice).collect()
 }
-fn float_array(channels: Vec<Vec<f32>>) -> Array {
+pub(crate) fn float_array(channels: Vec<Vec<f32>>) -> Array {
     channels
         .iter()
         .map(|channel| JsValue::from(Float32Array::from(channel.as_slice())))
@@ -83,11 +83,7 @@ pub fn waveform_of_sound(data: &[u8], max_peaks: u32) -> Result<JsValue, JsValue
         frames[index].left.abs().max(frames[index].right.abs())
     });
     let out = Object::new();
-    Reflect::set(
-        &out,
-        &"peaks".into(),
-        &Float32Array::from(peaks.as_slice()),
-    )?;
+    Reflect::set(&out, &"peaks".into(), &Float32Array::from(peaks.as_slice()))?;
     Reflect::set(
         &out,
         &"durationSeconds".into(),

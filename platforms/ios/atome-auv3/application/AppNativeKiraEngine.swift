@@ -51,10 +51,29 @@ extension AppNativeAudioController {
                 try routeSessionInput(sessionPortsNamed(by: ["strips": [["input": ["kind": "live_audio", "device_id": deviceId]]]]))
             }
             let (result, error) = NativeKiraEngine.run(command, arguments)
+            if command == "audio_record_strip_stop", error == nil, let path = result["absolute_file_path"] as? String {
+                publishTake(atPath: path)
+            }
             complete(completion, payload: command == "audio_mix_devices" && error == nil ? try withSessionInputs(result) : result, error: error)
         } catch {
             complete(completion, payload: ["success": false], error: error.localizedDescription)
         }
+    }
+
+    /// A take the engine closed in the app group (the canonical root, shared with the AUv3) is published at once to the
+    /// person's storage, where the local server serves it and syncs it to the server, as a video or a photo is
+    /// (`FileSyncCoordinator.publishNow`): its URL never answers 404 (R-356: a multitrack take's waveform could not be
+    /// read again at a zoom, and the take never reached the server).
+    func publishTake(atPath absolutePath: String) {
+        let file = URL(fileURLWithPath: absolutePath).resolvingSymlinksInPath().standardizedFileURL
+        guard let root = SandboxPathValidator.primaryRoot()?.resolvingSymlinksInPath().standardizedFileURL,
+              file.path.hasPrefix(root.path + "/") else {
+            NSLog("[AppNativeAudio] take_publish_outside_root file=%@", absolutePath)
+            return
+        }
+        do { try FileSyncCoordinator.shared.publishNow(file, relativePath: String(file.path.dropFirst(root.path.count + 1))) }
+        catch { NSLog("[AppNativeAudio] take_publish_failed file=%@ error=%@", file.lastPathComponent, error.localizedDescription) }
+        FileSyncCoordinator.shared.syncAll(force: true)
     }
 
     /// A strip whose IN is a live input opens the microphone: the capture
@@ -135,7 +154,12 @@ extension AppNativeAudioController {
                 let consumerId = self.makeRecordingAudioSessionConsumerId()
                 do {
                     try self.acquireAudioSessionConsumer(consumerId, kind: .musicCapture, prefersBluetoothMicrophone: false)
+                    // The session port the measure names is routed first, as for a take (R-286).
+                    if let deviceName = arguments["deviceName"] as? String {
+                        try self.routeSessionInput(self.sessionPortsNamed(by: ["strips": [["input": ["kind": "live_audio", "device_id": deviceName]]]]))
+                    }
                 } catch {
+                    self.releaseAudioSessionConsumer(consumerId)
                     self.complete(completion, payload: ["success": false], error: error.localizedDescription)
                     return
                 }

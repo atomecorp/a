@@ -167,7 +167,13 @@ pub fn render_clock() -> Result<Value, String> {
 pub fn mix_apply(program: Value) -> Result<Value, String> {
     let program: atome_mix_graph::Program =
         serde_json::from_value(program).map_err(|error| format!("mix program invalid: {error}"))?;
-    Ok(json!({ "success": true, "strips": mix::apply_program(program)? }))
+    let (strips, unavailable) = mix::apply_program(program)?;
+    Ok(json!({ "success": true, "strips": strips, "inputs_unavailable": unavailable }))
+}
+
+/// A track freeze command (R-370) by its name without `audio_`: `freeze_render`, `freeze_apply`, … (freeze.rs).
+pub fn dispatch_freeze(name: &str, args: &Value) -> Result<Value, String> {
+    crate::freeze::command(name, args)
 }
 
 pub fn mix_levels() -> Result<Value, String> {
@@ -453,7 +459,12 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "render_clock" => render_clock(),
         "output_hold" => output_hold(&parsed.owner, parsed.on),
         "mix_apply" => mix_apply(parsed.program),
+        "render_proxy" => crate::render_proxy::command(args), // R-349: `{ plan, bitrate? }` → an Ogg Opus proxy
+        "render_pcm" => crate::render_proxy::render_pcm(args), // R-370: `{ plan }` → its float samples
         "mix_levels" => mix_levels(),
+        // R-370: stems rendered while the engine has room, heard in place of a strip.
+        name @ ("freeze_render" | "freeze_apply" | "freeze_thaw" | "freeze_status"
+        | "freeze_reset_peak" | "freeze_retain") => dispatch_freeze(name, args),
         "mix_readings" => mix_readings(),
         "mix_devices" => mix_devices(),
         "mix_cut_tail" => mix_cut_tail(&parsed.module_id),

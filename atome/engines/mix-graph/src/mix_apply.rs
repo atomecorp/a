@@ -71,12 +71,16 @@ impl MixGraph {
                 other => return Err(format!("mix module type {other} is not an audio module")),
             });
         }
+        // A tail longer than a stem's fade would be heard cut where the timeline stops or loops (R-370).
+        let long_tail = matches!(processors.first(), Some(Processor::Dsp(runtime))
+            if f64::from(runtime.tail_frames) > crate::freeze::LONG_TAIL_SECONDS * f64::from(sample_rate));
         let fresh = ModuleRuntime::new(controls.clone(), processors, sample_rate);
         Ok(ModuleEntry {
             spec: spec.clone(),
             controls,
             channels,
             latency,
+            long_tail,
             fresh: Some(fresh),
             active: None,
             sent: None,
@@ -189,6 +193,8 @@ impl MixGraph {
                 capture: self.capture_slot(&strip.id),
                 source: feeds.strip_source(&strip.input),
                 meter: self.meters.entry(strip.id.clone()).or_default().clone(),
+                freeze: self.freezes.slot(&strip.id),
+                cost: self.freezes.cost(&strip.id),
                 modules,
             });
         }
@@ -211,6 +217,14 @@ impl MixGraph {
         compiled.automation = automation::Automation::bind(&program, &self.transports, &|id| {
             next_modules.get(id).map(|entry| entry.controls.clone())
         })?;
+        for strip in &mut compiled.strips {
+            strip.transport = program
+                .strips
+                .iter()
+                .find(|spec| spec.id == strip.id)
+                .and_then(|spec| spec.transport.as_deref())
+                .and_then(|id| self.transports.strip(id));
+        }
         for (id, location) in compiled.locations() {
             if let Some(entry) = next_modules.get_mut(id) {
                 entry.sent = Some(location);
@@ -226,6 +240,7 @@ impl MixGraph {
         self.instruments.retain(routed);
         self.live_inputs.retain(|key, _| devices.contains(key));
         self.meters.retain(|id, _| live.contains(id.as_str()));
+        self.freezes.applied(&program)?;
         self.modules = next_modules;
         *self
             .shared

@@ -51,7 +51,9 @@ extension WebViewManager {
                                                  payload: [String: Any]? = nil,
                                                  error: String? = nil,
                                                  log: Bool = true) {
-        if log || error != nil { print("[NATIVE_INVOKE] resolve request=\(requestId) success=\(error == nil) error=\(error ?? "<none>") payload_keys=\(Array((payload ?? [:]).keys).sorted())") }
+        // A command answering with its own failure (`{"error":…}`) names it too, not `<none>`.
+        let failure = error ?? (payload?["error"] as? String).map { "payload:\($0)" }
+        if log || failure != nil { print("[NATIVE_INVOKE] resolve request=\(requestId) success=\(error == nil) error=\(failure ?? "<none>") payload_keys=\(Array((payload ?? [:]).keys).sorted())") }
         guard let requestLiteral = jsonLiteral(requestId) else { return }
         let payloadLiteral = payload.flatMap { jsonLiteral($0) } ?? "null"
         let errorLiteral = error.flatMap { jsonLiteral($0) } ?? "null"
@@ -117,8 +119,10 @@ extension WebViewManager {
             }
             controller.startMIDIMonitoring { result in
                 switch result {
-                case .success(let inputs):
-                    sendNativeInvokeResponse(requestId: requestId, payload: ["ok": true, "runtime": "coremidi", "inputs": inputs])
+                case .success(let ports):
+                    sendNativeInvokeResponse(requestId: requestId, payload: [
+                        "ok": true, "runtime": "coremidi", "inputs": ports["inputs"] ?? [], "outputs": ports["outputs"] ?? []
+                    ])
                 case .failure(let error):
                     sendNativeInvokeResponse(requestId: requestId, error: error.localizedDescription)
                 }

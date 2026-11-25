@@ -32,6 +32,42 @@ export class VoiceConversation {
 export function audio_destroy_clip(id: string): void;
 
 /**
+ * Renders for at most `budget_ms` while the engine's load leaves room; whether renders remain.
+ */
+export function audio_freeze_advance(budget_ms: number): boolean;
+
+/**
+ * The strip is heard through the stem rendered under `key` (refused when the strip changed since).
+ */
+export function audio_freeze_apply(strip_id: string, key: string): void;
+
+/**
+ * `plan` (the page's render plan of the whole timeline) and `strip_id`: the stem of the strip's freezable part is
+ * rendered by `audio_freeze_advance` (or already is). `{ key, ready, steps }`.
+ */
+export function audio_freeze_render(plan: any, strip_id: string): any;
+
+/**
+ * A run starts: its peak is measured anew.
+ */
+export function audio_freeze_reset_peak(): void;
+
+/**
+ * Every stem and render but those `keys` name is forgotten.
+ */
+export function audio_freeze_retain(keys: string[]): void;
+
+/**
+ * The load, its peak, each strip's share, the frozen strips and the renders (`freeze_store::status`).
+ */
+export function audio_freeze_status(): any;
+
+/**
+ * The strip plays live again, its stem fading out.
+ */
+export function audio_freeze_thaw(strip_id: string): void;
+
+/**
  * `owner` plays on the engine's context itself (`on`) or lets it go: held,
  * the engine never sleeps.
  */
@@ -88,6 +124,23 @@ export function audio_probe_duration(data: Uint8Array): number;
  * `{ frames_rendered, base_context_frame, sample_rate, discontinuities, block_frames }`.
  */
 export function audio_render_clock(): object;
+
+/**
+ * The plan rendered offline, uncoded (R-370 L11: a MIDI clip « Figer »): its interleaved stereo float samples.
+ */
+export function audio_render_pcm(plan: any): Float32Array;
+
+/**
+ * The plan's Ogg Opus file (a `Uint8Array`), coded at `bitrate` b/s (the proxy's 96 kb/s when not given).
+ */
+export function audio_render_proxy(plan: any, bitrate?: number | null): Uint8Array;
+
+/**
+ * The plan's sound muxed with the page's coded picture as an MP4 file (a `Uint8Array`): `video` is
+ * `{ width, height, timescale, samples: [{ size, duration, key }] }`, `avcc` its parameters, `data` its samples'
+ * bytes one after another.
+ */
+export function audio_render_proxy_mp4(plan: any, bitrate: number | null | undefined, video: any, avcc: Uint8Array, data: Uint8Array): Uint8Array;
 
 /**
  * Starts each voice exactly on its rendered frame (`ScheduledVoice` list, as
@@ -174,6 +227,8 @@ export function endOfSound(channels: Array<any>, threshold_db: number, tail_fram
 
 export function findLoop(channels: Array<any>, start: number, end: number, radius: number, window: number, candidates: number): any;
 
+export function findNotes(notes: Float32Array, sample_rate: number): Float32Array;
+
 /**
  * `interchangeReadDawproject(projectXml, metadataXml, entriesJson)`: `entriesJson`
  * is the archive's entry names as a JSON array of strings.
@@ -209,9 +264,13 @@ export function nearestZeroCrossing(channels: Array<any>, frame: number, radius:
 
 export function readEditWindow(channels: Array<any>, start: number, end: number, dc: boolean, reverse: boolean): Array<any>;
 
+export function renderTune(channels: Array<any>, sample_rate: number, notes: Float32Array, tunes: Float32Array, formant: number): Array<any>;
+
 export function sourceRate(bytes: Uint8Array): number | undefined;
 
 export function toneSamples(hz: number, seconds: number, rate: number, edge_seconds: number, gain: number): Float32Array;
+
+export function trackPitch(channels: Array<any>, sample_rate: number): object;
 
 export function wavInfo(bytes: Uint8Array): any;
 
@@ -228,10 +287,55 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly audio_freeze_advance: (a: number) => [number, number, number];
+    readonly audio_freeze_apply: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly audio_freeze_render: (a: any, b: number, c: number) => [number, number, number];
+    readonly audio_freeze_reset_peak: () => void;
+    readonly audio_freeze_retain: (a: number, b: number) => void;
+    readonly audio_freeze_status: () => [number, number, number];
+    readonly audio_freeze_thaw: (a: number, b: number) => [number, number];
+    readonly interchangeReadDawproject: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly interchangeReadFcpxml: (a: number, b: number) => [number, number, number, number];
+    readonly interchangeReadOtio: (a: number, b: number) => [number, number, number, number];
     readonly calendarExpand: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly calendarOccurrenceEnd: (a: number, b: number, c: number) => [number, number, number, number];
     readonly calendarRangeOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+    readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
     readonly lpprojRead: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly voiceconversation_inputDb: (a: number) => number;
+    readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
+    readonly voiceconversation_new: () => number;
+    readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
+    readonly voiceconversation_reset: (a: number) => void;
+    readonly voiceconversation_setRecording: (a: number, b: number) => void;
+    readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
+    readonly voiceconversation_takeRecording: (a: number) => any;
+    readonly clickBar: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly compileSliceMotif: (a: any, b: any, c: number, d: number, e: number) => [number, number, number];
+    readonly cutTakes: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly decodeWav: (a: number, b: number) => [number, number, number];
+    readonly decodeWavIntegers: (a: number, b: number) => [number, number, number];
+    readonly detectOnsets: (a: any, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly encodeFlac: (a: any, b: number, c: number) => [number, number, number, number];
+    readonly encodeWav: (a: any, b: number, c: number) => [number, number, number, number];
+    readonly encodeWavIntegers: (a: any, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly endOfSound: (a: any, b: number, c: number) => [number, number, number];
+    readonly findLoop: (a: any, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly findNotes: (a: number, b: number, c: number) => [number, number];
+    readonly isWav: (a: any) => number;
+    readonly layEditPiece: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly nearestZeroCrossing: (a: any, b: number, c: number) => [number, number, number];
+    readonly readEditWindow: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly renderTune: (a: any, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+    readonly sourceRate: (a: any) => [number, number, number];
+    readonly toneSamples: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly trackPitch: (a: any, b: number) => [number, number, number];
+    readonly wavInfo: (a: any) => [number, number, number];
+    readonly waveformOfSound: (a: number, b: number, c: number) => [number, number, number];
+    readonly waveformPeaks: (a: any, b: number) => [number, number, number, number];
+    readonly audio_render_pcm: (a: any) => [number, number, number, number];
+    readonly audio_render_proxy: (a: any, b: number) => [number, number, number, number];
+    readonly audio_render_proxy_mp4: (a: any, b: number, c: any, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly audio_destroy_clip: (a: number, b: number) => [number, number];
     readonly audio_hold: (a: number, b: number, c: number) => [number, number, number];
     readonly audio_init: () => [number, number];
@@ -250,10 +354,6 @@ export interface InitOutput {
     readonly audio_stop: (a: number, b: number) => [number, number];
     readonly audio_stop_instance: (a: number, b: number) => [number, number];
     readonly audio_wake: () => [number, number, number];
-    readonly audio_mix_record_drain: (a: number, b: number) => [number, number, number];
-    readonly audio_mix_record_release: (a: number, b: number) => [number, number];
-    readonly audio_mix_record_start: (a: number, b: number, c: number, d: number) => [number, number, number];
-    readonly audio_mix_record_stop: (a: number, b: number) => [number, number];
     readonly audio_instrument: (a: any) => [number, number, number];
     readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly audio_mix_apply: (a: any) => [number, number, number];
@@ -265,39 +365,11 @@ export interface InitOutput {
     readonly audio_mix_live_push: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly audio_mix_module_state: (a: number, b: number) => [number, number, number];
     readonly audio_mix_readings: () => [number, number, number];
-    readonly interchangeReadDawproject: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly interchangeReadFcpxml: (a: number, b: number) => [number, number, number, number];
-    readonly interchangeReadOtio: (a: number, b: number) => [number, number, number, number];
-    readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
-    readonly clickBar: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
-    readonly compileSliceMotif: (a: any, b: any, c: number, d: number, e: number) => [number, number, number];
-    readonly cutTakes: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly decodeWav: (a: number, b: number) => [number, number, number];
-    readonly decodeWavIntegers: (a: number, b: number) => [number, number, number];
-    readonly detectOnsets: (a: any, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly encodeFlac: (a: any, b: number, c: number) => [number, number, number, number];
-    readonly encodeWav: (a: any, b: number, c: number) => [number, number, number, number];
-    readonly encodeWavIntegers: (a: any, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly endOfSound: (a: any, b: number, c: number) => [number, number, number];
-    readonly findLoop: (a: any, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
-    readonly isWav: (a: any) => number;
-    readonly layEditPiece: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly nearestZeroCrossing: (a: any, b: number, c: number) => [number, number, number];
-    readonly readEditWindow: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly sourceRate: (a: any) => [number, number, number];
-    readonly toneSamples: (a: number, b: number, c: number, d: number, e: number) => [number, number];
-    readonly voiceconversation_inputDb: (a: number) => number;
-    readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
-    readonly voiceconversation_new: () => number;
-    readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
-    readonly voiceconversation_reset: (a: number) => void;
-    readonly voiceconversation_setRecording: (a: number, b: number) => void;
-    readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
-    readonly voiceconversation_takeRecording: (a: number) => any;
-    readonly wavInfo: (a: any) => [number, number, number];
-    readonly waveformOfSound: (a: number, b: number, c: number) => [number, number, number];
-    readonly waveformPeaks: (a: any, b: number) => [number, number, number, number];
-    readonly wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d: (a: number, b: number) => void;
+    readonly audio_mix_record_drain: (a: number, b: number) => [number, number, number];
+    readonly audio_mix_record_release: (a: number, b: number) => [number, number];
+    readonly audio_mix_record_start: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly audio_mix_record_stop: (a: number, b: number) => [number, number];
+    readonly wasm_bindgen__convert__closures_____invoke__h89f5e65ccaea8674: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

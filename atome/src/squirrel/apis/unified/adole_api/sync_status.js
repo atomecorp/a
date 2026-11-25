@@ -3,6 +3,7 @@ import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
 import { pendingWorkspaceEvents, refusedWorkspaceEvents } from './guest_workspace_store.js';
 import { readBrowserWorkspaceSyncProgress } from './browser_workspace.js';
+import { deviceStore } from './auth_methods_login.js';
 
 // Read-only, account-bound view of the existing delivery and persistence owners.
 export async function getWorkspaceSyncStatus() {
@@ -15,6 +16,11 @@ export async function getWorkspaceSyncStatus() {
         if (result?.ok !== true && result?.success !== true) throw new Error(result?.error || 'sync_status_unavailable');
         const data = result.data || result;
         status = { ...(data.sync_status || {}), pending_delivery_count: data.pending_delivery_count };
+        // An account whose device holds no remote session any more (signed out of the server, a session it revoked):
+        // the native loop never gets its credential, so nothing reaches the server until the person signs in again.
+        if (session.mode === 'authenticated' && status.connection_state !== 'connected' && !await deviceStore().read('session')) {
+            status.connection_state = 'auth_required';
+        }
     } else {
         const [pending, refused] = await Promise.all([pendingWorkspaceEvents(principal), refusedWorkspaceEvents(principal)]);
         const engine = globalThis.window?.Squirrel?.SyncEngine?.getState?.();

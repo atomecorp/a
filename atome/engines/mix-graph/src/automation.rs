@@ -5,8 +5,10 @@
 // seek, pause, stop), then runs on the frames the graph renders, wrapping inside its loop.
 
 use crate::dsp_module;
-use crate::module::ModuleControls;
+use crate::module::{ModuleControls, REQUEST_ACTIVE, REQUEST_BYPASS};
 use crate::program::{ModuleSpec, Program};
+use atome_dsp::Transport;
+use atome_dsp::transport::{DEFAULT_BEATS_PER_SECOND, TempoPoint, beat_at};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -52,6 +54,18 @@ pub struct TransportSpec {
     pub seconds: f64,
     #[serde(default, rename = "loop")]
     pub cycle: Option<LoopSpec>,
+    // Its tempo map (sorted, from 0 s): the beat its rhythm effects count on (R-367).
+    #[serde(default)]
+    pub tempo: Vec<TempoSpec>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct TempoSpec {
+    pub start_seconds: f64,
+    pub bpm: f64,
+    // It glides evenly in time to the next change's tempo (time_model.js; R-379).
+    #[serde(default)]
+    pub ramp: bool,
 }
 
 // The value of a curve at `seconds` (points in time order): held before the first and after the last.
@@ -123,6 +137,11 @@ impl TransportClock {
         self.playing.store(spec.playing, Ordering::Release);
     }
 
+    // Where a stopped transport is parked (its last epoch's time).
+    pub fn parked_seconds(&self) -> f64 {
+        f64::from_bits(self.seconds.load(Ordering::Relaxed))
+    }
+
     // The transport's time at `frame`; none while it does not play.
     pub fn seconds_at(&self, frame: u64, sample_rate: f64) -> Option<f64> {
         if !self.playing.load(Ordering::Acquire) {
@@ -143,22 +162,94 @@ impl TransportClock {
     }
 }
 
-// The transports of the programs applied, by id; a transport no program names is dropped.
+// The transports of the programs applied, by id, with their tempo maps; a
+// transport no program names is dropped.
 #[derive(Default)]
-pub struct Transports(HashMap<String, Arc<TransportClock>>);
+pub struct Transports(
+    HashMap<String, Arc<TransportClock>>,
+    HashMap<String, Arc<[TempoPoint]>>,
+);
 
 impl Transports {
     pub fn apply(&mut self, program: &Program, frame: u64) {
         self.0
             .retain(|id, _| program.transports.iter().any(|spec| &spec.id == id));
+        self.1.clear();
         for spec in &program.transports {
             self.0
                 .entry(spec.id.clone())
                 .or_insert_with(TransportClock::new)
                 .anchor(spec, frame);
+            let mut tempo: Vec<TempoPoint> = spec
+                .tempo
+                .iter()
+                .filter(|point| point.bpm.is_finite() && point.bpm > 0.0)
+                .map(|point| TempoPoint {
+                    start_seconds: point.start_seconds,
+                    bpm: point.bpm,
+                    ramp: point.ramp,
+                })
+                .collect();
+            tempo.sort_by(|left, right| left.start_seconds.total_cmp(&right.start_seconds));
+            self.1.insert(spec.id.clone(), tempo.into());
         }
     }
+
+    // What a strip following transport `id` gives its rhythm effects.
+    pub fn strip(&self, id: &str) -> Option<StripTransport> {
+        Some(StripTransport {
+            clock: self.0.get(id)?.clone(),
+            tempo: self.1.get(id)?.clone(),
+        })
+    }
 }
+
+// A strip's transport on the render thread: its clock and its tempo map.
+pub struct StripTransport {
+    clock: Arc<TransportClock>,
+    tempo: Arc<[TempoPoint]>,
+}
+
+impl StripTransport {
+    /// Where the timeline stands at rendered `frame` while it plays, loops folded (a frozen strip's stem reads there).
+    pub fn seconds_at(&self, frame: u64, sample_rate: f64) -> Option<f64> {
+        self.clock.seconds_at(frame, sample_rate)
+    }
+}
+
+// Where the music stands at `frame` for a strip: its transport's beat while it
+// plays; else (stopped, or no transport) a beat that runs on with the frames at
+// the first tempo, so a beat division keeps its length on a live input.
+pub fn transport_at(strip: Option<&StripTransport>, frame: u64, sample_rate: f64) -> Transport {
+    let free = |tempo: &[TempoPoint]| {
+        let bps = tempo
+            .first()
+            .map_or(DEFAULT_BEATS_PER_SECOND, |point| point.bpm / 60.0);
+        Transport {
+            playing: false,
+            beat: frame as f64 / sample_rate * bps,
+            beats_per_second: bps,
+        }
+    };
+    let Some(strip) = strip else {
+        return free(&[]);
+    };
+    match strip.clock.seconds_at(frame, sample_rate) {
+        Some(seconds) => {
+            let (beat, beats_per_second) = beat_at(&strip.tempo, seconds);
+            Transport {
+                playing: true,
+                beat,
+                beats_per_second,
+            }
+        }
+        None => free(&strip.tempo),
+    }
+}
+
+// The lane of a painted zone (R-368): the module plays inside its blocks (value 1) and is bypassed outside them
+// (value 0), a tail ringing on past a zone's end as a bypass lets it (module.rs `STATE_DRAINING`).
+pub const ENGAGED_PARAM: &str = "engaged";
 
 // The parameter of a module that holds its primary value (module.rs `value`).
 pub fn primary_param(kind: &str) -> Option<&'static str> {
@@ -173,12 +264,16 @@ pub fn primary_param(kind: &str) -> Option<&'static str> {
 
 pub(crate) enum Slot {
     Value,
+    Engaged,
     Parameter(usize, &'static atome_dsp::ParamSpec),
 }
 
 pub(crate) fn slot_of(spec: &ModuleSpec, param: &str) -> Result<Slot, String> {
     if primary_param(&spec.kind) == Some(param) {
         return Ok(Slot::Value);
+    }
+    if param == ENGAGED_PARAM {
+        return Ok(Slot::Engaged);
     }
     if spec.kind == dsp_module::MODULE_TYPE
         && let Some((index, entry)) = dsp_module::kind_of(spec)?
@@ -250,15 +345,23 @@ impl Automation {
 
     pub fn run(&self, frame: u64, sample_rate: f64) {
         for lane in &self.lanes {
-            let Some(value) = lane
-                .clock
-                .seconds_at(frame, sample_rate)
-                .and_then(|seconds| evaluate(&lane.points, seconds))
-            else {
+            // A zone also holds while the transport is parked: the module is on where the playhead rests (R-368 Q9).
+            let seconds = lane.clock.seconds_at(frame, sample_rate).or_else(|| {
+                matches!(lane.slot, Slot::Engaged).then(|| lane.clock.parked_seconds())
+            });
+            let Some(value) = seconds.and_then(|seconds| evaluate(&lane.points, seconds)) else {
                 continue;
             };
             match lane.slot {
                 Slot::Value => lane.controls.value.set(value as f32),
+                Slot::Engaged => lane.controls.request.store(
+                    if value >= 0.5 {
+                        REQUEST_ACTIVE
+                    } else {
+                        REQUEST_BYPASS
+                    },
+                    Ordering::Relaxed,
+                ),
                 Slot::Parameter(index, entry) => {
                     lane.controls.parameters[index].set(entry.clamp(value as f32))
                 }

@@ -7,7 +7,7 @@ pub enum EventKind {
     NoteOn { note: u8, velocity: f32 },
     NoteOff { note: u8 },
     Sustain { down: bool },
-    // Pitch bend in semitones, already scaled by the bend range.
+    // Pitch bend throw, -1..1: the instrument scales it by its own bend range.
     PitchBend { semitones: f32 },
     // A MIDI controller moved, `value` normalized 0..1 (composed-note thresholds).
     Controller { number: u8, value: f32 },

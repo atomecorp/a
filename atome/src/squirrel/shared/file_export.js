@@ -7,6 +7,13 @@ const checkedFile = (name, bytes) => {
     if (!(bytes instanceof Uint8Array) || bytes.length > 64 * 1024 * 1024) throw new Error('export_bytes_invalid');
 };
 /** Explicit portable file export; native hosts never fall back to browser FS. */
+// The name an export is saved under: its label without the extension it may already carry (a clip keeps its imported
+// file's name), the characters a file system refuses replaced, then `extension`. R-295: a MIDI clip « x.mid » left as « x.mid.mid ».
+export const exportFileName = (label, extension) => {
+    const stem = String(label ?? '').trim().replace(/\.[a-z][a-z0-9]{0,4}$/i, '').replace(/[\\/:*?"<>|]/g, '_').trim();
+    return `${stem || 'eVe'}.${extension}`;
+};
+
 export async function saveExportFile(name, bytes, mime = 'application/octet-stream') {
     checkedFile(name, bytes);
     const invoke = getNativeImportInvoke();

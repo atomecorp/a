@@ -54,6 +54,12 @@ pub struct Segment {
     pub looping: Option<LoopSpec>,
     // Duration factor apart from pitch (1 = as recorded): read through the stretcher.
     pub stretch: f32,
+    // Its duration kept whatever the pitch (R-353 L7: a Scene's cell played chromatically): read through the
+    // stretcher even at ×1, so a note an octave up lasts as long as on its root.
+    pub hold: bool,
+    // False: played at its own pitch on every key, the bend kept (an EXS zone's « Pitch » off, SFZ's
+    // pitch_keytrack=0, SF2's scaleTuning 0).
+    pub key_track: bool,
     // Its markers in the instrument's marker table.
     pub markers: MarkerSpan,
 }
@@ -74,12 +80,23 @@ impl Segment {
             playback: Playback::Forward,
             looping: None,
             stretch: 1.0,
+            hold: false,
+            key_track: true,
             markers: MarkerSpan { first: 0, len: 0 },
         }
     }
 
+    // The pitch it is heard at for `pitch` (semitones, the note plus bend) played on `note`.
+    pub fn heard_pitch(&self, pitch: f32, note: u8) -> f32 {
+        if self.key_track {
+            pitch
+        } else {
+            pitch - note as f32 + self.root as f32
+        }
+    }
+
     pub fn is_stretched(&self) -> bool {
-        self.stretch != 1.0
+        self.stretch != 1.0 || self.hold
     }
 
     pub fn validate(&self, data: &SampleData) -> Result<(), String> {
@@ -90,7 +107,7 @@ impl Segment {
                 self.start, self.end, frames
             ));
         }
-        if self.is_stretched() && !(0.25..=4.0).contains(&self.stretch) {
+        if !(0.25..=4.0).contains(&self.stretch) {
             return Err(format!("stretch ×{} outside ×0.25..×4", self.stretch));
         }
         if let Some(spec) = self.looping {
@@ -144,6 +161,8 @@ impl SegmentPlayer {
             playback: Playback::Forward,
             looping: None,
             stretch: 1.0,
+            hold: false,
+            key_track: true,
             markers: MarkerSpan { first: 0, len: 0 },
         },
         position: 0.0,

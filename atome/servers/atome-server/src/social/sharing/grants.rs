@@ -177,7 +177,7 @@ impl Sharing {
         principal: &str,
         granted: Rights,
     ) -> Result<bool, String> {
-        if authority.share.is_some() || granted[1..].iter().any(|on| *on) {
+        if authority.share.is_some() || !rights::reads_only(granted) {
             return Ok(false);
         }
         let state = self

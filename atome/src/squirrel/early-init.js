@@ -35,6 +35,32 @@ if (location.hash.startsWith('#invite=')) {
     else console.error('[domain_link] unknown domain', domain);
 })();
 
+// The stream page (R-248, eVe/domains/screens/view_cast.js) lies in the iOS app's own page, as a frame of the same origin.
+// iOS injects its bridge into the main frame only (WebViewManager.swift#pageStartupScript), so this page could not resume
+// the app's session and stopped on the sign-in, never sending a picture to the television. It takes its host page's
+// bridge, limited to what the screen page of a connected screen may ask (ExternalDisplaySceneDelegate.swift
+// ExternalDisplayFollowerBridge: reading and resuming the app's session), and its local server's port.
+(function borrowHostBridge() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('display') !== 'follower' || params.get('stream') !== '1' || window.parent === window) return;
+    let host = null;
+    try { host = window.parent.location.origin === location.origin ? window.parent : null; } catch (_) { return; }
+    if (!host || typeof host.__ATOME_IOS_NATIVE_INVOKE !== 'function') return;
+    const READ_COMMANDS = ['auth_device_key', 'auth_local_request', 'workspace_resume_read'];
+    const SESSION_ACTIONS = ['local-session-describe', 'local-session-challenge', 'local-session-resume'];
+    window.__HOST_ENV = host.__HOST_ENV;
+    ['__ATOME_LOCAL_HTTP_PORT__', 'ATOME_LOCAL_HTTP_PORT', '__LOCAL_HTTP_PORT', '__SQUIRREL_TAURI_LOCAL_PORT__'].forEach(function (key) {
+        if (host[key]) window[key] = host[key];
+    });
+    window.__ATOME_IOS_NATIVE_INVOKE = function (command, payload) {
+        const name = String(command || '');
+        if (READ_COMMANDS.indexOf(name) < 0 || (name === 'auth_local_request' && SESSION_ACTIONS.indexOf(payload && payload.action) < 0)) {
+            return Promise.reject(new Error('external_display_command_refused:' + name));
+        }
+        return host.__ATOME_IOS_NATIVE_INVOKE(name, payload);
+    };
+})();
+
 // Ensure global debug flag exists before any module scripts run.
 window.__CHECK_DEBUG__ = false;
 var __CHECK_DEBUG__ = window.__CHECK_DEBUG__;

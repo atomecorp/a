@@ -262,6 +262,17 @@ export async function set_current_project(projectId, projectName = null, ownerId
     return true;
 }
 
+// A project that is no longer the person's (a share they left, or that its owner ended): it stops being their current
+// project, remembered on this device and named in the session, so no screen lists it as theirs. Another project stays current.
+export function forget_current_project(projectId) {
+    const id = String(projectId || '');
+    if (!id) throw new Error('forget_current_project_id_required');
+    if (readWindowProjectId() !== id && String(getCurrentProjectCache()?.id || '') !== id) return false;
+    setCurrentProjectCache(null);
+    updateWindowProject(null);
+    return true;
+}
+
 export async function load_saved_current_project() {
     const currentUserId = getCurrentUserId();
     if (!currentUserId || isLoggedOut()) return null;
@@ -310,5 +321,6 @@ export default {
     get_current_project_id,
     get_current_project,
     set_current_project,
+    forget_current_project,
     load_saved_current_project
 };

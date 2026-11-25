@@ -220,6 +220,12 @@ fn normalized(input: &JsonValue) -> Result<Option<JsonValue>, String> {
         "starts_at": or(&["starts_at", "startsAt"], JsonValue::Null),
         "ends_at": or(&["ends_at", "endsAt"], JsonValue::Null),
         "origin": origin_of(input.get("origin")),
+        // Another person asking for one of this person's devices (R-248): the grant its card answers.
+        "grant_id": or(&["grant_id", "grantId"], JsonValue::Null),
+        "capabilities": match input.get("capabilities") {
+            Some(capabilities @ JsonValue::Array(_)) => capabilities.clone(),
+            _ => json!([]),
+        },
     })))
 }
 

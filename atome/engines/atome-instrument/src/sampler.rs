@@ -24,61 +24,14 @@ use crate::pool::VoicePool;
 use crate::sample::SampleBank;
 use crate::voice::Shape;
 use crate::zone::MAX_PLAYERS;
-use atome_dsp::{ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use atome_dsp::{ParamSpec, Processor, Smoothed, StereoBlock};
 use std::sync::Arc;
 
-pub const GAIN_DB: u32 = 0;
-pub const ATTACK_MS: u32 = 1;
-pub const DECAY_MS: u32 = 2;
-pub const SUSTAIN: u32 = 3;
-pub const RELEASE_MS: u32 = 4;
-pub const VELOCITY_SENSE: u32 = 5;
-pub const TUNE_CENTS: u32 = 6;
-pub const GLIDE_MS: u32 = 7;
-pub const POLYPHONY: u32 = 8;
-pub const MODE: u32 = 9;
-pub const BEND_RANGE: u32 = 10;
-pub const PARAMS: [ParamSpec; 11] = [
-    ParamSpec::new(GAIN_DB, "gain_db", -60.0, 12.0, 0.0, Unit::Decibels),
-    ParamSpec::new(
-        ATTACK_MS,
-        "attack_ms",
-        0.1,
-        10000.0,
-        1.0,
-        Unit::Milliseconds,
-    ),
-    ParamSpec::new(
-        DECAY_MS,
-        "decay_ms",
-        1.0,
-        10000.0,
-        144.0,
-        Unit::Milliseconds,
-    ),
-    ParamSpec::new(SUSTAIN, "sustain", 0.0, 1.0, 1.0, Unit::Percent),
-    ParamSpec::new(
-        RELEASE_MS,
-        "release_ms",
-        1.0,
-        20000.0,
-        89.0,
-        Unit::Milliseconds,
-    ),
-    ParamSpec::new(
-        VELOCITY_SENSE,
-        "velocity_sense",
-        0.0,
-        1.0,
-        0.89,
-        Unit::Percent,
-    ),
-    ParamSpec::new(TUNE_CENTS, "tune_cents", -1200.0, 1200.0, 0.0, Unit::Plain),
-    ParamSpec::new(GLIDE_MS, "glide_ms", 0.0, 5000.0, 55.0, Unit::Milliseconds),
-    ParamSpec::new(POLYPHONY, "polyphony", 1.0, 128.0, 21.0, Unit::Plain),
-    ParamSpec::new(MODE, "mode", 0.0, 2.0, 0.0, Unit::Plain),
-    ParamSpec::new(BEND_RANGE, "bend_range", 0.0, 48.0, 2.0, Unit::Plain),
-];
+mod params;
+pub use params::{
+    ATTACK_MS, BEND_RANGE, DECAY_MS, DELAY_MS, GAIN_DB, GLIDE_MS, HOLD_MS, MODE, PARAMS, POLYPHONY,
+    RELEASE_MS, SUSTAIN, TUNE_CENTS, VELOCITY_SENSE,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoiceMode {
@@ -96,6 +49,16 @@ pub fn priming_budget(sample_rate: f32, frames: usize) -> usize {
     ((frames as f32 / (sample_rate * 0.001)) as usize).max(1)
 }
 const EVENT_CAPACITY: usize = 512;
+
+// The controllers before any is sent, as MIDI resets them (RP-015): the volume at 100,
+// the pan at its centre, the expression full, the others at 0.
+const RESTING_CONTROLLERS: [f32; 128] = {
+    let mut values = [0.0; 128];
+    values[7] = 100.0 / 127.0;
+    values[10] = 64.0 / 127.0;
+    values[11] = 1.0;
+    values
+};
 
 // The outputs rendered: bus `b` is samples [b * frames, (b + 1) * frames) of each side.
 struct Buses<'a> {
@@ -186,7 +149,7 @@ impl Sampler {
             held: [0; HELD_NOTES],
             held_count: 0,
             held_velocity: 1.0,
-            controllers: [0.0; 128],
+            controllers: RESTING_CONTROLLERS,
             actions: Arc::new(ActionQueue::new(ACTION_CAPACITY)),
             generation: 0,
         }
@@ -248,14 +211,18 @@ impl Sampler {
         let glide_ms = value(GLIDE_MS);
         match self.keymap.zone(zone).envelope {
             Some(own) => Shape {
+                delay_ms: own.delay_ms,
                 attack_ms: own.attack_ms,
+                hold_ms: own.hold_ms,
                 decay_ms: own.decay_ms,
                 sustain: own.sustain,
                 release_ms: own.release_ms,
                 glide_ms,
             },
             None => Shape {
+                delay_ms: value(DELAY_MS),
                 attack_ms: value(ATTACK_MS),
+                hold_ms: value(HOLD_MS),
                 decay_ms: value(DECAY_MS),
                 sustain: value(SUSTAIN),
                 release_ms: value(RELEASE_MS),
@@ -494,7 +461,7 @@ impl Processor for Sampler {
             .map_or(0, |switches| switches.default);
         self.sustain_down = false;
         self.bend = 0.0;
-        self.controllers = [0.0; 128];
+        self.controllers = RESTING_CONTROLLERS;
         self.keymap.markers_mut().reset();
         for voice in self.pool.voices_mut() {
             voice.active = false;

@@ -1,25 +1,25 @@
 // The Sampler's bank and automation commands (todo/sampler_cahier_des_charges_2026-10-29.md §8.3, §9, §10, §13):
-// import an SFZ, DecentSampler or SF2 bank, arrange loose sounds, export an instrument as SFZ, auto-sample an
+// import an SFZ, DecentSampler, SF2 or Logic EXS bank, arrange loose sounds, export an instrument as SFZ, auto-sample an
 // external instrument. Same family and shape as instrument_contracts.js; run by
 // eVe/domains/audio_fx/instrument_bank_commands.js (INSTRUMENT_BANK_ACTIONS).
 // The sampler banks eVe reads (bank_sources.js). A bank is a file kept as it is among the person's media, even under
 // an audio MIME (a SoundFont's audio/x-sf2): no sound decoder reads it (asset_box_media.js#inferUploadAtomeType).
-export const BANK_FORMATS = Object.freeze(['sfz', 'dspreset', 'sf2']);
+export const BANK_FORMATS = Object.freeze(['sfz', 'dspreset', 'sf2', 'exs']);
 export const INSTRUMENT_BANK_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'NOT_FOUND', 'INVALID_INSTRUMENT', 'WRITE_FAILED',
     'PLAY_FAILED', 'BANK_UNREADABLE', 'BANK_UNSUPPORTED', 'SAMPLE_MISSING', 'ROOT_UNKNOWN', 'CAPTURE_UNAVAILABLE', 'SILENT_CAPTURE', 'INVALID_PLAN']);
 
 const text = { type: 'string', minLength: 1, maxLength: 200 };
-const url = { type: 'string', minLength: 1, maxLength: 2048, description: 'An http(s) address of a .sfz, .dspreset or .sf2 file; an SFZ or DecentSampler bank\'s sounds are fetched beside it.' };
+const url = { type: 'string', minLength: 1, maxLength: 2048, description: 'An http(s) address of a .sfz, .dspreset, .sf2 or .exs file; an SFZ, DecentSampler or EXS bank\'s sounds are fetched beside it.' };
 const note = { type: 'integer', minimum: 0, maximum: 127 };
 const velocity = { type: 'integer', minimum: 1, maximum: 127 };
 const media = { type: 'array', minItems: 1, maxItems: 1024, uniqueItems: true, items: text };
 const source = { bank_atome_id: { ...text, description: 'The bank file among the person\'s media.' },
     sample_atome_ids: { ...media, minItems: 0, description: 'The person\'s media holding the bank\'s sounds, matched by file name.' }, url };
 const definitions = {
-    bank_inspect: [source, [], 'Read a sampler bank without importing it (dry run): its format, presets (an SF2 lists all, each with its index, bank and program), region counts, the sounds it names that are missing, and what eVe cannot hold of it (warnings). Give bank_atome_id or url.', false, 'read'],
+    bank_inspect: [source, [], 'Read a sampler bank without importing it (dry run): its format, presets (an SF2 lists all, each with its index, bank and program; an EXS one per articulation ID), region counts, the sounds it names that are missing, and what eVe cannot hold of it (warnings). Give bank_atome_id or url.', false, 'read'],
     bank_import: [{ ...source, name: text, presets: { type: 'array', minItems: 1, maxItems: 1024, uniqueItems: true, items: { type: 'integer', minimum: 0, maximum: 65535 } },
         flac: { type: 'boolean' }, play: { type: 'boolean' } }, [],
-        'Import an SFZ, DecentSampler (.dspreset) or SoundFont 2 (.sf2) bank into Mes instruments (one instrument per SF2 preset; presets: the indices bank_inspect gave, all by default). Its sounds join the person\'s media first, integer WAVs and SF2 samples stored as FLAC (flac false keeps WAVs). Zones, round-robin, cuts, release samples, loops, tuning, level and pan are kept; the envelope becomes the instrument\'s. name: the instrument\'s name when the bank makes one (else the bank\'s or preset\'s). The first instrument plays on a new chain unless play is false. Give bank_atome_id (with sample_atome_ids) or url. Returns instruments [{ instrument_id, name, zone_count, warnings }].', true, 'write'],
+        'Import an SFZ, DecentSampler (.dspreset), SoundFont 2 (.sf2) or Logic EXS24 / Sampler (.exs) bank into Mes instruments (one instrument per SF2 preset or EXS articulation ID; presets: the indices bank_inspect gave, all by default). Its sounds join the person\'s media first, integer WAVs and SF2 samples stored as FLAC (flac false keeps WAVs). Zones, round-robin, cuts, release samples, loops, tuning, level, pan and each zone\'s output (a multi-out bank: one console strip per output) are kept; the envelope becomes the instrument\'s. name: the instrument\'s name when the bank makes one (else the bank\'s or preset\'s). The first instrument plays on a new chain unless play is false. Give bank_atome_id (with sample_atome_ids) or url. Returns instruments [{ instrument_id, name, zone_count, warnings }].', true, 'write'],
     samples_arrange: [{ media_atome_ids: media, instrument_id: text, name: text, middle_c: { type: 'string', enum: ['C4', 'C3'] },
         layer_db: { type: 'number', minimum: 0, maximum: 24 } }, ['media_atome_ids'],
         'Arrange sounds automatically (rangement automatique) on instrument_id, or on a new instrument named name: each sound\'s root from its file name (C4, F#3, Db2, a MIDI number, do3 = 60; middle_c says whether C4 or C3 is 60), else its WAV smpl/acid metadata, else pitch analysis; sounds of one root become velocity layers by measured level (a pp…fff or v3 name wins), those within layer_db (3 dB) of each other or named rr1/rr2 play in turn (round-robin); each root spreads halfway to its neighbours. Returns zone_ids and unplaced sounds (root_unknown).', true, 'write'],

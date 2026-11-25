@@ -273,7 +273,11 @@ pub(crate) fn queue_masked_node(
         if !paint.valid() {
             return Err(format!("bevy_surface_paint_invalid:{}", node.id));
         }
-        let texture = paint.texture(silhouette, crate::spawn::color_for_node(node));
+        let texture = paint.texture(
+            silhouette,
+            crate::spawn::color_for_node(node),
+            crate::shape_texture::texture_side_limit(world),
+        );
         return queue_masked_texture(world, &texture, mask, &node.id).map(Some);
     }
     match node.texture.as_ref() {

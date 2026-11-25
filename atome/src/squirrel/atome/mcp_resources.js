@@ -169,6 +169,7 @@ export async function readMcpResource(uri, params = {}, handlers = {}) {
     }
     if (normalizedUri === 'runtime://audit/recent') {
         return handlers['runtime.audit.list']({
+            __mcp: params.__mcp,
             limit: Number.isFinite(Number(params?.limit)) ? Number(params.limit) : 50
         });
     }

@@ -2,10 +2,12 @@ use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnec
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+
+use crate::native_midi_schedule;
 
 const MIDI_RUNTIME: &str = "midir";
 // midir tells no device plugged or unplugged: the watcher lists the ports this often (R-286, user 24 Nov. 2026: a MIDI
@@ -260,10 +262,16 @@ pub fn start_native_midi(app: AppHandle) -> Result<NativeMidiStatus, String> {
     })
 }
 
+// The longest a message waits for its instant (`delay_ms`): a clock tick or a note scheduled a little ahead.
+const MAX_DELAY_MS: f64 = 2000.0;
+
+// `delay_ms`: the message leaves at that instant from now (native_midi_schedule.rs), as Web MIDI's timestamp does; none,
+// 0 or less, it leaves now.
 #[tauri::command]
 pub fn send_native_midi(
     bytes: Vec<u8>,
     output_id: Option<String>,
+    delay_ms: Option<f64>,
 ) -> Result<NativeMidiSendStatus, String> {
     if bytes.is_empty() || bytes.len() > 1024 {
         return Err("native_midi_bytes_invalid".to_string());
@@ -282,31 +290,59 @@ pub fn send_native_midi(
     } else {
         return Err("native_midi_destination_missing".to_string());
     };
-    if !locked.output_connections.contains_key(&resolved_id) {
+    let destination_count = locked.outputs.len();
+    let delay = delay_ms.filter(|delay| delay.is_finite() && *delay > 0.0);
+    match delay {
+        Some(delay) => {
+            drop(locked);
+            native_midi_schedule::send_at(
+                Duration::from_secs_f64(delay.min(MAX_DELAY_MS) / 1000.0),
+                resolved_id.clone(),
+                bytes,
+            )?;
+        }
+        None => send_now(&mut locked, &resolved_id, &bytes)?,
+    }
+    Ok(NativeMidiSendStatus {
+        ok: true,
+        destination_count,
+        output_id: resolved_id,
+        runtime: MIDI_RUNTIME,
+    })
+}
+
+// The port's connection, opened once, sends `bytes` now.
+fn send_now(locked: &mut NativeMidiState, port_id: &str, bytes: &[u8]) -> Result<(), String> {
+    if !locked.output_connections.contains_key(port_id) {
         let output = MidiOutput::new("Atome Desktop MIDI output")
             .map_err(|error| format!("native_midi_output_init_failed:{error}"))?;
         let port = output
-            .find_port_by_id(&resolved_id)
+            .find_port_by_id(port_id)
             .ok_or_else(|| "native_midi_destination_missing".to_string())?;
         let connection = output
             .connect(&port, "Atome Desktop MIDI output connection")
             .map_err(|error| format!("native_midi_output_connect_failed:{error}"))?;
         locked
             .output_connections
-            .insert(resolved_id.clone(), connection);
+            .insert(port_id.to_string(), connection);
     }
     locked
         .output_connections
-        .get_mut(&resolved_id)
+        .get_mut(port_id)
         .ok_or_else(|| "native_midi_output_unavailable".to_string())?
-        .send(&bytes)
-        .map_err(|error| format!("native_midi_send_failed:{error}"))?;
-    Ok(NativeMidiSendStatus {
-        ok: true,
-        destination_count: locked.outputs.len(),
-        output_id: resolved_id,
-        runtime: MIDI_RUNTIME,
-    })
+        .send(bytes)
+        .map_err(|error| format!("native_midi_send_failed:{error}"))
+}
+
+// A scheduled message, at its instant (native_midi_schedule.rs): the port may have gone meanwhile.
+pub(crate) fn send_scheduled(port_id: &str, bytes: &[u8]) -> Result<(), String> {
+    let mut locked = state()
+        .lock()
+        .map_err(|_| "native_midi_state_poisoned".to_string())?;
+    if !locked.outputs.iter().any(|port| port.id == port_id) {
+        return Err("native_midi_destination_missing".to_string());
+    }
+    send_now(&mut locked, port_id, bytes)
 }
 
 #[cfg(all(test, target_os = "macos"))]
@@ -321,9 +357,11 @@ mod tests {
         let output = output_lister().expect("output lister");
         let inputs = read_input_ports(&input).expect("inputs");
         let outputs = read_output_ports(&output).expect("outputs");
-        assert!(changed_ports(&input, &output, (&inputs, &outputs))
-            .expect("listed")
-            .is_none());
+        assert!(
+            changed_ports(&input, &output, (&inputs, &outputs))
+                .expect("listed")
+                .is_none()
+        );
         let plugged = MidiOutput::new("Atome hot-plug test")
             .expect("output client")
             .create_virtual("Atome hot-plug source")
@@ -333,9 +371,11 @@ mod tests {
             changed_ports(&input, &output, (&inputs, &outputs)).expect("listed")
         });
         let (listed, _) = changed.expect("the source plugged in was not listed");
-        assert!(listed
-            .iter()
-            .any(|port| port.name.contains("Atome hot-plug source")));
+        assert!(
+            listed
+                .iter()
+                .any(|port| port.name.contains("Atome hot-plug source"))
+        );
         drop(plugged);
     }
 }

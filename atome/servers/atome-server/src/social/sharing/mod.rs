@@ -9,7 +9,7 @@ pub(crate) mod grants;
 mod list_view;
 mod lists;
 mod manage;
-mod rights;
+pub(crate) mod rights;
 
 use super::{Notice, NotificationStack, Relations};
 use crate::social::news::db::{all, get, parsed, run};
@@ -59,6 +59,7 @@ fn visible(row: &JsonValue) -> JsonValue {
         "principal_id": row["principal_id"], "atome_id": row["atome_id"], "stream_id": row["stream_id"],
         "share_type": row["share_type"], "share_mode": row["share_mode"], "status": row["status"],
         "permissions": permissions, "rights": rights::object(held), "role": rights::role(held),
+        "access": rights::access(held),
         "allowed_properties": allowed, "readable_properties": or_allowed("readable_properties_json"),
         "writable_properties": or_allowed("writable_properties_json"), "parent_share_id": or_null("parent_share_id"),
         "publication_cursor": js::number_json(js::number_or(row.get("publication_cursor"), 0.0)),

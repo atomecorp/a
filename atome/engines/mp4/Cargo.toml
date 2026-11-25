@@ -1,0 +1,13 @@
+[package]
+name = "atome-mp4"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The one ISO BMFF (MP4) box writer of atome/eVe: the live fragmented H.264 of a television stream (screen-cast HLS) and a shared project's progressive MP4 proxy (H.264 + Opus, R-349)"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

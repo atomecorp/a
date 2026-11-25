@@ -132,6 +132,12 @@ impl Processor for Chain {
 
     fn set_param(&mut self, _id: u32, _value: f32) {}
 
+    fn set_transport(&mut self, transport: &crate::Transport) {
+        for slot in &mut self.slots {
+            slot.processor.set_transport(transport);
+        }
+    }
+
     fn params(&self) -> &'static [ParamSpec] {
         &[]
     }

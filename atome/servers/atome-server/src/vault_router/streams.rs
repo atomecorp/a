@@ -299,9 +299,11 @@ impl VaultRouter {
             .into_iter()
             .flatten()
         {
+            // A share at « Écoute » carries the events of the project and its proxy alone (R-349).
             if self
                 .within_shared_root(&owner, &atome_id, &js::id(share.get("atome_id")))
                 .await?
+                && self.share_reaches(share, &atome_id).await?
             {
                 covering = Some(share.clone());
                 break;
@@ -361,7 +363,8 @@ impl VaultRouter {
             .unwrap_or_else(|| json!({}));
         let allowed = shares::readable(&share);
         let visible = |key: &str| allowed.as_ref().is_none_or(|allowed| allowed.contains(key));
-        let props = shares::filter_properties(payload.get("props"), &share);
+        let atome_id = js::id(event.get("atome_id"));
+        let props = shares::shown_properties(payload.get("props"), &share, &atome_id);
         let delete_keys: Vec<JsonValue> = first(&payload, &["delete_keys", "deleteKeys"])
             .and_then(JsonValue::as_array)
             .into_iter()
@@ -382,7 +385,7 @@ impl VaultRouter {
                 projection,
                 [(
                     "properties",
-                    shares::filter_properties(projection.get("properties"), &share),
+                    shares::shown_properties(projection.get("properties"), &share, &atome_id),
                 )],
             ),
             _ => JsonValue::Null,

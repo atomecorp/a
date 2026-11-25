@@ -9,8 +9,45 @@ use bevy::{
     asset::RenderAssetUsages,
     image::{Image, ImageSampler},
     prelude::*,
-    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    render::{
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        renderer::RenderDevice,
+    },
 };
+
+/// WebGPU's guaranteed `maxTextureDimension2D`: the side every device takes, before one is known.
+const WEBGPU_GUARANTEED_TEXTURE_SIDE: u32 = 8192;
+
+/// The longest side a texture may have on `device` (its `maxTextureDimension2D`); WebGPU's
+/// guaranteed side while no device is known yet (the scene a renderer starts with).
+pub(crate) fn device_texture_side(device: Option<&RenderDevice>) -> u32 {
+    device.map_or(WEBGPU_GUARANTEED_TEXTURE_SIDE, |device| {
+        device.limits().max_texture_dimension_2d
+    })
+}
+
+/// The longest side a texture may have on the running device.
+pub(crate) fn texture_side_limit(world: &World) -> u32 {
+    device_texture_side(world.get_resource::<RenderDevice>())
+}
+
+/// Texels per px (1 at most) at which a texture of `extent` px fits the device: a shape longer
+/// than its textures (a long clip on a zoomed Timeline) is drawn at a lower density and laid at
+/// its own size, never refused by the GPU, whose error stops the renderer (R-295, iPad).
+pub(crate) fn fitting_density(world: &World, extent: [f32; 2]) -> f32 {
+    density_within(texture_side_limit(world), extent)
+}
+
+/// `fitting_density` for a known side limit.
+pub(crate) fn density_within(limit: u32, extent: [f32; 2]) -> f32 {
+    let limit = limit as f32;
+    let longest = extent[0].max(extent[1]).ceil();
+    if longest <= limit {
+        1.0
+    } else {
+        limit / longest
+    }
+}
 
 fn image_from_mask(width: u32, height: u32, rgba: Vec<u8>) -> Image {
     let mut image = Image::new(
@@ -101,6 +138,17 @@ pub fn cached_image_handle_from_shape_surface(
     if world.get_resource::<AtomeRoundedRectMaskCache>().is_none() {
         world.insert_resource(AtomeRoundedRectMaskCache::default());
     }
+    // A painted surface keeps its logical lengths (borders, insets) and lowers its own raster
+    // density (`SurfacePaint::texture`); a bare mask is its silhouette drawn smaller. One texel
+    // more on an axis a shadow's phase moves (`queue_shape_mask`).
+    let limit = texture_side_limit(world);
+    let density = density_within(limit, [silhouette.width + 1.0, silhouette.height + 1.0]);
+    let fitted = silhouette.scaled(density);
+    let silhouette = if density < 1.0 && paint.is_none() {
+        &fitted
+    } else {
+        silhouette
+    };
     let mut key = mask_cache_key(silhouette);
     if let Some(paint) = paint {
         if !paint.valid() {
@@ -130,7 +178,7 @@ pub fn cached_image_handle_from_shape_surface(
     }
     let handle = match paint {
         Some(paint) => {
-            let texture = paint.texture(silhouette, fill);
+            let texture = paint.texture(silhouette, fill, limit);
             world
                 .get_resource_mut::<Assets<Image>>()
                 .ok_or_else(|| "bevy_image_assets_required".to_string())?

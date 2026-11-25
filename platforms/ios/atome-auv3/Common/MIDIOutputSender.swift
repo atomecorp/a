@@ -31,13 +31,41 @@ final class MIDIOutputSender {
         sendMIDIMessage(data: [0xB0 | (channel & 0x0F), controller & 0x7F, value & 0x7F], port: port)
     }
 
-    func sendRaw(bytes: [UInt8], port: MIDIPortRef) {
-        sendMIDIMessage(data: bytes, port: port)
+    func sendRaw(bytes: [UInt8], port: MIDIPortRef, destinationId: String? = nil, delayMs: Double = 0) {
+        sendMIDIMessage(data: bytes, port: port, destinationId: destinationId, delayMs: delayMs)
     }
 
-    // One message to every CoreMIDI destination (the page's single broadcast output).
-    private func sendMIDIMessage(data: [UInt8], port: MIDIPortRef) {
-        guard data.count > 0 && data.count <= 3 else {
+    /// The CoreMIDI destinations, as the page lists its outputs (R-379: one line per device in Synchro MIDI).
+    func destinations() -> [[String: String]] {
+        (0..<MIDIGetNumberOfDestinations()).compactMap { index in
+            let destination = MIDIGetDestination(index)
+            guard destination != 0, let uniqueID = Self.uniqueID(destination) else { return nil }
+            return ["id": Self.destinationId(uniqueID), "name": objectNameResolver(destination) ?? ""]
+        }
+    }
+
+    private static func destinationId(_ uniqueID: MIDIUniqueID) -> String {
+        "coremidi-out-\(UInt32(bitPattern: uniqueID))"
+    }
+
+    private static func uniqueID(_ object: MIDIObjectRef) -> MIDIUniqueID? {
+        var uniqueID: MIDIUniqueID = 0
+        return MIDIObjectGetIntegerProperty(object, kMIDIPropertyUniqueID, &uniqueID) == noErr ? uniqueID : nil
+    }
+
+    /// The host time `delayMs` from now (0: now, as CoreMIDI reads a zero timestamp).
+    private static func hostTime(afterMs delayMs: Double) -> MIDITimeStamp {
+        guard delayMs > 0, delayMs.isFinite else { return 0 }
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let nanoseconds = min(delayMs, 2000) * 1_000_000
+        return mach_absolute_time() + MIDITimeStamp(nanoseconds * Double(timebase.denom) / Double(timebase.numer))
+    }
+
+    // One message to one destination (`destinationId`), else to every CoreMIDI destination (the page's broadcast
+    // output), at its instant (`delayMs` from now, CoreMIDI holding it until then).
+    private func sendMIDIMessage(data: [UInt8], port: MIDIPortRef, destinationId: String?, delayMs: Double) {
+        guard !data.isEmpty && data.count <= 3 else {
             logger.error("Invalid MIDI data length: \(data.count)")
             return
         }
@@ -53,10 +81,11 @@ final class MIDIOutputSender {
         // so the one or two words of a message always fit (MIDIEventListAdd cannot fail here).
         var eventList = MIDIEventList()
         let packet = MIDIEventListInit(&eventList, ._1_0)
-        _ = MIDIEventListAdd(&eventList, MemoryLayout<MIDIEventList>.size, packet, 0, words.count, words)
+        _ = MIDIEventListAdd(&eventList, MemoryLayout<MIDIEventList>.size, packet, Self.hostTime(afterMs: delayMs), words.count, words)
         for index in 0..<MIDIGetNumberOfDestinations() {
             let destination = MIDIGetDestination(index)
             guard destination != 0 else { continue }
+            if let destinationId, Self.uniqueID(destination).map(Self.destinationId) != destinationId { continue }
             let result = MIDISendEventList(port, destination, &eventList)
             if result != noErr {
                 logger.error("MIDI send to \(self.objectNameResolver(destination) ?? String(destination)) failed: \(result)")

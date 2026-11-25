@@ -206,10 +206,22 @@ impl SurfacePaint {
         result
     }
 
-    pub fn texture(&self, silhouette: &AtomeShapeSilhouette, fill: [f32; 4]) -> AtomeTexture {
+    /// `texel_limit`: the longest side the device's textures take; a surface longer than it is
+    /// rastered at a lower density (`shape_texture.rs#fitting_density`).
+    pub fn texture(
+        &self,
+        silhouette: &AtomeShapeSilhouette,
+        fill: [f32; 4],
+        texel_limit: u32,
+    ) -> AtomeTexture {
         // Lengths stay logical; only the raster grows. Edges blend over one texel.
-        let scale = self.scale();
         let (logical_width, logical_height) = (silhouette.width, silhouette.height);
+        let asked = self.scale();
+        let scale = asked
+            * crate::shape_texture::density_within(
+                texel_limit,
+                [logical_width * asked, logical_height * asked],
+            );
         let width = (logical_width * scale).ceil().max(1.0) as u32;
         let height = (logical_height * scale).ceil().max(1.0) as u32;
         let mut rgba = vec![0; width as usize * height as usize * 4];

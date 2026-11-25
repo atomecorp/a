@@ -120,8 +120,11 @@ impl Composed {
                 ));
             }
         }
-        let first = self.steps[0].segments[0].stretch;
-        if self.segments().any(|segment| segment.stretch != first) {
+        let first = self.steps[0].segments[0];
+        if self
+            .segments()
+            .any(|segment| segment.stretch != first.stretch || segment.hold != first.hold)
+        {
             return Err(
                 "the segments of a composed note share one stretch (one stretcher per voice)"
                     .into(),

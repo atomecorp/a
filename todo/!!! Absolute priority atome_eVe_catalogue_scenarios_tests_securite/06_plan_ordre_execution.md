@@ -95,6 +95,9 @@ pour une plateforme non ouverte.
 
 ## Avancement
 
+- 2026-11-25, phase 1 sécurité (lot security, Web) : Q01 Q03 Q04 Q05 Q07 Q08 Q09 Q11 joués, Q06 jusqu'au refus ; BUG-0027 à BUG-0032 réparés (FIXED_AWAITING_RETEST) ; matrice C0716–C0732, C0293, C0416–C0420 remplies ; sondes `temp/r246_resume/security/`.
+- 2026-11-25, retest indépendant sécurité (lot retest_security, Web) : BUG-0028, BUG-0029 VERIFIED ; BUG-0027, 0030, 0031, 0032 rouverts puis réparés (FIXED_AWAITING_RETEST, retest par un autre agent) ; BUG-0100 nouveau, réparé ; Q06 Chromium 24/24 ; matrice C0416–C0420, C0717–C0732 (exercées), C0293 ; sondes `temp/r246_resume/retest_security/`.
+
 ### Phase 0 (19 nov.)
 
 - Médias de référence fictifs : `temp/r246_media/fixtures/` (183 Mo, dont `hostile/` et `sfz/`). Bombe PNG réduite

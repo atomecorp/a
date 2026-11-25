@@ -4,13 +4,18 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "eVe's offline audio kernels: waveform peaks, attacks, loops, edit renders, takes, WAV and FLAC, cue tones (step 7, measured faster than the JS they replace)"
+description = "eVe's offline audio kernels: waveform peaks, attacks, loops, edit renders, takes, WAV, FLAC and Ogg Opus, cue tones (step 7, measured faster than the JS they replace)"
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
 serde.workspace = true
+# The retuning of a line's notes (src/tune.rs, R-372): the voice bricks' YIN and formant-keeping phase vocoder.
+atome-dsp = { path = "../atome-dsp" }
+# The Ogg Opus files (src/ogg_opus.rs): the Ogg pages, and libopus 1.6 in Rust for the coding.
+ogg = "0.9.2"
+opus-rs.workspace = true
 
 [lints]
 workspace = true

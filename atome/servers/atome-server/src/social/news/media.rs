@@ -285,8 +285,8 @@ impl News {
         let original = js::first(meta, &["original_name", "file_name"])
             .map(js::string)
             .unwrap_or_else(|| name.clone());
-        storage::register(
-            &self.central,
+        storage::register_server_copy(
+            &self.router,
             &name,
             author,
             storage::Registration {

@@ -241,7 +241,8 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         pending: B, placeholder_kind: S, properties: O, recording_id: S, render_layer: N, render_order: N,
         renderLayer: N, renderOrder: N, rotate: N, selectable: ANY, size: ANY, size_bytes: N, source: ANY,
         source_height: N, source_width: N, sourceHeight: N, sourceWidth: N, src: S, storage_root: S,
-        system_template_ref: S, template_instance_id: S, template_slot_id: S, text: S, thumbnail_ref: S,
+        // The project a light proxy stands for (R-349: a share at « Écoute » reads it alone).
+        proxy_of: S, system_template_ref: S, template_instance_id: S, template_slot_id: S, text: S, thumbnail_ref: S,
         tv_channel_id: S, tv_channel_name: S, tv_country: S, video_codec: S, video_track_count: N, visual_ref: S,
         visual_status: S, zIndex: N
     },
@@ -250,7 +251,8 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         fontSize: ANY, fontWeight: ANY, gain: N, has_audio: B, height: ANY, hierarchy_order: N, left: ANY,
         line_height: ANY, lineHeight: ANY, loop: B, media_duration: N, media_kind: S, mediaKind: ANY, mime_type: S, mimeType: S,
         opacity: N, overflow: ANY, peaks: ANY, playback_offset_seconds: N, playback_rate: N,
-        preview_media_kind: ANY, render_layer: N, render_order: N, renderLayer: N, renderOrder: N, text: S,
+        // The project a light proxy stands for (R-349: a share at « Écoute » reads it alone).
+        preview_media_kind: ANY, proxy_of: S, render_layer: N, render_order: N, renderLayer: N, renderOrder: N, text: S,
         top: ANY, width: ANY, zIndex: N
     },
     midi: {
@@ -272,5 +274,8 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
     },
     action_take: {
         action_recording: O, duration_sec: N
+    },
+    screen_target: {
+        kind: S, device_id: S, host: S, port: N, model: S, pairing_required: B, seen_at: S, sent_at: S, credentials: O
     }
 });

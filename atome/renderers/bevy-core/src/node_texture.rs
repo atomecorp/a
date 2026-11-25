@@ -46,9 +46,11 @@ fn masked_texture(texture: &AtomeTexture, mask: Option<&AtomeMaskStyle>) -> Opti
     mask.map(|mask| apply_spatial_mask_to_texture(texture, mask))
 }
 
+/// `texel_limit`: the longest side the device's textures take (`shape_texture.rs#device_texture_side`).
 pub(crate) fn texture_handle_for_node(
     images: &mut Assets<Image>,
     node: &AtomeRenderNode,
+    texel_limit: u32,
 ) -> Result<Option<Handle<Image>>, String> {
     if node.kind == "video" || node.kind == "media_window" {
         return Ok(None);
@@ -58,7 +60,11 @@ pub(crate) fn texture_handle_for_node(
         if !paint.valid() {
             return Err(format!("bevy_surface_paint_invalid:{}", node.id));
         }
-        let texture = paint.texture(&shape_silhouette_for_node(node), color_for_node(node));
+        let texture = paint.texture(
+            &shape_silhouette_for_node(node),
+            color_for_node(node),
+            texel_limit,
+        );
         let texture = masked_texture(&texture, mask.as_ref()).unwrap_or(texture);
         return Ok(Some(image_handle_from_texture(
             images,
@@ -88,7 +94,12 @@ pub(crate) fn texture_handle_for_node(
     // A mask asks for a texture to cut, even a plain rectangle's: without one
     // the mask's alpha had nothing to multiply and the shape stayed whole.
     if node.kind == "shape" && (silhouette.requires_mask() || mask.is_some()) {
-        let texture = shape_mask_texture(&silhouette);
+        // Drawn smaller when longer than the device's textures, laid at its own size.
+        let density = crate::shape_texture::density_within(
+            texel_limit,
+            [silhouette.width, silhouette.height],
+        );
+        let texture = shape_mask_texture(&silhouette.scaled(density));
         let texture = masked_texture(&texture, mask.as_ref()).unwrap_or(texture);
         return Ok(Some(image_handle_from_texture(
             images,
@@ -131,8 +142,9 @@ pub(crate) fn texture_handle_for_node_in_world(
             &node.id,
         )?));
     }
+    let limit = crate::shape_texture::texture_side_limit(world);
     let mut images = world
         .get_resource_mut::<Assets<Image>>()
         .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-    texture_handle_for_node(&mut images, node)
+    texture_handle_for_node(&mut images, node, limit)
 }

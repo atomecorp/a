@@ -468,5 +468,6 @@ pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), Strin
             crate::project_view::apply_project_space(world, patch)
         }
         AtomeRenderOp::Lut(patch) => crate::media_fx::lut::apply_lut(world, patch),
+        AtomeRenderOp::MediaClock(patch) => crate::media_fx::clock::apply_media_clock(world, patch),
     }
 }

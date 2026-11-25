@@ -27,6 +27,7 @@ use crate::nam::{AmpModel, AmpModelError};
 use crate::oscillator::{Oscillator, Waveform};
 use crate::pitch::PitchShift;
 use crate::reverb::Reverb;
+use crate::rhythm::{chop::Chop, glitch::Glitch, speed::Speed, stutter::Stutter};
 use crate::saturator::Saturator;
 use crate::scope::Scope;
 use crate::split::{Split, Splitter};
@@ -82,9 +83,14 @@ pub enum ModuleKind {
     Svf,
     // R-290 (23 Nov. 2026): the console's Scope, the signal through, measured.
     Scope,
+    // R-367 (25 Nov. 2026): the real-time rhythm effects, on the transport's beats.
+    Stutter,
+    Chop,
+    Glitch,
+    Speed,
 }
 
-pub const KINDS: [ModuleKind; 50] = [
+pub const KINDS: [ModuleKind; 54] = [
     ModuleKind::Volume,
     ModuleKind::Pan,
     ModuleKind::Filter(Shape::LowPass),
@@ -135,6 +141,10 @@ pub const KINDS: [ModuleKind; 50] = [
     ModuleKind::Constant,
     ModuleKind::Svf,
     ModuleKind::Scope,
+    ModuleKind::Stutter,
+    ModuleKind::Chop,
+    ModuleKind::Glitch,
+    ModuleKind::Speed,
 ];
 
 // What a kind needs beyond its parameters to exist.
@@ -219,6 +229,10 @@ impl ModuleKind {
             Self::Constant => "constant",
             Self::Svf => "svf",
             Self::Scope => "scope",
+            Self::Stutter => "stutter",
+            Self::Chop => "chop",
+            Self::Glitch => "glitch",
+            Self::Speed => "speed",
         }
     }
 
@@ -326,6 +340,10 @@ impl ModuleKind {
             Self::Constant => &crate::control::CONSTANT_PARAMS,
             Self::Svf => &crate::svf::PARAMS,
             Self::Scope => &crate::scope::PARAMS,
+            Self::Stutter => &crate::rhythm::stutter::PARAMS,
+            Self::Chop => &crate::rhythm::chop::PARAMS,
+            Self::Glitch => &crate::rhythm::glitch::PARAMS,
+            Self::Speed => &crate::rhythm::speed::PARAMS,
         }
     }
 
@@ -388,6 +406,10 @@ impl ModuleKind {
             (Self::Constant, ModuleAsset::None) => Box::new(Constant::new()),
             (Self::Svf, ModuleAsset::None) => Box::new(Svf::new()),
             (Self::Scope, ModuleAsset::None) => Box::new(Scope::new()),
+            (Self::Stutter, ModuleAsset::None) => Box::new(Stutter::new()),
+            (Self::Chop, ModuleAsset::None) => Box::new(Chop::new()),
+            (Self::Glitch, ModuleAsset::None) => Box::new(Glitch::new()),
+            (Self::Speed, ModuleAsset::None) => Box::new(Speed::new()),
         };
         Ok(processor)
     }

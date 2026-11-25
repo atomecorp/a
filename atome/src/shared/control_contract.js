@@ -6,6 +6,9 @@
 import { ATOME_FRAME_SCHEMA, ATOME_ORDER_SCHEMA } from './core_atome_type_shape.js';
 
 export const CONTROL_ATOME_TYPE = 'control';
+// The id prefix of a control's drawn parts in the project scene (its face, its cap), never written as atomes; a leaf
+// here so the scene's projection and the control's own read it without importing each other (an import cycle).
+export const CONTROL_PART_PREFIX = '__eve_control:';
 // The 13 controls of Créer › Contrôles (cahier Q2, Q4, Q15), in the panel's order.
 export const CONTROL_KINDS = Object.freeze(['slider', 'knob', 'button', 'toggle', 'xy_pad', 'field', 'menu', 'pads',
     'keyboard', 'display', 'selector', 'condition', 'zone']);
@@ -43,9 +46,13 @@ export const CONTROL_TYPE = Object.freeze({ type: CONTROL_ATOME_TYPE, kind: 'vis
         follow_end: { type: 'boolean' }, laid: { type: 'boolean' } }, required: ['fade'] },
     // A Zone lies on an object (cahier Q4): the one it makes touchable.
     zone_of: { type: 'string' },
-    // A Condition written as rows or as a script of the script engine (cahier Q15).
+    // A Condition written as rows or as a script of the script engine (cahier Q15). A row: what it reads (an atome, a
+    // state of it), how it compares (eq, neq, lt, gt, between) to a value, and how it joins the row before (and, or).
     condition: { type: 'object', properties: { mode: { type: 'string', enum: ['rows', 'script'] }, lang: { type: 'string', enum: ['ruby', 'js'] },
-        source: { type: 'string', maxLength: 65536 }, enabled: { type: 'boolean' } }, required: ['mode'] }
+        source: { type: 'string', maxLength: 65536 }, enabled: { type: 'boolean' },
+        rows: { type: 'array', maxItems: 34, items: { type: 'object', properties: { atome_id: { type: 'string' }, state: { type: 'string' },
+            operator: { type: 'string', enum: ['eq', 'neq', 'lt', 'gt', 'between'] }, value: {}, join: { type: 'string', enum: ['and', 'or'] } } } } },
+        required: ['mode'] }
 } });
 
 // Each kind's birth: its size in tool cells (60 px, AGENTS.md rule 12) and its first value (cahier A1).
@@ -62,7 +69,7 @@ export const CONTROL_DEFAULTS = Object.freeze({
     keyboard: { cells: [4, 1.5], value: null, keyboard: { first_note: 48, keys: 18 } },
     display: { cells: [1, 2], value: 0, range: { min: 0, max: 100, display: 'value' }, step: 0 },
     selector: { cells: [4, 1], value: 0, options: ['A', 'B', 'C', 'D'] },
-    condition: { cells: [1, 1], value: null, condition: { mode: 'rows' } },
+    condition: { cells: [1, 1], value: null, condition: { mode: 'rows', rows: [], lang: 'ruby', enabled: false } },
     zone: { cells: [3, 2], value: null }
 });
 

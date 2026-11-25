@@ -30,6 +30,32 @@ pub struct AtomeVideoExternalTexture {
     pub mask_texture: Option<Handle<Image>>,
 }
 
+impl AtomeVideoExternalTexture {
+    /// The `VideoParams` uniform of `video_external.wgsl`, in its field order.
+    pub fn params_bytes(&self) -> [u8; 48] {
+        let (filters, transition) = (&self.filters, &self.transition);
+        let values: [f32; 12] = [
+            self.opacity.clamp(0.0, 1.0),
+            filters.brightness,
+            filters.contrast,
+            filters.saturate,
+            filters.grayscale,
+            filters.sepia,
+            filters.invert,
+            filters.hue,
+            transition.kind,
+            transition.progress,
+            transition.role,
+            transition.softness,
+        ];
+        let mut bytes = [0u8; 48];
+        for (index, value) in values.iter().enumerate() {
+            bytes[index * 4..index * 4 + 4].copy_from_slice(&value.to_ne_bytes());
+        }
+        bytes
+    }
+}
+
 /// What the media effects of a video read in the render world, extracted with
 /// it each frame: the chain its entity carries (`media_fx::AtomeMediaFx`, kept
 /// across resource updates of the video) and the size it is displayed at. A

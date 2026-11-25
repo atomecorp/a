@@ -105,7 +105,7 @@ impl Providers {
         let social = social::config(settings, project_root)?;
         openai::configure(settings);
         Ok(Self {
-            router,
+            router: router.clone(),
             central: central.clone(),
             bottle_media: crate::social::cb::bottles::media_dir_of(&storage.uploads_tmp),
             vault_root,
@@ -113,7 +113,7 @@ impl Providers {
             model_router: model_router::ModelRouter::load(settings),
             everyone: Arc::default(),
             audio: audio::Audio::load(settings, central.clone()),
-            video: video::Video::load(settings, project_root, storage, central),
+            video: video::Video::load(settings, project_root, storage, router.clone()),
             music: music::Music::load(settings),
             strava: strava::Strava::load(settings, project_root, &social),
             social: social::Social::new(social),

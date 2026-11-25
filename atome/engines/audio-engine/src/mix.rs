@@ -22,7 +22,10 @@ fn with_engine<T>(
     action(engine)
 }
 
-pub fn apply_program(program: Program) -> Result<usize, String> {
+// The strips applied, and the live inputs they ask for that cannot be heard (R-295).
+pub fn apply_program(
+    program: Program,
+) -> Result<(usize, Vec<super::live_input::UnavailableInput>), String> {
     let (count, inputs) = with_engine(|engine| {
         let count = engine.mix.apply(&mut engine.manager, program)?;
         OUTPUT_LATENCY.store(
@@ -31,8 +34,8 @@ pub fn apply_program(program: Program) -> Result<usize, String> {
         );
         Ok((count, engine.mix.graph().live_inputs()))
     })?;
-    super::live_input::sync_console(inputs)?;
-    Ok(count)
+    let unavailable = super::live_input::sync_console(inputs)?;
+    Ok((count, unavailable))
 }
 
 // The real inputs and outputs a strip can use: the active output device

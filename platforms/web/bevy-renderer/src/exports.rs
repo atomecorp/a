@@ -1,4 +1,5 @@
 use super::*;
+use atome_bevy_renderer_core::media_fx::clock::AtomeMediaClockPatch;
 use atome_bevy_renderer_core::media_fx::lut::AtomeLutPatch;
 use atome_bevy_renderer_core::{
     AtomeLayerPatch, AtomeParentPatch, AtomeProjectSpacePatch, AtomeProjectViewPatch,
@@ -304,6 +305,12 @@ pub fn apply_atome_bevy_project_view(patch: JsValue) -> Result<(), JsValue> {
         .map_err(|error| JsValue::from_str(&format!("bevy_project_view_decode_failed:{error}")))?;
     queue_web_op(AtomeRenderOp::ProjectView(parsed));
     Ok(())
+}
+
+/// The instant the media effects are drawn at, in seconds (an MP4 proxy's image, R-349); none: the real clock.
+#[wasm_bindgen]
+pub fn set_atome_bevy_media_clock(seconds: Option<f64>) {
+    queue_web_op(AtomeRenderOp::MediaClock(AtomeMediaClockPatch { seconds }));
 }
 
 #[wasm_bindgen]

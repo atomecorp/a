@@ -15,7 +15,8 @@ const definitions = {
     start: [{ kind: { type: 'string', enum: CAPTURE_KINDS }, duration_seconds: { type: 'number', minimum: 1, maximum: 86400 } }, ['kind'],
         'Open a capture on the Dashboard and start it at once in the last project: a sound, a video, the photo camera, a dictated text, a MIDI take. Its list shows under the preview. '
         + 'duration_seconds (not for a photo): the take stops by itself that long after it really started, and is kept (« filme pendant 10 secondes »); '
-        + 'the result gives its take and stops_at.', true, 'write'],
+        + 'the result gives its take and stops_at. In a project\'s Timeline or Mix stopped, the take is armed (armed: true, recording: false): '
+        + 'it records once Lecture runs the playhead, its length counted from then; captures.stop disarms it.', true, 'write'],
     stop: [{ take: { type: 'integer', minimum: 1 } }, [], 'End the take recording (it is kept and becomes current in its list). '
         + 'take: only that take (the number captures.start gave); another one recording is left alone (NOTHING_RECORDING). '
         + 'TAKE_EMPTY: the take stopped but held nothing (silence, no picture), so nothing was kept.', true, 'write'],
@@ -38,7 +39,7 @@ export const CAPTURE_COMMANDS = Object.freeze(Object.entries(definitions).map(([
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: CAPTURE_ERRORS },
         open: { type: 'boolean' }, project_id: { type: 'string' }, current: { type: 'string' }, previewing: { type: 'boolean' }, playing: { type: 'string' },
-        recording: { type: 'boolean' }, take: { type: 'integer' }, stops_at: { type: 'string' }, items: { type: 'array', items: itemSchema }, removed: { type: 'array', items: { type: 'string' } } } }
+        recording: { type: 'boolean' }, armed: { type: 'boolean' }, take: { type: 'integer' }, stops_at: { type: 'string' }, items: { type: 'array', items: itemSchema }, removed: { type: 'array', items: { type: 'string' } } } }
 })));
 export const validateCaptureInput = (action, input) => {
     const contract = CAPTURE_COMMANDS.find(command => command.action === action);

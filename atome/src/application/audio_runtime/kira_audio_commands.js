@@ -48,14 +48,16 @@ export const normalizeKiraVoiceEnvelope = (input) => {
     };
 };
 
-// A warped voice's time map (mix-graph warp_voice.rs): `[[clip_seconds, source_seconds]…]` and its pitch; the engine
-// validates the map and refuses a voice whose map it cannot play.
+// A warped voice's time map (mix-graph warp_voice.rs): `[[clip_seconds, source_seconds]…]`, its pitch, and whether the
+// pitch follows the speed (`tape`, a take's speed curve in Bande); the engine validates the map and refuses a voice
+// whose map it cannot play.
 const normalizeKiraVoiceWarp = (warp) => {
     if (warp === undefined || warp === null) return null;
     if (typeof warp !== 'object' || !Array.isArray(warp.points)) throw new Error('kira_voice_warp_points_required');
     return {
         points: warp.points.map((point) => [Number(point?.[0]), Number(point?.[1])]),
-        pitchSemitones: finiteNumber(warp.pitchSemitones ?? warp.pitch_semitones, 0)
+        pitchSemitones: finiteNumber(warp.pitchSemitones ?? warp.pitch_semitones, 0),
+        tape: warp.tape === true
     };
 };
 
@@ -140,6 +142,18 @@ export const buildFacadeKiraAudioPayload = (command = '', input = {}) => {
     }
     return input && typeof input === 'object' ? { ...input } : {};
 };
+
+// The voices started on their exact rendered frames, in the engine's words (mix-graph `ScheduledVoice`): a live
+// schedule's (`schedule_instances`) and a project's proxy plan's (`render_proxy`, R-349) alike.
+export const buildKiraScheduledVoices = (list = []) => list.map((arg) => {
+    const payload = normalizeKiraPlayInstancePayload(arg);
+    const frame = Number(arg?.startRenderFrame);
+    if (!payload.assetId || !payload.voiceId || !Number.isFinite(frame)) {
+        throw new Error('[backend.kira] schedule_instances requires asset, voice and frame');
+    }
+    return { ...buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload),
+        startRenderFrame: Math.max(0, Math.round(frame)), envelope: normalizeKiraVoiceEnvelope(arg.envelope) };
+});
 
 // A clip's bytes for a native engine (Tauri, iOS): one base64 string, the one binary form a script message carries,
 // never a JSON array of numbers (a 90 MB AIFF sent as `Array.from(bytes)` grew into gigabytes and killed the iOS app,

@@ -291,6 +291,9 @@ impl Graph {
                 capture: part.capture,
                 source: part.source,
                 meter: part.meter,
+                freeze: part.freeze,
+                freeze_chunk: Default::default(),
+                cost: part.cost,
                 chain,
                 output,
                 output_enabled: spec.output_enabled,
@@ -305,6 +308,7 @@ impl Graph {
                 work: Wide::new(pairs),
                 scratch: Wide::new(pairs),
                 key: vec![Frame::ZERO; MAX_BLOCK],
+                transport: None,
             });
         }
         let chunk = if rings.is_empty() {
@@ -320,6 +324,7 @@ impl Graph {
                 .into_iter()
                 .map(|channel| (channel, vec![Frame::ZERO; MAX_BLOCK]))
                 .collect(),
+            feed_live: vec![true; feeds.buses.len()],
             feeds: feeds.buses,
             lanes,
             rings,

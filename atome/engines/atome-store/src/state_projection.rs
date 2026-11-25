@@ -22,6 +22,13 @@ fn actor_id(event: &JsonEvent) -> Option<String> {
         .and_then(|actor| first_text(actor, &["id", "user_id", "userId"]))
 }
 
+/// The type the projection gives the atome an event writes (its property patch's `event_type`): a
+/// guard deciding on a type (atome-server vault_router/owner_only.rs) reads it here, never by a list
+/// of its own.
+pub fn projected_type(event: &JsonEvent) -> Option<String> {
+    append::event_property_patch(event).and_then(|patch| event_type(&patch))
+}
+
 // `resolveEventType(patch)`: a declared type unless generic, then the kind.
 fn event_type(patch: &JsonMap<String, JsonValue>) -> Option<String> {
     let declared = first_text(patch, &["type", "atome_type"]);

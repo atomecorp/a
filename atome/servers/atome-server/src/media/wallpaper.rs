@@ -263,8 +263,8 @@ impl Wallpaper {
             size: image.bytes.len() as u64,
             file_path: Some(placed.relative_path.clone()),
         };
-        let central = uploads.sessions.central();
-        if let Err(error) = storage::register(central, &placed.file_name, user, registration).await
+        if let Err(error) =
+            storage::register(&uploads.router, &placed.file_name, user, registration).await
         {
             let _ = tokio::fs::remove_file(&placed.file_path).await;
             // A missing or unprovisioned identity is the caller's situation, not a fault.

@@ -1,4 +1,4 @@
-import { ATOME_MCP_PROTOCOL } from './mcp_core.js';
+import { ATOME_MCP_PROTOCOL, visibleToActor } from './mcp_core.js';
 import { ensureRuntimeCommandBus, ensureRuntimeToolApi, loadAIAgent, loadMcpToolModules } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, normalizeRuntimeToolEntry, normalizeRuntimeToolIdentifier, projectRuntimeMcpResult } from './mcp_runtime.js';
 import { validateContractCommandInput } from './mcp_handlers_contracts.js';
@@ -107,9 +107,12 @@ export const createMcpAiRuntimeHandlers = () => ({
         const limit = Number.isFinite(Number(params?.limit))
             ? Math.max(1, Math.round(Number(params.limit)))
             : 50;
+        // The command log tells what each actor's requests did: a program reads only its own (R-246 BUG-0030).
+        const actor = params.__mcp.actor;
+        const own = (Array.isArray(events) ? events : []).filter(entry => visibleToActor(actor, entry?.envelope?.actor?.actor_id));
         return {
             protocol: ATOME_MCP_PROTOCOL,
-            events: Array.isArray(events) ? events.slice(-limit) : []
+            events: own.slice(-limit)
         };
     },
 });

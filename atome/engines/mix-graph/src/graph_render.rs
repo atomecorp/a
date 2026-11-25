@@ -4,11 +4,17 @@
 // of each: the same program sounds the same whatever the host's block size.
 // Without either, chunks stay as long as the block (or a loop's return).
 
+use crate::automation::StripTransport;
+use crate::automation::transport_at;
 use crate::dsp;
+use crate::freeze::FreezeSlot;
 use crate::graph::{ChainStep, Graph, Lane, MAX_BLOCK, MixIn, StripRuntime};
+use crate::load_meter::now_ns;
 use crate::modulation::CONTROL_FRAMES;
 use crate::return_ring::ReturnRing;
 use crate::route_delivery::deliver;
+use crate::source_bus::StripSource;
+use crate::wide::Wide;
 use crate::wide::pair_of;
 use kira::Frame;
 
@@ -23,6 +29,20 @@ fn write_lane(
         Lane::Direct(index) => lanes[index][..signal.len()].copy_from_slice(signal),
         Lane::Return(index) => rings[index].add(clock, signal),
     }
+}
+
+// A frozen strip's stem blended into its first pair (freeze.rs), at the timeline position of each frame of the chunk.
+fn blend_stem(
+    freeze: &FreezeSlot,
+    work: &mut Wide,
+    transport: Option<&StripTransport>,
+    frames: usize,
+    at: u64,
+    sample_rate: f64,
+) {
+    freeze.blend(pair_of(work.span_mut(frames), 0, frames), |index| {
+        transport.and_then(|transport| transport.seconds_at(at + index as u64, sample_rate))
+    });
 }
 
 impl Graph {
@@ -51,7 +71,7 @@ impl Graph {
                     self.automation.run(at, sample_rate);
                 }
             }
-            self.process_chunk(offset, length);
+            self.process_chunk(offset, length, frame + offset as u64, sample_rate);
             offset += length;
             self.clock = self.clock.wrapping_add(length);
         }
@@ -60,12 +80,14 @@ impl Graph {
         }
     }
 
-    fn process_chunk(&mut self, offset: usize, frames: usize) {
+    // `at`: the chunk's first rendered frame, where its rhythm effects stand.
+    fn process_chunk(&mut self, offset: usize, frames: usize, at: u64, sample_rate: f64) {
         let Graph {
             strips,
             main,
             aux,
             feeds,
+            feed_live,
             lanes,
             rings,
             controls,
@@ -74,13 +96,34 @@ impl Graph {
         } = self;
         let clock = *clock;
         let main = &mut main[offset..offset + frames];
-        for feed in feeds.iter_mut() {
-            feed.fill(frames);
+        // Each strip takes its stem's news; a source only frozen strips read rests (an instrument heard through
+        // stems alone is not computed: freeze.rs).
+        feed_live.fill(false);
+        for strip in strips.iter_mut() {
+            strip.freeze_chunk = strip.freeze.begin();
+            if let StripSource::Bus { feed, .. } = strip.source
+                && strip.freeze_chunk.skipped.is_none()
+            {
+                feed_live[feed] = true;
+            }
+            for step in &strip.chain {
+                if let Some(MixIn::Bus(feed, _)) = step.mix {
+                    feed_live[feed] = true;
+                }
+            }
+        }
+        for (feed, live) in feeds.iter_mut().zip(feed_live.iter()) {
+            match live {
+                true => feed.fill(frames),
+                false => feed.rest(frames),
+            }
         }
         for position in 0..strips.len() {
             let (current, later) = strips[position..]
                 .split_first_mut()
                 .expect("strip at position");
+            let started = now_ns();
+            let frozen = current.freeze_chunk;
             let pairs = current.work.pairs;
             {
                 let StripRuntime {
@@ -94,7 +137,9 @@ impl Graph {
                 } = &mut *current;
                 let work = work.span_mut(frames);
                 work.fill(Frame::ZERO);
-                source.pull(capture, offset, feeds, pair_of(work, 0, frames));
+                if frozen.skipped.is_none() {
+                    source.pull(capture, offset, feeds, pair_of(work, 0, frames));
+                }
                 let inbox = inbox.span_mut(frames);
                 for (out, input) in work.iter_mut().zip(inbox.iter()) {
                     *out += *input;
@@ -109,7 +154,23 @@ impl Graph {
                     dsp::apply_mono(pair_of(work, 0, frames));
                 }
             }
-            for step in current.chain.iter_mut() {
+            let transport = transport_at(current.transport.as_ref(), at, sample_rate);
+            for (index, step) in current.chain.iter_mut().enumerate() {
+                if let Some(replaced) = frozen.replaced {
+                    if index == replaced {
+                        blend_stem(
+                            &current.freeze,
+                            &mut current.work,
+                            current.transport.as_ref(),
+                            frames,
+                            at,
+                            sample_rate,
+                        );
+                    }
+                    if index < replaced && frozen.skipped.is_some() {
+                        continue;
+                    }
+                }
                 let ChainStep {
                     module,
                     send,
@@ -126,6 +187,7 @@ impl Graph {
                 let Some(module) = module.as_mut() else {
                     continue;
                 };
+                module.set_transport(&transport);
                 for read in mods.iter_mut() {
                     read.compute(&module.controls, controls, clock, frames);
                 }
@@ -263,7 +325,18 @@ impl Graph {
                 }
                 module.finish(frames);
             }
+            if frozen.replaced == Some(current.chain.len()) {
+                blend_stem(
+                    &current.freeze,
+                    &mut current.work,
+                    current.transport.as_ref(),
+                    frames,
+                    at,
+                    sample_rate,
+                );
+            }
             let StripRuntime {
+                cost,
                 output,
                 output_enabled,
                 muted,
@@ -296,6 +369,9 @@ impl Graph {
                     rings,
                     clock,
                 );
+            }
+            if let (Some(started), Some(ended)) = (started, now_ns()) {
+                cost.record(ended.saturating_sub(started), frames);
             }
         }
     }

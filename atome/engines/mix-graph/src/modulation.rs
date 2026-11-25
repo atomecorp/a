@@ -223,6 +223,8 @@ fn resolve(spec: &ModuleSpec, param: &str) -> Result<(Target, ParamSpec), String
     let (target, entry) = match slot_of(spec, param).map_err(|_| refused())? {
         Slot::Value => (Target::Value, value_spec(&spec.kind).ok_or_else(refused)?),
         Slot::Parameter(index, entry) => (Target::Parameter(index), *entry),
+        // A painted zone switches its module on and off: it is set, never modulated.
+        Slot::Engaged => return Err(refused()),
     };
     if !entry.modulatable() {
         return Err(format!(

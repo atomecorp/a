@@ -31,6 +31,7 @@ const fakeMoleculeApi = ({ append = async () => ({ ok: true }) } = {}) => {
         async cueGroupTimelineTransport({ group_id, seconds }) { this.cues.push({ group_id, seconds }); return { ok: true }; },
         async scrubGroupTimelineTransport({ group_id, seconds }) { this.scrubs.push({ group_id, seconds }); return { ok: true }; },
         readGroupTimelineTransport: () => ({ ok: true, playing: false, position: 0 }),
+        readGroupTimelineRecording: () => ({ ok: true, generic_recording: { active: [], taking: [] } }),
         prepareGroupTimelineCells: async () => ({ ok: true, prepared: true })
     };
 };

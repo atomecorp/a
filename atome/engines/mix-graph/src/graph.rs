@@ -79,6 +79,12 @@ pub struct StripRuntime {
     pub(crate) work: Wide,
     pub(crate) scratch: Wide,
     pub(crate) key: Vec<Frame>,
+    // Its transport, bound once the program's transports are applied (mix_apply.rs).
+    pub(crate) transport: Option<crate::automation::StripTransport>,
+    // Its stem, when frozen (R-370, freeze.rs), and its share of the load (load_meter.rs).
+    pub(crate) freeze: Arc<crate::freeze::FreezeSlot>,
+    pub(crate) freeze_chunk: crate::freeze::FreezeChunk,
+    pub(crate) cost: Arc<crate::load_meter::StripCost>,
 }
 
 pub struct Graph {
@@ -86,6 +92,8 @@ pub struct Graph {
     pub main: Vec<Frame>,
     pub aux: Vec<(u16, Vec<Frame>)>,
     pub(crate) feeds: Vec<SourceBus>,
+    // Per feed, this chunk: whether a strip still hears it live (an instrument heard only through stems rests).
+    pub(crate) feed_live: Vec<bool>,
     pub(crate) lanes: Vec<Vec<Frame>>,
     pub(crate) rings: Vec<ReturnRing>,
     pub(crate) controls: Vec<ControlLane>,
@@ -106,6 +114,8 @@ pub struct StripParts {
     pub capture: Arc<CaptureSlot>,
     pub source: StripSource,
     pub meter: Arc<StripMeter>,
+    pub freeze: Arc<crate::freeze::FreezeSlot>,
+    pub cost: Arc<crate::load_meter::StripCost>,
     pub modules: Vec<StepModule>,
 }
 

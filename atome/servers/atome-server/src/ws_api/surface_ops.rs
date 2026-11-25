@@ -115,6 +115,7 @@ async fn announce(
             None => message.get("platform"),
         },
         capabilities: message.get("capabilities"),
+        form: message.get("form"),
         program_id: program,
         discoverable,
     };

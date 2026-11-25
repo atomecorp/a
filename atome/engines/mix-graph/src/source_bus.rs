@@ -30,6 +30,15 @@ impl SourceBus {
             Feed::Instrument(slot) => slot.render(&mut self.buses, frames),
         }
     }
+
+    // Render thread: this chunk with nobody hearing the source live (R-370: only frozen strips read it). A live
+    // input is still consumed; an instrument keeps its clock and lets its notes pass unheard (instrument.rs#skip).
+    pub fn rest(&mut self, frames: usize) {
+        match &self.feed {
+            Feed::Live(live) => live.pull(&mut self.buses[0][..frames]),
+            Feed::Instrument(slot) => slot.skip(frames),
+        }
+    }
 }
 
 // What a strip plays: its track's voices, or one bus of a source.

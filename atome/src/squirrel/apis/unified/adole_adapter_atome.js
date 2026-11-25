@@ -1,4 +1,4 @@
-import { browserWorkspaceRequest, ownsBrowserWorkspaceMessage } from './adole_api/browser_workspace.js';
+import { browserWorkspaceAnswers, browserWorkspaceRequest } from './adole_api/browser_workspace.js';
 // Extracted from adole_adapter.js: the adapter's `atome` API sub-object (commit/list/get/etc.),
 // built per-adapter from the WS accessor + token key.
 import { sanitizeAtomeProperties } from '../../../shared/atome_contract.js';
@@ -37,7 +37,7 @@ const normalizeCommitEvent = (event = {}) => {
 };
 
 export const buildAtomeApi = ({ getWs, tokenKey }) => {
-    const send = message => ownsBrowserWorkspaceMessage(message) ? browserWorkspaceRequest(message) : getWs().send(message);
+    const send = async message => (await browserWorkspaceAnswers(message) ? browserWorkspaceRequest(message) : getWs().send(message));
     return ({
             async commit(event = {}) {
                 const token = getToken(tokenKey);

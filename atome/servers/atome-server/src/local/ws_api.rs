@@ -205,9 +205,11 @@ fn read_aside(msg_type: &str) -> bool {
     msg_type == "state-current"
 }
 
+// A message to the network (an HTTP request may take seconds) is answered aside too.
 fn relayed_aside(msg_type: &str) -> bool {
     super::public_relay::PUBLIC_TYPES.contains(&msg_type)
         || super::public_relay::ACCOUNT_TYPES.contains(&msg_type)
+        || msg_type == crate::network::KIND
 }
 
 /// The answer to one `/ws/api` frame that needs no connection of its own: the page's
@@ -259,6 +261,13 @@ pub async fn answer(data: JsonValue, state: &AppState) -> JsonValue {
     }
     if msg_type == "file" {
         return handle_ws_file_message(data, state).await;
+    }
+    // A control's message to the network: OSC and HTTP from this device (R-347 L12, network/).
+    if msg_type == crate::network::KIND {
+        return match ws_authenticated_user(&data, state) {
+            Ok(_) => crate::network::local(&data).await,
+            Err(response) => ws_reply_envelope(response, request_id),
+        };
     }
     // The named screens of the local network (R-248, local_screens.rs).
     if msg_type == "screens" {

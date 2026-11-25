@@ -201,7 +201,9 @@ fn the_playlist_keeps_the_six_latest_segments_then_ends() {
     let playlist = live.playlist();
     assert!(playlist.starts_with("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:1\n"));
     assert!(playlist.contains("#EXT-X-MEDIA-SEQUENCE:4\n"));
-    assert!(playlist.contains("#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"init.mp4\"\n"));
+    assert!(playlist.contains(
+        "#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=-1.0,PRECISE=YES\n#EXT-X-MAP:URI=\"init.mp4\"\n"
+    ));
     let uris: Vec<&str> = playlist
         .lines()
         .filter(|line| line.ends_with(".m4s"))

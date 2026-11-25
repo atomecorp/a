@@ -216,6 +216,8 @@ export const installRemoteCommandExecutor = () => {
                 detail: { toolId: detail.toolId, fromLabel: detail.fromLabel, fromSurfaceId: detail.fromSurfaceId, ok: result?.ok !== false }
             }));
             await send('command-result', { command_id: detail.commandId, result });
+            // Answered: a command that ends this page (a follow reloads it) may go on now (view_follow.js).
+            window.dispatchEvent(new CustomEvent('squirrel:remote-command-answered', { detail: { commandId: detail.commandId, toolId: detail.toolId } }));
         })();
     });
     return true;

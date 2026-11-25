@@ -37,17 +37,11 @@ const send = async (action, fields = {}) => {
     const principal = await ensureRemoteSurfacePrincipal();
     if (!principal.ok) return { ok: false, success: false, error: principal.error };
     try {
-        return await FastifyAdapter.ws.send({ type: 'surface-grant', action, ...fields });
+        // A grant is written in the server's vaults, its owner's inbox card too (several seconds each on the hosted server).
+        return await FastifyAdapter.ws.send({ type: 'surface-grant', action, ...fields }, { timeoutMs: 30000 });
     } catch (error) {
         return { ok: false, success: false, error: error?.message || String(error) };
     }
-};
-
-const dispatch = (type, detail) => {
-    if (typeof window === 'undefined') return;
-    try {
-        window.dispatchEvent(new CustomEvent(type, { detail }));
-    } catch (_) { }
 };
 
 /** Ask another user for capabilities on one of their surfaces. */
@@ -105,13 +99,8 @@ export const installSurfaceGrantLifecycle = () => {
     window.addEventListener('squirrel:surface-grant-request', (event) => {
         const grant = event?.detail?.grant;
         if (!grant?.grant_id) return;
+        // Never auto-answered: across accounts, the owner decides (eVe's teleport_grant_notifications.js asks them).
         state.incoming.set(grant.grant_id, grant);
-        // Surfaced for the UI to render. It is never auto-answered: across accounts,
-        // the owner has to decide.
-        dispatch('squirrel:surface-grant-pending', {
-            grant,
-            fromUserId: event.detail.fromUserId || grant.grantee_id
-        });
     });
 
     ['squirrel:surface-grant-granted', 'squirrel:surface-grant-denied', 'squirrel:surface-grant-revoked']
@@ -122,7 +111,6 @@ export const installSurfaceGrantLifecycle = () => {
                 state.incoming.delete(grant.grant_id);
                 if (type === 'squirrel:surface-grant-revoked') state.outgoing.delete(grant.grant_id);
                 else state.outgoing.set(grant.grant_id, grant);
-                dispatch('squirrel:surface-grant-settled', { grant, outcome: grant.status });
             });
         });
 

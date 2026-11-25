@@ -34,4 +34,4 @@ pub use sampler::{Sampler, VoiceMode};
 pub use segment::{LoopMode, LoopSpec, Playback, Segment};
 pub use stream::{FrameSource, Streams};
 pub use synth::Synth;
-pub use zone::{Draw, Stack, Zone, ZoneEnvelope, ZoneFilter};
+pub use zone::{Draw, Stack, Zone, ZoneController, ZoneEnvelope, ZoneFilter};

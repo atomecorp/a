@@ -31,6 +31,8 @@ struct Seat {
     label: String,
     platform: String,
     capabilities: JsonValue,
+    // The device's form (`FORMS`), drawn by the nearby plates (R-248: an iPad is not a telephone); '' when unsaid.
+    form: &'static str,
     program_id: Option<String>,
     announced_at: String,
     last_seen_at: String,
@@ -54,6 +56,8 @@ const PLATFORMS: [&str; 6] = [
     "mcp_program",
     "unknown",
 ];
+/// What a seat's device is, for its picture: its own runtime (`PLATFORMS`) says nothing of it (an iPad runs `ios`).
+const FORMS: [&str; 3] = ["phone", "tablet", "computer"];
 const CAPABILITIES: [&str; 5] = ["render", "pointer_input", "audio", "video", "fullscreen"];
 /// Who may find a seat by its nearby token: the owner's accepted contacts (the default), or anyone.
 pub(super) const DISCOVERABLE: [&str; 2] = ["contacts", "everyone"];
@@ -97,7 +101,7 @@ pub(super) fn normalized_id(value: Option<&JsonValue>) -> String {
 }
 
 fn public(surface_id: &str, user: &str, seat: &Seat) -> JsonValue {
-    json!({ "surface_id": surface_id, "user_id": user, "label": seat.label, "platform": seat.platform,
+    json!({ "surface_id": surface_id, "user_id": user, "label": seat.label, "platform": seat.platform, "form": seat.form,
         "capabilities": seat.capabilities, "announced_at": seat.announced_at, "last_seen_at": seat.last_seen_at,
         "program_id": seat.program_id, "online": true })
 }
@@ -120,6 +124,8 @@ pub(super) struct Announced<'a> {
     pub label: Option<&'a JsonValue>,
     pub platform: Option<&'a JsonValue>,
     pub capabilities: Option<&'a JsonValue>,
+    /// One of `FORMS`; anything else is unsaid.
+    pub form: Option<&'a JsonValue>,
     pub program_id: Option<String>,
     /// One of `DISCOVERABLE`, none to keep the seat's (`contacts` for a new one).
     pub discoverable: Option<&'static str>,
@@ -177,6 +183,10 @@ pub(super) fn attach(
         },
         platform: platform.to_string(),
         capabilities: JsonValue::Object(capabilities),
+        form: FORMS
+            .into_iter()
+            .find(|known| announced.form.and_then(JsonValue::as_str) == Some(*known))
+            .unwrap_or(""),
         program_id: announced.program_id.filter(|id| !id.is_empty()),
         announced_at: previous.map_or_else(|| at.clone(), |p| p.announced_at.clone()),
         last_seen_at: at,

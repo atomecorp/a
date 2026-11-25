@@ -17,6 +17,7 @@ mod native_contacts;
 mod native_file_export;
 mod native_health;
 mod native_midi;
+mod native_midi_schedule;
 mod native_personal_import;
 mod server;
 mod streaming_view;
@@ -271,6 +272,14 @@ pub fn run() {
             audio_engine::bridge::audio_render_clock,
             audio_engine::bridge::audio_output_hold,
             audio_engine::bridge::audio_mix_apply,
+            audio_engine::bridge::audio_render_proxy,
+            audio_engine::bridge::audio_render_pcm,
+            audio_engine::bridge::audio_freeze_render,
+            audio_engine::bridge::audio_freeze_apply,
+            audio_engine::bridge::audio_freeze_thaw,
+            audio_engine::bridge::audio_freeze_status,
+            audio_engine::bridge::audio_freeze_reset_peak,
+            audio_engine::bridge::audio_freeze_retain,
             audio_engine::bridge::audio_mix_levels,
             audio_engine::bridge::audio_mix_readings,
             audio_engine::bridge::audio_mix_devices,

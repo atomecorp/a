@@ -18,7 +18,7 @@ use crate::{
     shape_shadow_gpu::{
         ShadowBlurJob, queue_shadow_blur, shadow_blur_uniform, shadow_target_image,
     },
-    shape_texture::cached_image_handle_from_shape_mask,
+    shape_texture::{cached_image_handle_from_shape_mask, fitting_density},
     types::AtomeShadowStyle,
 };
 
@@ -61,7 +61,39 @@ fn shape_shadow_cache_key(
     }
 }
 
+/// The shadow `silhouette` casts: its texture, the px size it is laid at and the px it extends
+/// past the shape on each side. A shadow longer than the device's textures is drawn for the shape
+/// and the shadow scaled into them, then laid at its own size (`shape_texture.rs#fitting_density`).
 pub(crate) fn cached_shape_shadow_handle(
+    world: &mut World,
+    shadow: AtomeShadowStyle,
+    silhouette: &AtomeShapeSilhouette,
+) -> Result<Option<(Handle<Image>, Vec2, f32)>, String> {
+    let reach = shadow.spread.max(0.0) + shadow_padding(shadow.blur) as f32;
+    let extent = |side: f32| side + reach * 2.0 + 1.0;
+    let density = fitting_density(world, [extent(silhouette.width), extent(silhouette.height)]);
+    let fitted = AtomeShadowStyle {
+        blur: shadow.blur * density,
+        spread: shadow.spread * density,
+        offset_x: shadow.offset_x * density,
+        offset_y: shadow.offset_y * density,
+        ..shadow
+    };
+    let margin = (fitted.spread + shadow_padding(fitted.blur) as f32) / density;
+    Ok(
+        fitted_shape_shadow_handle(world, fitted, &silhouette.scaled(density))?.map(
+            |(handle, width, height)| {
+                (
+                    handle,
+                    Vec2::new(width as f32, height as f32) / density,
+                    margin,
+                )
+            },
+        ),
+    )
+}
+
+fn fitted_shape_shadow_handle(
     world: &mut World,
     shadow: AtomeShadowStyle,
     silhouette: &AtomeShapeSilhouette,

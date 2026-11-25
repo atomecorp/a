@@ -357,6 +357,23 @@ impl Device {
         }
     }
 
+    /// Creates a new [`ExternalTexture`] from a browser media source, the browser's refusal
+    /// returned: `GPUDevice.importExternalTexture` throws for a source it holds no frame for,
+    /// which the caller skips for that frame instead of losing its render loop.
+    #[cfg(webgpu)]
+    pub fn try_create_external_texture(
+        &self,
+        desc: &ExternalTextureDescriptor<'_>,
+    ) -> Result<ExternalTexture, wasm_bindgen::JsValue> {
+        let device = self
+            .inner
+            .as_webgpu_opt()
+            .ok_or_else(|| wasm_bindgen::JsValue::from_str("external_texture_device_not_webgpu"))?;
+        Ok(ExternalTexture {
+            inner: device.try_import_external_texture(desc)?.into(),
+        })
+    }
+
     /// Creates a [`Buffer`] from a wgpu-hal Buffer.
     ///
     /// # Types

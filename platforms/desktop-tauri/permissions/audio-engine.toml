@@ -15,6 +15,7 @@ permissions = [
   "allow-audio-measure-input-latency",
   "allow-audio-render-clock",
   "allow-audio-mix-apply",
+  "allow-audio-render-proxy",
   "allow-audio-mix-levels",
   "allow-audio-mix-readings",
   "allow-audio-mix-devices",
@@ -183,6 +184,11 @@ commands.allow = ["audio_render_clock"]
 identifier = "allow-audio-mix-apply"
 description = "Enables the audio_mix_apply command."
 commands.allow = ["audio_mix_apply"]
+
+[[permission]]
+identifier = "allow-audio-render-proxy"
+description = "Enables the audio_render_proxy command."
+commands.allow = ["audio_render_proxy"]
 
 [[permission]]
 identifier = "allow-audio-mix-levels"

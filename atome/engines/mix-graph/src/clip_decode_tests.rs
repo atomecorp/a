@@ -53,7 +53,7 @@ fn a_caf_of_linear_pcm_probes_and_decodes_whatever_its_name() {
 }
 
 // Opus (clip_opus.rs): a stereo Ogg Opus and a mono WebM tone of 0.5 s at 440 Hz,
-// made by ffmpeg (libopus), read whole at 48 kHz with their pre-skip removed, their
+// made by ffmpeg (libopus), read whole at 48 kHz with their pre-skip removed (R-349), their
 // peak the one ffmpeg's own decoder reads (`volumedetect`: −20.7 dB and −17.9 dB).
 const TONE_OPUS: &[u8] = include_bytes!("test_fixtures/tone.opus");
 const TONE_WEBA: &[u8] = include_bytes!("test_fixtures/tone.weba");
@@ -75,6 +75,10 @@ fn decodes_ogg_opus_and_webm_tones() {
     for (bytes, extension, reference) in [(TONE_OPUS, "opus", 0.092), (TONE_WEBA, "weba", 0.127)] {
         let sound = decode_clip(bytes.to_vec(), Some(extension)).expect(extension);
         assert_eq!(sound.sample_rate, 48_000, "{extension}");
+        // The pre-skip dropped exactly (its OpusHead's 312 frames); a WebM keeps its end
+        // padding, as Symphonia reads no DiscardPadding.
+        let exact = if extension == "opus" { 24_000 } else { 24_648 };
+        assert_eq!(sound.frames.len(), exact, "{extension}: frames");
         let seconds = sound.frames.len() as f64 / 48_000.0;
         assert!((seconds - 0.5).abs() < 0.03, "{extension}: {seconds} s");
         let peak = sound

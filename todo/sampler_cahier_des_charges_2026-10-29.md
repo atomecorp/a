@@ -364,7 +364,7 @@ S3e Note composée, S3f Façade + Avancé, puis S4 Capture › Instruments et S5
 | Zones et pile | `src/zone.rs`, `src/keymap.rs` | touches × vélocité ; Alternance (cycle, hasard, hasard sans répétition, graine rejouable), Mélange (niveau par son, 4 au plus), Couches (fondu à chaque couture) ; emprunt aux voisines ; coupe à sens unique ; samples de relâché atténués selon la durée tenue |
 | Voix | `src/voice.rs`, `src/pool.rs` | ADSR, glissé, vol de voix (la plus ancienne relâchée d'abord), coupe en 3 ms ; poly / mono / legato, pile de 16 notes tenues |
 | Sampler | `src/sampler.rs` | `Processor` générateur ; le bloc est coupé à chaque événement (note à la trame exacte) ; 11 paramètres (gain, ADSR, vélocité, accord, glissé, polyphonie, mode, plage du bend) |
-| Étirement (Q2) | `src/stretch.rs` | Signalsmith Stretch (MIT), natif seulement : sur le Web (wasm) un segment étiré est **refusé avec une erreur explicite** |
+| Étirement (Q2) | `src/stretch.rs` | Signalsmith Stretch (MIT), porté en Rust (`src/stretch/`), natif et wasm32 (`stretch.rs`, mis à jour le 2026-11-25 : l'ancien refus sur le Web n'existe plus) |
 
 **Hauteur et durée séparées** : la hauteur de la note reste au lecteur sinc (exacte) ; l'étireur ne règle que la
 durée (lire plus vite raccourcit, il rallonge d'autant). Mesuré : la transposition de Signalsmith elle-même tombait

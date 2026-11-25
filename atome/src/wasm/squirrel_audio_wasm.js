@@ -90,6 +90,94 @@ export function audio_destroy_clip(id) {
 }
 
 /**
+ * Renders for at most `budget_ms` while the engine's load leaves room; whether renders remain.
+ * @param {number} budget_ms
+ * @returns {boolean}
+ */
+export function audio_freeze_advance(budget_ms) {
+    const ret = wasm.audio_freeze_advance(budget_ms);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] !== 0;
+}
+
+/**
+ * The strip is heard through the stem rendered under `key` (refused when the strip changed since).
+ * @param {string} strip_id
+ * @param {string} key
+ */
+export function audio_freeze_apply(strip_id, key) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_freeze_apply(ptr0, len0, ptr1, len1);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * `plan` (the page's render plan of the whole timeline) and `strip_id`: the stem of the strip's freezable part is
+ * rendered by `audio_freeze_advance` (or already is). `{ key, ready, steps }`.
+ * @param {any} plan
+ * @param {string} strip_id
+ * @returns {any}
+ */
+export function audio_freeze_render(plan, strip_id) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_freeze_render(plan, ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * A run starts: its peak is measured anew.
+ */
+export function audio_freeze_reset_peak() {
+    wasm.audio_freeze_reset_peak();
+}
+
+/**
+ * Every stem and render but those `keys` name is forgotten.
+ * @param {string[]} keys
+ */
+export function audio_freeze_retain(keys) {
+    const ptr0 = passArrayJsValueToWasm0(keys, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    wasm.audio_freeze_retain(ptr0, len0);
+}
+
+/**
+ * The load, its peak, each strip's share, the frozen strips and the renders (`freeze_store::status`).
+ * @returns {any}
+ */
+export function audio_freeze_status() {
+    const ret = wasm.audio_freeze_status();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * The strip plays live again, its stem fading out.
+ * @param {string} strip_id
+ */
+export function audio_freeze_thaw(strip_id) {
+    const ptr0 = passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_freeze_thaw(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
  * `owner` plays on the engine's context itself (`on`) or lets it go: held,
  * the engine never sleeps.
  * @param {string} owner
@@ -403,6 +491,62 @@ export function audio_probe_duration(data) {
 export function audio_render_clock() {
     const ret = wasm.audio_render_clock();
     return ret;
+}
+
+/**
+ * The plan rendered offline, uncoded (R-370 L11: a MIDI clip « Figer »): its interleaved stereo float samples.
+ * @param {any} plan
+ * @returns {Float32Array}
+ */
+export function audio_render_pcm(plan) {
+    const ret = wasm.audio_render_pcm(plan);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * The plan's Ogg Opus file (a `Uint8Array`), coded at `bitrate` b/s (the proxy's 96 kb/s when not given).
+ * @param {any} plan
+ * @param {number | null} [bitrate]
+ * @returns {Uint8Array}
+ */
+export function audio_render_proxy(plan, bitrate) {
+    const ret = wasm.audio_render_proxy(plan, isLikeNone(bitrate) ? Number.MAX_SAFE_INTEGER : (bitrate) >>> 0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v1;
+}
+
+/**
+ * The plan's sound muxed with the page's coded picture as an MP4 file (a `Uint8Array`): `video` is
+ * `{ width, height, timescale, samples: [{ size, duration, key }] }`, `avcc` its parameters, `data` its samples'
+ * bytes one after another.
+ * @param {any} plan
+ * @param {number | null | undefined} bitrate
+ * @param {any} video
+ * @param {Uint8Array} avcc
+ * @param {Uint8Array} data
+ * @returns {Uint8Array}
+ */
+export function audio_render_proxy_mp4(plan, bitrate, video, avcc, data) {
+    const ptr0 = passArray8ToWasm0(avcc, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_render_proxy_mp4(plan, isLikeNone(bitrate) ? Number.MAX_SAFE_INTEGER : (bitrate) >>> 0, video, ptr0, len0, ptr1, len1);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
 }
 
 /**
@@ -777,6 +921,20 @@ export function findLoop(channels, start, end, radius, window, candidates) {
 }
 
 /**
+ * @param {Float32Array} notes
+ * @param {number} sample_rate
+ * @returns {Float32Array}
+ */
+export function findNotes(notes, sample_rate) {
+    const ptr0 = passArrayF32ToWasm0(notes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.findNotes(ptr0, len0, sample_rate);
+    var v2 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v2;
+}
+
+/**
  * `interchangeReadDawproject(projectXml, metadataXml, entriesJson)`: `entriesJson`
  * is the archive's entry names as a JSON array of strings.
  * @param {string} project_xml
@@ -954,6 +1112,26 @@ export function readEditWindow(channels, start, end, dc, reverse) {
 }
 
 /**
+ * @param {Array<any>} channels
+ * @param {number} sample_rate
+ * @param {Float32Array} notes
+ * @param {Float32Array} tunes
+ * @param {number} formant
+ * @returns {Array<any>}
+ */
+export function renderTune(channels, sample_rate, notes, tunes, formant) {
+    const ptr0 = passArrayF32ToWasm0(notes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF32ToWasm0(tunes, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.renderTune(channels, sample_rate, ptr0, len0, ptr1, len1, formant);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * @param {Uint8Array} bytes
  * @returns {number | undefined}
  */
@@ -978,6 +1156,19 @@ export function toneSamples(hz, seconds, rate, edge_seconds, gain) {
     var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v1;
+}
+
+/**
+ * @param {Array<any>} channels
+ * @param {number} sample_rate
+ * @returns {object}
+ */
+export function trackPitch(channels, sample_rate) {
+    const ret = wasm.trackPitch(channels, sample_rate);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -1382,6 +1573,10 @@ function __wbg_get_imports() {
             const ret = arg0.next();
             return ret;
         }, arguments); },
+        __wbg_now_f565250295e2d180: function(arg0) {
+            const ret = arg0.now();
+            return ret;
+        },
         __wbg_of_f34f1ce50f299ee9: function(arg0, arg1) {
             const ret = Array.of(arg0, arg1);
             return ret;
@@ -1389,6 +1584,10 @@ function __wbg_get_imports() {
         __wbg_parse_a7c8a8cd2f5065db: function(arg0, arg1) {
             const ret = Date.parse(getStringFromWasm0(arg0, arg1));
             return ret;
+        },
+        __wbg_performance_68499ca0718837f5: function(arg0) {
+            const ret = arg0.performance;
+            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_prototypesetcall_3249fc62a0fafa30: function(arg0, arg1, arg2) {
             Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
@@ -1484,8 +1683,8 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 263, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 280, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h89f5e65ccaea8674);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0) {
@@ -1525,8 +1724,8 @@ function __wbg_get_imports() {
 }
 
 const lAudioContext = (typeof AudioContext !== 'undefined' ? AudioContext : (typeof webkitAudioContext !== 'undefined' ? webkitAudioContext : undefined));
-function wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hf307e732c0dcac9d(arg0, arg1);
+function wasm_bindgen__convert__closures_____invoke__h89f5e65ccaea8674(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h89f5e65ccaea8674(arg0, arg1);
 }
 
 
@@ -1769,6 +1968,16 @@ function passArrayF64ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 8, 8) >>> 0;
     getFloat64ArrayMemory0().set(arg, ptr / 8);
     WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayJsValueToWasm0(array, malloc) {
+    const ptr = malloc(array.length * 4, 4) >>> 0;
+    for (let i = 0; i < array.length; i++) {
+        const add = addToExternrefTable0(array[i]);
+        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
+    }
+    WASM_VECTOR_LEN = array.length;
     return ptr;
 }
 

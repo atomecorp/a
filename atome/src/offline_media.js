@@ -1,5 +1,5 @@
 // Service-worker access to the canonical browser file store. A URL never grants
-// access to another identity, and logout closes this read boundary immediately.
+// access to another identity's local files, and logout closes this read boundary immediately.
 
 // A medium of the account not on this device yet (made on another one) is read from the
 // server and, read whole, kept in the same file store as already sent (`uploaded`): it then
@@ -49,7 +49,10 @@ self.atomeLocalMediaResponse = async function (request) {
     let authorization;
     try { authorization = await read('atome_auth_device_v1', 'records', 'workspace-identity'); }
     catch { return new Response(null, { status: 403 }); }
-    if (!owner || authorization?.id !== owner || authorization.locked) return new Response(null, { status: 403 });
+    if (!owner || !authorization?.id || authorization.locked) return new Response(null, { status: 403 });
+    // Another account's medium (a project or a folder shared with this one) is never in this device's store: the server
+    // reads it, deciding by this session whether the share lets it (atome-server media/downloads.rs#can_read).
+    if (authorization.id !== owner) return fetch(request);
     let name;
     try { name = decodeURIComponent(url.pathname.slice('/api/uploads/'.length)); }
     catch { return new Response(null, { status: 400 }); }

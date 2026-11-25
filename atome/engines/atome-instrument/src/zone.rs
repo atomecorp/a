@@ -8,7 +8,9 @@
 // routable to its own strip); output 0 unless it says another.
 // Read from banks (SFZ): a one-shot zone plays its take to the end whatever the
 // key does; a zone with a switch sounds only while that keyswitch is the last
-// one pressed (keymap.rs); a zone's filter colours each of its voices; a zone's
+// one pressed (keymap.rs), a zone with a controller only while that MIDI
+// controller lies in its range (an EXS group chosen by a pedal, SFZ locc/hicc);
+// a zone's filter colours each of its voices; a zone's
 // envelope shapes its voices instead of the instrument's (a region's ampeg_*).
 
 use crate::composed::Composed;
@@ -60,6 +62,8 @@ pub struct Zone {
     pub one_shot: bool,
     // The keyswitch (a key of the keymap's switch range) this zone answers to.
     pub switch: Option<u8>,
+    // The MIDI controller whose value chooses this zone, checked at each note.
+    pub controller: Option<ZoneController>,
     pub filter: Option<ZoneFilter>,
     // Its own amplitude envelope; none: the instrument's settings apply.
     pub envelope: Option<ZoneEnvelope>,
@@ -68,7 +72,9 @@ pub struct Zone {
 // A zone's amplitude envelope, in the sampler's units and ranges (sampler.rs PARAMS).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ZoneEnvelope {
+    pub delay_ms: f32,
     pub attack_ms: f32,
+    pub hold_ms: f32,
     pub decay_ms: f32,
     pub sustain: f32,
     pub release_ms: f32,
@@ -77,9 +83,11 @@ pub struct ZoneEnvelope {
 impl ZoneEnvelope {
     // Each value within its sampler parameter's range.
     pub fn validate(&self) -> Result<(), String> {
-        use crate::sampler::{ATTACK_MS, DECAY_MS, PARAMS, RELEASE_MS, SUSTAIN};
+        use crate::sampler::{ATTACK_MS, DECAY_MS, DELAY_MS, HOLD_MS, PARAMS, RELEASE_MS, SUSTAIN};
         [
+            (DELAY_MS, self.delay_ms),
             (ATTACK_MS, self.attack_ms),
+            (HOLD_MS, self.hold_ms),
             (DECAY_MS, self.decay_ms),
             (SUSTAIN, self.sustain),
             (RELEASE_MS, self.release_ms),
@@ -96,6 +104,22 @@ impl ZoneEnvelope {
                 ))
             }
         })
+    }
+}
+
+// A zone sounds while controller `number` lies in `low..=high` (MIDI 0..127).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ZoneController {
+    pub number: u8,
+    pub low: u8,
+    pub high: u8,
+}
+
+impl ZoneController {
+    // Whether the controllers' values (0..1, sampler.rs) let the zone sound.
+    pub fn admits(&self, controllers: &[f32; 128]) -> bool {
+        let value = (controllers[self.number as usize & 127] * 127.0).round() as u8;
+        (self.low..=self.high).contains(&value)
     }
 }
 
@@ -137,6 +161,7 @@ impl Zone {
             output: 0,
             one_shot: false,
             switch: None,
+            controller: None,
             filter: None,
             envelope: None,
         }

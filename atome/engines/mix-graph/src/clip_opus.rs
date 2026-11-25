@@ -1,14 +1,16 @@
 // Opus — an Ogg `.opus` file, a WebM `.weba`, a browser's own recording — decoded by
 // `opus-rs` (libopus 1.6 ported to Rust): Symphonia reads the container and hands its packets
-// with their trims (the pre-skip, the end padding), as it has no Opus codec of its
-// own. One stream of one or two channels; a multistream file (surround) is refused
+// with their trims (the end padding), as it has no Opus codec of its own. The
+// pre-skip is not a packet trim: it is read from the stream's OpusHead and dropped
+// here. A Matroska stream's DiscardPadding is not read by Symphonia: its end padding stays. One stream of one or two channels; a multistream file (surround) is refused
 // by its error. A malformed packet is skipped, as the other decoders do.
 
 use crate::clip_decode::next_track_packet;
 use kira::Frame;
 use opus_rs::OpusDecoder;
 use symphonia::core::codecs::audio::AudioCodecParameters;
-use symphonia::core::formats::FormatReader;
+use symphonia::core::formats::{FormatReader, Track};
+use symphonia::core::packet::Packet;
 
 /// Opus always decodes at 48 kHz, whatever rate its source had.
 pub(crate) const OPUS_SAMPLE_RATE: u32 = 48_000;
@@ -16,10 +18,40 @@ pub(crate) const OPUS_SAMPLE_RATE: u32 = 48_000;
 // The longest Opus packet, 120 ms at 48 kHz.
 const MAX_PACKET_FRAMES: usize = 5_760;
 
+/// What an Opus stream's start drops before its first played frame: its pre-skip,
+/// read from its `OpusHead` (RFC 7845 §5.1: the Ogg header, a Matroska CodecPrivate),
+/// else the delay its track declares.
+pub(crate) struct Lead {
+    delay: u64,
+}
+
+impl Lead {
+    pub(crate) fn of(track: &Track, params: &AudioCodecParameters) -> Self {
+        let head = params
+            .extra_data
+            .as_deref()
+            .filter(|head| head.len() >= 12 && head.starts_with(b"OpusHead"));
+        let delay = match head {
+            Some(head) => u64::from(u16::from_le_bytes([head[10], head[11]])),
+            None => u64::from(track.delay.unwrap_or(0)),
+        };
+        Self { delay }
+    }
+
+    // The frames a packet of `frames` drops at its start: its trim, then what is left of the pre-skip.
+    fn frames(&mut self, packet: &Packet, frames: u64) -> u64 {
+        let lead = packet.trim_start.get().min(frames);
+        let delayed = self.delay.min(frames - lead);
+        self.delay -= delayed;
+        lead + delayed
+    }
+}
+
 pub(crate) fn decode_opus(
     format: &mut dyn FormatReader,
     track_id: u32,
     params: &AudioCodecParameters,
+    mut lead: Lead,
 ) -> Result<Vec<Frame>, String> {
     let channels = params
         .channels
@@ -39,9 +71,8 @@ pub(crate) fn decode_opus(
         let Ok(decoded) = decoder.decode(&packet.data, MAX_PACKET_FRAMES, &mut pcm) else {
             continue;
         };
-        let trim_start = usize::try_from(packet.trim_start.get()).unwrap_or(usize::MAX);
+        let start = lead.frames(&packet, decoded as u64) as usize;
         let trim_end = usize::try_from(packet.trim_end.get()).unwrap_or(usize::MAX);
-        let start = trim_start.min(decoded);
         let end = decoded.saturating_sub(trim_end).max(start);
         let kept = &pcm[start * channels..end * channels];
         if channels == 1 {
@@ -78,11 +109,16 @@ fn packet_frames(data: &[u8]) -> u64 {
 
 /// An Opus track's length in seconds, its packets' own lengths summed, less their
 /// trims: a WebM's packets carry no duration of their own.
-pub(crate) fn opus_duration(format: &mut dyn FormatReader, track_id: u32) -> Result<f64, String> {
+pub(crate) fn opus_duration(
+    format: &mut dyn FormatReader,
+    track_id: u32,
+    mut lead: Lead,
+) -> Result<f64, String> {
     let mut frames: u64 = 0;
     while let Some(packet) = next_track_packet(format, track_id)? {
-        let trimmed = packet.trim_start.get() + packet.trim_end.get();
-        frames += packet_frames(&packet.data).saturating_sub(trimmed);
+        let length = packet_frames(&packet.data);
+        let dropped = lead.frames(&packet, length);
+        frames += (length - dropped).saturating_sub(packet.trim_end.get());
     }
     if frames == 0 {
         return Err("No audio frames found".to_string());

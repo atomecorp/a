@@ -29,13 +29,7 @@ pub(super) async fn upload_handler(
         }
     };
 
-    let token = extract_bearer_token(&headers);
-    let token_user_id = local_auth::extract_user_id_from_token(auth_state, token.as_deref());
-    let user_id = if token_user_id != "anonymous" {
-        token_user_id
-    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
-        header_user_id
-    } else {
+    let Some(user_id) = resolve_authenticated_user(&headers, auth_state) else {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({ "success": false, "error": "Unauthorized" })),

@@ -415,7 +415,8 @@ impl Vault<'_> {
                 "SELECT f.atome_id, f.particle_value AS file_name, o.particle_value AS original_name, p.particle_value AS profiles,
                         a.atome_type AS atome_type, m.particle_value AS mime_type, w.particle_value AS width, h.particle_value AS height,
                         nw.particle_value AS natural_width, nh.particle_value AS natural_height,
-                        COALESCE(d.particle_value, dd.particle_value, md.particle_value) AS duration_sec
+                        COALESCE(d.particle_value, dd.particle_value, md.particle_value) AS duration_sec,
+                        px.particle_value AS proxy_of
                  FROM particles f
                  JOIN atomes a ON a.atome_id = f.atome_id AND a.deleted_at IS NULL
                  LEFT JOIN particles o ON o.atome_id = f.atome_id AND o.particle_key = 'original_name'
@@ -428,6 +429,7 @@ impl Vault<'_> {
                  LEFT JOIN particles d ON d.atome_id = f.atome_id AND d.particle_key = 'duration_sec'
                  LEFT JOIN particles dd ON dd.atome_id = f.atome_id AND dd.particle_key = 'duration'
                  LEFT JOIN particles md ON md.atome_id = f.atome_id AND md.particle_key = 'media_duration'
+                 LEFT JOIN particles px ON px.atome_id = f.atome_id AND px.particle_key = 'proxy_of'
                  WHERE f.particle_key = 'file_name' AND f.particle_value IN ({})
                  ORDER BY COALESCE(a.updated_at, a.created_at) DESC",
                 placeholders(quoted.len())
@@ -447,7 +449,7 @@ impl Vault<'_> {
         };
         rows.into_iter()
             .map(|row| {
-                Ok(json!({
+                let mut described = json!({
                     "atome_id": row["atome_id"],
                     "file_name": parse(&row["file_name"])?,
                     "original_name": if row["original_name"].is_null() { JsonValue::Null } else { parse(&row["original_name"])? },
@@ -459,7 +461,13 @@ impl Vault<'_> {
                     "natural_width": measure(&row["natural_width"])?,
                     "natural_height": measure(&row["natural_height"])?,
                     "duration_sec": measure(&row["duration_sec"])?,
-                }))
+                });
+                // A project's light proxy (R-349, eVe project_proxy_mark.js) names the project it renders; any
+                // other file's description keeps its recorded shape.
+                if !row["proxy_of"].is_null() {
+                    described["proxy_of"] = parse(&row["proxy_of"])?;
+                }
+                Ok(described)
             })
             .collect::<Result<Vec<_>, String>>()
             .map(JsonValue::Array)

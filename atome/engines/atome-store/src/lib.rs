@@ -52,6 +52,7 @@ pub use projection::*;
 pub use rows::*;
 pub use schema::*;
 pub use snapshots::restored_atome_ids;
+pub use state_projection::projected_type;
 
 #[cfg(test)]
 #[path = "../../../../tests/atome_store/commit_parity.rs"]

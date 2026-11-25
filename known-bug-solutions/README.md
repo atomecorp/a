@@ -10,6 +10,8 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Warped / quantized audio: attacks heard ~10 ms before the beat although the warp markers are on the grid | [warp-hits-heard-early](warp-hits-heard-early/README.md) |
+| Web: another account's shared media (a shared project's proxy, a live folder's picture or sound) answers `403` in the browser, intermittently (only once the service worker controls the page) | [shared-media-403-service-worker](shared-media-403-service-worker/README.md) |
 | Touching Carnet (Dashboard Contacts) freezes the phone, then everything lags; `contactsList` runs over a hundred times | [contacts-rubric-directory-read-loop](contacts-rubric-directory-read-loop/README.md) |
 | Contact plates and Carnet rows without photo on every device but the importing one; `file missing … contact_photo_<hash>.jpg` | [contact-photo-device-bound-path](contact-photo-device-bound-path/README.md) |
 | Rencontre people as small empty plates (name and « contact » glyph, never the photo); a person with a phone photo missing; `vault_request_too_large` | [person-plates-laid-as-level-tools](person-plates-laid-as-level-tools/README.md) |

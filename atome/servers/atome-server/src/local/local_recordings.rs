@@ -23,7 +23,11 @@ pub(super) async fn delete_recording_handler(
         )
             .into_response();
     };
-    let Some(user_id) = resolve_media_authenticated_user(&headers, &query, auth_state) else {
+    // The session's own account, never a folder the request names (`media_user_id`, `X-User-Id`): a read may reach
+    // a synced owner's folder, a deletion only the signed-in user's (R-246 retest BUG-0031).
+    let token = extract_bearer_token(&headers).or_else(|| extract_token_from_media_query(&query));
+    let Some(user_id) = local_auth::verified_user_id_from_token(auth_state, token.as_deref())
+    else {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({ "success": false, "error": "Unauthorized" })),

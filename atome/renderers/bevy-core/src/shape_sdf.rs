@@ -256,6 +256,18 @@ impl AtomeShapeSilhouette {
         }
     }
 
+    /// The same silhouette `factor` times its size, its rounding included: drawn at `factor`
+    /// texels per px and laid at its own size, it is the same shape at a lower density (a box
+    /// longer than the device's textures, `shape_texture.rs#fitting_density`).
+    pub(crate) fn scaled(&self, factor: f32) -> Self {
+        Self {
+            geometry: self.geometry,
+            width: self.width * factor,
+            height: self.height * factor,
+            corner_radii: self.corner_radii.map(|radius| radius * factor),
+        }
+    }
+
     /// L'arrondi des SOMMETS, en px. Sur une etoile ou un polygone les quatre
     /// coins du cadre n'existent plus : le rayon qui arrondit est donc le plus
     /// grand demande, pour qu'un seul curseur de coin deplace se voie.

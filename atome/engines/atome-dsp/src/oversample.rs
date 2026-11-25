@@ -268,6 +268,11 @@ impl crate::Processor for Oversampled {
         self.inner.set_param(id, value);
     }
 
+    // Beats run in seconds: the inner rate changes nothing.
+    fn set_transport(&mut self, transport: &crate::Transport) {
+        self.inner.set_transport(transport);
+    }
+
     fn params(&self) -> &'static [crate::ParamSpec] {
         self.inner.params()
     }

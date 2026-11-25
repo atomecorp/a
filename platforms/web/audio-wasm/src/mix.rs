@@ -39,8 +39,16 @@ pub fn audio_mix_levels() -> Result<js_sys::Array, JsValue> {
         let entry = js_sys::Object::new();
         js_sys::Reflect::set(&entry, &"strip_id".into(), &level.strip_id.into())?;
         js_sys::Reflect::set(&entry, &"peak".into(), &(level.peak as f64).into())?;
-        js_sys::Reflect::set(&entry, &"peak_left".into(), &(level.peak_left as f64).into())?;
-        js_sys::Reflect::set(&entry, &"peak_right".into(), &(level.peak_right as f64).into())?;
+        js_sys::Reflect::set(
+            &entry,
+            &"peak_left".into(),
+            &(level.peak_left as f64).into(),
+        )?;
+        js_sys::Reflect::set(
+            &entry,
+            &"peak_right".into(),
+            &(level.peak_right as f64).into(),
+        )?;
         js_sys::Reflect::set(&entry, &"rms".into(), &(level.rms as f64).into())?;
         out.push(&entry);
     }

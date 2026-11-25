@@ -120,6 +120,8 @@ pub struct DspRuntime {
     // While bypassed, a module with latency keeps the timing it promised.
     compensation: Option<[DelayLine; 2]>,
     pub has_tail: bool,
+    // How long it rings as built (a frozen stem never stands for a long one, R-370).
+    pub tail_frames: u32,
 }
 
 // The 2× or 4× a module asks for (R-191): any kind but a generator, a keyed
@@ -186,6 +188,7 @@ impl DspRuntime {
             .then(|| (vec![0.0; block], vec![0.0; block]));
         let mut runtime = Self {
             has_tail: processor.tail_frames() > 0,
+            tail_frames: processor.tail_frames(),
             extra,
             key,
             processor,
@@ -354,6 +357,10 @@ impl DspRuntime {
             *frame += ring;
         }
         peak
+    }
+
+    pub fn set_transport(&mut self, transport: &atome_dsp::Transport) {
+        self.processor.set_transport(transport);
     }
 
     pub fn reset(&mut self) {

@@ -1749,7 +1749,7 @@ fn partially_rounded_shape_gets_a_mask_even_with_a_zero_scalar_radius() {
         ..shape_node("accordion_header")
     };
     let mut images = Assets::<Image>::default();
-    let handle = crate::node_texture::texture_handle_for_node(&mut images, &node).unwrap();
+    let handle = crate::node_texture::texture_handle_for_node(&mut images, &node, 8192).unwrap();
     assert!(
         handle.is_some(),
         "a node with only per-corner radii must still receive a rounded mask"

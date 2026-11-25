@@ -1206,6 +1206,30 @@ pub struct WebDevice {
     error_scope_count: Rc<Cell<u32>>,
 }
 
+impl WebDevice {
+    /// `GPUDevice.importExternalTexture`, its refusal returned rather than unwrapped: WebKit refuses
+    /// a video it holds no pixel buffer for (`InvalidStateError: Unable to import texture`) even
+    /// while the element reports a current frame — iOS takes decoders back under load — and the
+    /// unwrap killed the whole render loop (atome R-295 défaut 44).
+    pub(crate) fn try_import_external_texture(
+        &self,
+        desc: &crate::ExternalTextureDescriptor<'_>,
+    ) -> Result<WebExternalTexture, wasm_bindgen::JsValue> {
+        let source = desc
+            .source
+            .as_ref()
+            .expect("Web external texture creation requires a browser media source");
+        let mapped_desc = webgpu_sys::GpuExternalTextureDescriptor::new(source);
+        if let Some(label) = desc.label {
+            mapped_desc.set_label(label);
+        }
+        Ok(WebExternalTexture {
+            inner: self.inner.import_external_texture(&mapped_desc)?,
+            ident: crate::cmp::Identifier::create(),
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WebQueue {
     pub(crate) inner: webgpu_sys::GpuQueue,
@@ -2365,21 +2389,9 @@ impl dispatch::DeviceInterface for WebDevice {
         desc: &crate::ExternalTextureDescriptor<'_>,
         _planes: &[&crate::TextureView],
     ) -> dispatch::DispatchExternalTexture {
-        let source = desc
-            .source
-            .as_ref()
-            .expect("Web external texture creation requires a browser media source");
-        let mapped_desc = webgpu_sys::GpuExternalTextureDescriptor::new(source);
-
-        if let Some(label) = desc.label {
-            mapped_desc.set_label(label);
-        }
-
-        WebExternalTexture {
-            inner: self.inner.import_external_texture(&mapped_desc).unwrap(),
-            ident: crate::cmp::Identifier::create(),
-        }
-        .into()
+        self.try_import_external_texture(desc)
+            .expect("GPUDevice.importExternalTexture refused its source")
+            .into()
     }
 
     fn create_blas(

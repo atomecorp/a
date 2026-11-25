@@ -10,6 +10,8 @@ description = "Named screens of the local network (R-248): a Chromecast (Cast v2
 path = "src/lib.rs"
 
 [dependencies]
+# The MP4 boxes of the live HLS stream (src/hls/mp4.rs): the one box writer.
+atome-mp4 = { path = "../mp4" }
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "rt", "macros"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 serde = { workspace = true }

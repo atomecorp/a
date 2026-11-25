@@ -6,7 +6,7 @@
 // stack (notification_ops.rs), the contacts (contact_ops.rs), the direct messages and calls
 // (message_ops.rs, the calls' SFU in visio/, which a closed connection leaves), the News, communities and forums (news_ops.rs), the shares (share_ops.rs),
 // the projected bases (projection_ops.rs), the providers (provider_ops.rs), the outside sources
-// (sources/), the restricted shell (shell_ops.rs) and the device seats with what crosses them
+// (sources/), a control's message to the network (network_ops.rs), the restricted shell (shell_ops.rs) and the device seats with what crosses them
 // (surface_ops.rs, surface_grant_ops.rs, teleport_ops.rs, remote_control_ops.rs, the seats
 // themselves in seats.rs). A frame no family claims is logged once per connection, never answered.
 mod atome_ops;
@@ -19,6 +19,7 @@ mod file_reads;
 mod guest_adoption;
 mod identity;
 mod message_ops;
+mod network_ops;
 mod news_ops;
 pub(crate) mod notification_ops;
 mod password_ops;
@@ -232,6 +233,7 @@ enum Route {
     Surface(JsonValue),
     RemoteControl(JsonValue),
     Shell(JsonValue),
+    Network(JsonValue),
     Unclaimed(JsonValue),
     // `JSON.parse` refused it.
     Invalid,
@@ -259,7 +261,8 @@ impl Route {
             | Route::Source(frame)
             | Route::Surface(frame)
             | Route::RemoteControl(frame)
-            | Route::Shell(frame) => Some(frame),
+            | Route::Shell(frame)
+            | Route::Network(frame) => Some(frame),
             Route::Unclaimed(_) | Route::Invalid | Route::Null => None,
         }
     }
@@ -346,6 +349,9 @@ fn route(bytes: &[u8]) -> Route {
     }
     if kind == shell_ops::KIND {
         return Route::Shell(message);
+    }
+    if kind == network_ops::KIND {
+        return Route::Network(message);
     }
     Route::Unclaimed(message)
 }
@@ -440,6 +446,9 @@ async fn join(ws_api: Arc<WsApi>, client: WebSocket, network: String, opening: O
             }
             Route::Shell(frame) => {
                 tokio::spawn(shell_ops::answer(connection, frame));
+            }
+            Route::Network(frame) => {
+                tokio::spawn(network_ops::answer(connection, frame));
             }
             Route::RemoteControl(frame) => {
                 tokio::spawn(remote_control_ops::answer(connection, frame));

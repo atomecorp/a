@@ -18,6 +18,7 @@ members = [
     "atome/engines/js-values",
     "atome/engines/lpproj-import",
     "atome/engines/mix-graph",
+    "atome/engines/mp4",
     "atome/engines/screen-cast",
     "atome/engines/voice-turns",
     "atome/servers/atome-server",

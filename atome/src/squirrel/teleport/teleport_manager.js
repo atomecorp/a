@@ -10,6 +10,7 @@
 import { FastifyAdapter } from '../apis/unified/adole.js';
 import { ensureRemoteSurfacePrincipal, ensureSurfaceAnnounced, getLocalSurfaceId, listSurfaces } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
+import { flushBrowserWorkspace } from '../apis/unified/adole_api/auth_methods_login.js';
 
 const isAuthenticated = () => getSessionState()?.mode === 'authenticated';
 
@@ -32,7 +33,9 @@ const send = async (action, fields = {}) => {
     // the server can resolve either end.
     await ensureSurfaceAnnounced();
     try {
-        return await FastifyAdapter.ws.send({ type: 'teleport', action, ...fields });
+        // An offer, an accept or a return commits in the server's vaults (several seconds each on the hosted server):
+        // the ten seconds by default gave a first offer up (`Request timeout`) while it went through.
+        return await FastifyAdapter.ws.send({ type: 'teleport', action, ...fields }, { timeoutMs: 30000 });
     } catch (error) {
         return { ok: false, success: false, error: error?.message || String(error) };
     }
@@ -55,6 +58,10 @@ export const teleportObject = async (atomeId, targetSurfaceId, targetUserId = ''
     // A foreign surface must carry its owner, otherwise the server resolves it inside
     // the sender's own namespace and the grant check never runs.
     const owner = String(targetUserId || '').trim();
+    // The server moves what it holds: an object made a moment ago (a media just chosen) is first sent from this
+    // device's working copy (local first), as a share does (list_share_commands.js `flush`).
+    const flushed = await flushBrowserWorkspace({ atomeIds: [id] }).catch(error => ({ ok: false, error: error?.message || 'workspace_flush_failed' }));
+    if (!flushed.ok) return { ok: false, error: flushed.error };
     const result = await send('offer', {
         atome_id: id,
         target_surface_id: target,

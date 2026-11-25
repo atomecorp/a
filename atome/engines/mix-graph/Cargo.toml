@@ -16,11 +16,18 @@ kira.workspace = true
 serde.workspace = true
 symphonia = { workspace = true, optional = true, features = ["aac", "alac", "isomp4", "aiff", "caf", "pcm", "ogg", "mkv"] }
 opus-rs = { workspace = true, optional = true }
+atome-audio-kernels = { path = "../audio-kernels", optional = true }
+atome-mp4 = { path = "../mp4", optional = true }
+serde_json = { workspace = true, optional = true }
 
 [features]
 # The clip decoder of the engines that load files (native and Web playback);
 # the direct path's worklet decodes nothing.
 decode = ["dep:symphonia", "dep:opus-rs"]
+# A project rendered offline and coded to Ogg Opus, or muxed with its picture as an MP4 (offline_proxy.rs, R-349).
+proxy = ["dep:atome-audio-kernels", "dep:atome-mp4"]
+# A strip's stem plan and its key, from the page's render plan (freeze_plan.rs, R-370).
+freeze = ["dep:serde_json"]
 
 [dev-dependencies]
 serde_json.workspace = true

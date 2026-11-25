@@ -28,6 +28,8 @@ import {
 } from '../../eVe/domains/rendering/bevy_perf_diagnostics_runtime.js';
 import { createBrowserBevyMediaTextureResolver } from '../../eVe/domains/rendering/bevy_media_texture_resolver.js';
 import { clearBevyMediaTextureCache } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
+import { hasPersistedMediaTextureInput } from '../../eVe/domains/rendering/bevy_pending_media_contract.js';
+import { createBevyMediaResourceRuntime } from '../../eVe/domains/rendering/bevy_media_resource_runtime.js';
 import { snapshotCaptureCanvas } from '../../eVe/domains/rendering/bevy_project_preview_capture_frame.js';
 import { VIRTUAL_SCENE_DIFF_TYPES } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 
@@ -874,45 +876,86 @@ test('cropped images keep one source-aspect texture across frame and crop previe
     assert.deepEqual(drawCalls[0].slice(1), [0, 0, 800, 400]);
 });
 
-test('waveform texture keeps full peak coordinates across temporal crop previews', async () => {
+test('waveform texture is drawn at its shown size, for the part of the sound shown', async () => {
     clearBevyMediaTextureCache();
     const canvases = [];
+    const bars = [];
     const documentRef = {
-        defaultView: { devicePixelRatio: 1 },
+        defaultView: { devicePixelRatio: 2 },
         createElement: (tagName) => {
             if (tagName !== 'canvas') throw new Error(`unexpected_element:${tagName}`);
             const canvas = {
                 width: 0,
                 height: 0,
                 getContext: () => ({
+                    alpha: 1,
                     clearRect: () => null,
-                    fillRect: () => null,
+                    fillRect(x, y, width, height) { if (this.alpha === 1) bars.push({ canvas, x, height }); },
                     getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
                     set fillStyle(_value) {},
-                    set globalAlpha(_value) {}
+                    set globalAlpha(value) { this.alpha = value; },
+                    get globalAlpha() { return this.alpha; }
                 })
             };
             canvases.push(canvas);
             return canvas;
         }
     };
-    const resolver = createBrowserBevyMediaTextureResolver({ documentRef, maxTextureSize: 1024 });
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef });
+    // A sound with no file draws its record's peaks; the loud one is the 7th of 8.
     const node = {
         id: 'waveform_source_space', kind: 'audio_waveform',
         bounds: { x: 0, y: 0, width: 400, height: 40 },
-        content: { source: '/audio.wav', duration: 8, peaks: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] },
+        content: { duration: 8, peaks: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 1, 0.1] },
         material: { fill: '#44cc88' }
     };
-    const first = await resolver(node);
-    const preview = await resolver({
-        ...node,
-        bounds: { ...node.bounds, width: 200 },
-        content: { ...node.content, uvRect: [0.25, 0, 0.5, 1] }
-    });
+    const whole = await resolver(node);
+    // 400 px at 2 device px per px: 800, laid on 1024 (a power of two), 80 high.
+    assert.deepEqual([whole.width, whole.height], [1024, 80]);
+    const shown = await resolver({ ...node, content: { ...node.content, peaksWindow: [0.75, 0.875] } });
+    assert.deepEqual([shown.width, shown.height], [1024, 80]);
+    assert.equal(canvases.length, 2);
+    // The part shown is the loud peak alone: every column of the second raster is tall.
+    const columns = bars.filter(bar => bar.canvas === canvases[1]);
+    assert.equal(columns.length, 1024);
+    assert.ok(columns.every(bar => bar.height === 80));
+    // The same node again comes from the cache.
+    assert.deepEqual(await resolver(node), whole);
+    assert.equal(canvases.length, 2);
+});
 
-    assert.deepEqual([first.width, first.height], [8, 40]);
-    assert.deepEqual(preview, first);
-    assert.equal(canvases.length, 1);
+test('a sound is drawn from its record peaks while they cover its columns, from its file only for a finer zoom', async () => {
+    const peaks = Array.from({ length: 256 }, () => 0.5);
+    const tile = { id: 'waveform_tile', kind: 'audio_waveform', bounds: { x: 0, y: 0, width: 120, height: 60 },
+        content: { duration: 30, source: '/api/uploads/sound.m4a', peaks }, material: { fill: '#44cc88' } };
+    // A tile's 120 px lie on 128 columns: its 256 peaks draw it with the batch, its file never read.
+    assert.equal(hasPersistedMediaTextureInput(tile), true);
+    const zoomed = { ...tile, id: 'waveform_zoomed', bounds: { ...tile.bounds, width: 2000 } };
+    assert.equal(hasPersistedMediaTextureInput(zoomed), false);
+    // A part of the sound shown at the tile's size has fewer of its peaks: the file is read.
+    assert.equal(hasPersistedMediaTextureInput({ ...tile, content: { ...tile.content, peaksWindow: [0, 0.25] } }), false);
+    // A sound with no peaks is read from its file; one with neither is a defect.
+    assert.equal(hasPersistedMediaTextureInput({ ...tile, content: { ...tile.content, peaks: [] } }), false);
+    clearBevyMediaTextureCache();
+    const fetched = [];
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { fetched.push(String(url)); throw new Error('unexpected_fetch'); };
+    try {
+        const documentRef = { defaultView: { devicePixelRatio: 1 }, createElement: () => ({ width: 0, height: 0, getContext: () => ({
+            clearRect: () => null, fillRect: () => null, getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+            set fillStyle(_value) {}, set globalAlpha(_value) {} }) }) };
+        const texture = await createBrowserBevyMediaTextureResolver({ documentRef })(tile);
+        assert.deepEqual([texture.width, fetched], [128, []]);
+        // A zoomed clip spawns at once with its peaks drawn, its file read by the deferred queue.
+        const media = createBevyMediaResourceRuntime({ readSurfaceState: () => null, writeSurfaceState: () => null,
+            ownerWindowForSurface: () => globalThis, requireExport: () => () => null, requestPresentationRedraw: () => null });
+        const spawned = await media.mapSpawnOp({ node: { ...zoomed, layer: 1, opacity: 1 } }, createBrowserBevyMediaTextureResolver({ documentRef }));
+        assert.equal(spawned.deferred.id, zoomed.id);
+        assert.ok(spawned.payload.texture?.width > 0, JSON.stringify(Object.keys(spawned.payload)));
+        assert.deepEqual(fetched, []);
+    } finally {
+        globalThis.fetch = savedFetch;
+    }
 });
 
 test('Bevy media texture resolver bounds oversized cover textures without changing their ratio', async () => {

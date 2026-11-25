@@ -227,5 +227,21 @@ nommer, lot, condition, bus) ; l'assistant l'exécute aussitôt, sans écran de 
 12. **L12 Réseau** (OSC, adresse web) : à créer ; les envois vers dehors suivent la règle 22 (redemande dans la
     conversation seulement pour ce qui part vers d'autres personnes).
 
+**L3–L12 FAITS (24 nov.)** — preuves sous `temp/widgets_spec_2026-11-24/` :
+- L3 gestes (`l3_gesture_probe.mjs`), L4–L5 panneau Action et exécution (`l5_reactions_probe.mjs`), L6 retour et
+  automation (`l6_automation_probe.mjs`), L7 présence par le clip (`l7_presence_probe.mjs`), L8 Condition
+  (`l8_condition_probe.mjs`, pixels `l10_out/04_condition.png`).
+- L9 bus MIDI : `kernel/mix_midi_endpoints.js` (listes d'entrées/sorties dans IN/OUT de la tranche, filtre canal, plage,
+  transposition, canal de destination), `eVe/domains/midi/midi_bus_runtime.js` (routage, boucle coupée à 8 sauts), colonne
+  et panneau soudé `molecule_mix_midi_lists.js` / `_actions.js` / `_range.js` (clavier de 128 notes sur la dalle, bornes
+  dans leurs cases) ; sondes `l9_midi_bus_probe.mjs` (33), pixels `l9_pixels.probe.mjs` → `l9_out/`.
+- L10 lot : `control_batch.js` (ordre de lecture, « ≠ », Série), Action et Réglages en lot, Nom en lot
+  (`control_rename.js`, outil `ui.control.rename`, rail « Nom ») ; sonde `l10_l11_probe.mjs`, pixels `l10_pixels.probe.mjs`.
+- L11 : l'outil Action dans le rail de tout objet (`context_menus.json`) ; un doigt qui glisse sur une Zone depuis
+  ailleurs déclenche Entrer/Sortir (`control_zone_roaming.js`).
+- L12 réseau : `atome-server/src/network/` (OSC UDP, HTTP), `ws_api/network_ops.rs` (central : OSC refusé, adresses
+  publiques, 600/min par compte), `AdoleAPI.network.send` (`adole_api/network.js`) ; message discret si l'OSC est
+  refusé sur le Web ; sonde `r347_l12_network_probe.mjs`, tests Rust `cargo test -p atome-server --lib network`.
+
 Chaque lot : `npm run check:rust` / `npm run check:js`, sonde ciblée sous `temp/`, pixels Playwright pour l'UI.
 Fichiers partagés (console, Molecule, `Cargo.toml`, moteurs) : couloir demandé à l'orchestrateur avant d'y toucher.

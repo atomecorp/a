@@ -412,7 +412,11 @@ extension WebViewManager {
                             if WebViewManager.runningInExtension, let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                                 au.sendHostMIDIOutput(u8)
                             } else {
-                                WebViewManager.midiController?.sendRaw(bytes: u8)
+                                // `outputId`: one destination (Synchro MIDI, a strip's port); `delayMs`: its instant.
+                                WebViewManager.midiController?.sendRaw(
+                                    bytes: u8, destinationId: body["outputId"] as? String,
+                                    delayMs: (body["delayMs"] as? NSNumber)?.doubleValue ?? 0
+                                )
                             }
                         }
                         return

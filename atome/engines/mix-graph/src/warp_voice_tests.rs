@@ -1,5 +1,6 @@
 // Warped voices: the real Kira sound rendered block by block — the map places the source where it asks, the pitch
-// stays the source's (or moves by the asked semitones) whatever the speed, and the voice ends with its map.
+// stays the source's (or moves by the asked semitones) whatever the speed, and the voice ends with its map. A tape map
+// (a take's speed curve in Bande, R-367) lets the pitch follow the speed.
 
 use crate::voice::{VoiceEnvelope, VoiceRequest, build_voice_sound};
 use crate::warp_voice::VoiceWarp;
@@ -35,6 +36,7 @@ fn warped(points: Vec<[f64; 2]>, pitch_semitones: f64) -> VoiceRequest {
         warp: Some(VoiceWarp {
             points,
             pitch_semitones,
+            tape: false,
         }),
         ..VoiceRequest::default()
     }
@@ -175,5 +177,78 @@ fn a_map_out_of_range_is_refused() {
     assert!(
         build_voice_sound(data, &looped).is_err(),
         "a warped voice never loops"
+    );
+}
+
+fn taped(points: Vec<[f64; 2]>, pitch_semitones: f64) -> VoiceRequest {
+    let mut request = warped(points, pitch_semitones);
+    if let Some(warp) = request.warp.as_mut() {
+        warp.tape = true;
+    }
+    request
+}
+
+#[test]
+fn a_tape_map_lets_the_pitch_follow_the_speed() {
+    let data = source(4.0, |t| 0.5 * (TAU * 440.0 * t).sin());
+    // ×1 for a second, then ×2 for a second (two seconds of source).
+    let (left, ended) = render(
+        &taped(vec![[0.0, 0.0], [1.0, 1.0], [2.0, 3.0]], 0.0),
+        data,
+        RATE as usize * 4,
+    );
+    assert!(ended, "the voice ends with its map");
+    assert!(
+        (left.len() as f32 / RATE as f32 - 2.0).abs() < 0.02,
+        "no stretcher tail: {}",
+        left.len()
+    );
+    let plain = frequency(&left, 0.1, 0.9);
+    let fast = frequency(&left, 1.1, 1.9);
+    assert!((plain - 440.0).abs() < 4.0, "×1, 440 Hz: {plain}");
+    assert!((fast - 880.0).abs() < 8.0, "×2, an octave up: {fast}");
+}
+
+#[test]
+fn a_tape_ramp_lands_on_its_map() {
+    // A burst at 3.0 s of the source; a ramp from ×1 to ×3 over two seconds reads 4 s, so 3.0 s of source is heard where
+    // the integral reaches it: 1·t + t²/2 = 3 → t = √7 − 1 ≈ 1.646 s.
+    let data = source(4.0, |t| {
+        if (3.0..3.05).contains(&t) {
+            0.8 * (TAU * 1000.0 * t).sin()
+        } else {
+            0.0
+        }
+    });
+    let points: Vec<[f64; 2]> = (0..=200)
+        .map(|index| {
+            let t = index as f64 / 100.0;
+            [t, t + t * t / 2.0]
+        })
+        .collect();
+    let (left, _) = render(&taped(points, 0.0), data, RATE as usize * 3);
+    let onset = left
+        .iter()
+        .position(|value| value.abs() > 0.2)
+        .expect("the burst is heard") as f32
+        / RATE as f32;
+    assert!(
+        (onset - (7f32.sqrt() - 1.0)).abs() < 0.01,
+        "heard where the ramp reaches it: {onset}"
+    );
+}
+
+#[test]
+fn a_tape_map_keeps_its_semitones_on_top_of_the_speed() {
+    let data = source(4.0, |t| 0.5 * (TAU * 440.0 * t).sin());
+    let (left, _) = render(
+        &taped(vec![[0.0, 0.0], [2.0, 4.0]], -12.0),
+        data,
+        RATE as usize * 3,
+    );
+    let heard = frequency(&left, 0.3, 1.7);
+    assert!(
+        (heard - 440.0).abs() < 6.0,
+        "×2 an octave down: 440 Hz: {heard}"
     );
 }

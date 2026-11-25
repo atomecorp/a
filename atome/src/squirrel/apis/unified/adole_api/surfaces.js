@@ -123,12 +123,22 @@ const resolveCapabilities = () => {
     };
 };
 
+// What this device is, for its picture on another's nearby plate (R-248): the runtime (`platform`) says nothing of it, an
+// iPad running `ios` as an iPhone does; an Android tablet's agent has no « Mobile ».
+const resolveForm = () => {
+    const { platform } = describeThisDevice();
+    if (platform === 'ipados') return 'tablet';
+    if (platform === 'android') return /Mobile/.test(String(globalThis.navigator?.userAgent || '')) ? 'phone' : 'tablet';
+    return platform === 'ios' ? 'phone' : 'computer';
+};
+
 export const describeLocalSurface = async () => {
     const platform = resolvePlatform();
     return {
         surface_id: getLocalSurfaceId(),
         label: await readLocalSurfaceName(),
         platform,
+        form: resolveForm(),
         capabilities: resolveCapabilities(),
         discoverable: state.discoverable
     };

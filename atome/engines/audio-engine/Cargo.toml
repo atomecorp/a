@@ -10,7 +10,7 @@ description = "Native Kira audio engine shared by Tauri desktop and iOS: sample-
 path = "src/lib.rs"
 
 [dependencies]
-atome-mix-graph = { path = "../mix-graph", features = ["decode"] }
+atome-mix-graph = { path = "../mix-graph", features = ["decode", "proxy", "freeze"] }
 # The one WAV codec: a take is written with the kernels' encoder (src/recorder_wav.rs).
 atome-audio-kernels = { path = "../audio-kernels" }
 kira = { workspace = true, features = ["wav", "pcm", "mp3", "ogg", "vorbis", "flac", "aac", "isomp4"] }
@@ -22,12 +22,13 @@ serde.workspace = true
 serde_json.workspace = true
 vosk = { version = "0.3.1", optional = true }
 ort = { version = "=2.0.0-rc.15", optional = true }
-base64 = { workspace = true, optional = true }
+# A proxy comes back in base64 (src/render_proxy.rs), as the voice session's audio.
+base64.workspace = true
 atome-voice-turns = { path = "../voice-turns", optional = true }
 
 [features]
 # The host links libvosk (desktop: platforms/desktop-tauri/native/lib; iOS: libvosk_ios.a).
-voice = ["dep:vosk", "dep:ort", "dep:base64", "dep:atome-voice-turns"]
+voice = ["dep:vosk", "dep:ort", "dep:atome-voice-turns"]
 # Windows: ASIO drivers beside WASAPI exclusive (src/asio_duplex.rs). cpal's ASIO host builds
 # asio-sys against the Steinberg ASIO SDK (CPAL_ASIO_DIR, else fetched by its build script) and
 # needs LLVM's libclang; the Windows desktop build enables it.

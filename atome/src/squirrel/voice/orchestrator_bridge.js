@@ -40,9 +40,15 @@ const summarizeMcpResult = (method, result = null) => {
     };
 };
 
+// The single MCP entry, read when a request goes: the voice service may be built before mcp.js has loaded (boot
+// order). A spoken request never reaches the runtime by another door (R-246 BUG-0100): without the entry it fails.
+const mcpEntry = (env) => {
+    const entry = readEnv(env, 'handleAtomeMCPRequestAsync');
+    if (typeof entry !== 'function') throw new Error('voice_mcp_entry_unavailable');
+    return entry;
+};
+
 const createMcpBridge = (env) => {
-    const asyncHandler = readEnv(env, 'handleAtomeMCPRequestAsync');
-    if (typeof asyncHandler !== 'function') return null;
     // A spoken request reaches the single MCP entry with the voice transport: who asks is the
     // transport's, never a field of the params (atome/mcp_transport.js).
     const voiceTransport = (actor, source) => ({
@@ -61,7 +67,7 @@ const createMcpBridge = (env) => {
             ...summarizeMcpRequest(method, params)
         });
         try {
-            const response = await asyncHandler({ jsonrpc: '2.0', id, method, params }, voiceTransport(actor, source));
+            const response = await mcpEntry(env)({ jsonrpc: '2.0', id, method, params }, voiceTransport(actor, source));
             if (response?.error) throw new Error(response.error.message || `MCP ${method} failed`);
             writeVoiceDiagnostic(env, 'voice.mcp.response', {
                 id,
@@ -126,33 +132,6 @@ const createMcpBridge = (env) => {
     };
 };
 
-const createRuntimeBridge = (env) => {
-    const runtime = readEnv(env, 'atome')?.tools?.v2Runtime
-        || readEnv(env, 'window')?.atome?.tools?.v2Runtime
-        || null;
-    if (!runtime || typeof runtime.invokeById !== 'function') return null;
-    return {
-        kind: 'runtime_v2',
-        async listRuntimeTools() {
-            if (typeof runtime.listTools !== 'function') return [];
-            return runtime.listTools({ includeDisabled: false });
-        },
-        async callRuntimeTool(payload = {}) {
-            return runtime.invokeById(payload);
-        },
-        async batchRuntimeTools(events = [], options = {}) {
-            if (typeof runtime.invokeBatch === 'function') {
-                return runtime.invokeBatch(events, options);
-            }
-            const results = [];
-            for (const event of events) {
-                results.push(await runtime.invokeById(event));
-            }
-            return { ok: results.every((entry) => entry?.ok !== false), results };
-        }
-    };
-};
-
 export const resolveVoiceExecutionBridge = (env = defaultEnv()) => {
-    return createMcpBridge(env) || createRuntimeBridge(env) || null;
+    return createMcpBridge(env);
 };

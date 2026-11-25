@@ -33,28 +33,18 @@ pub(super) fn ws_file_response(request_id: Option<String>, payload: JsonValue) -
     JsonValue::Object(response)
 }
 
+// The account a file message acts for is the one its token proves, never a `user_id` the message names
+// (R-246 BUG-0031: a named id let anyone write into any account's folder).
 pub(super) fn resolve_ws_file_user_id(
     data: &JsonValue,
     state: &AppState,
 ) -> Result<String, String> {
-    let explicit_user = json_string_field(data, "user_id")
-        .or_else(|| json_string_field(data, "userId"))
-        .or_else(|| json_string_field(data, "owner_id"))
-        .map(|value| sanitize_user_segment(&value))
-        .filter(|value| value != "anonymous");
-
-    let token_user = state.auth_state.as_ref().map(|auth_state| {
-        let token = json_string_field(data, "token");
-        local_auth::extract_user_id_from_token(auth_state, token.as_deref())
-    });
-
-    if let Some(user_id) = explicit_user {
-        return Ok(user_id);
-    }
-    if let Some(user_id) = token_user.filter(|value| value != "anonymous") {
-        return Ok(user_id);
-    }
-    Err("Unauthorized".to_string())
+    let auth_state = state.auth_state.as_ref().ok_or("Unauthorized")?;
+    let token = json_string_field(data, "token");
+    local_auth::verified_user_id_from_token(auth_state, token.as_deref())
+        .map(|user| sanitize_user_segment(&user))
+        .filter(|user| user != "anonymous")
+        .ok_or_else(|| "Unauthorized".to_string())
 }
 
 pub(super) async fn resolve_ws_upload_target(

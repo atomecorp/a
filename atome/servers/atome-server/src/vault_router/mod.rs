@@ -5,6 +5,8 @@
 // grants. The server's `/ws/api` and `/ws/sync` ask it by `router:<operation>` (`service`).
 pub mod central;
 pub(crate) use atome_js_values as js;
+mod owner_only;
+mod shared_project_list;
 pub(crate) mod shares;
 mod stream_listing;
 mod streams;
@@ -201,26 +203,10 @@ impl VaultRouter {
             self.authorize_shared_write(actor, &normalized, Some(owner.clone()))
                 .await?;
         }
-        // Created through a share, the object is its vault's: the patch names that owner, never the writer.
-        if owner != actor
-            && normalized.get("kind").and_then(JsonValue::as_str) == Some("set")
-            && registered.is_none()
-        {
-            let payload = normalized
-                .get("payload")
-                .filter(|p| truthy(Some(p)))
-                .cloned()
-                .unwrap_or_else(|| json!({}));
-            let props = payload
-                .get("props")
-                .filter(|p| truthy(Some(p)))
-                .cloned()
-                .unwrap_or_else(|| json!({}));
-            let props = js::with(&props, [("owner_id", json!(owner))]);
-            normalized = js::with(
-                &normalized,
-                [("payload", js::with(&payload, [("props", props)]))],
-            );
+        self.refuse_owner_only(actor, &owner, &atome_id, &normalized, registered.is_some())
+            .await?;
+        if owner != actor && registered.is_none() {
+            normalized = owner_only::with_vault_owner(&normalized, &owner);
         }
         let conflict_mode = first(options, &["conflictMode"]).cloned();
         let committed = self
@@ -384,6 +370,9 @@ impl VaultRouter {
         let include_shared = [options.get("includeShared"), options.get("include_shared")]
             .contains(&Some(&JsonValue::Bool(true)));
         if !include_shared {
+            if let Some(states) = self.shared_project_states(principal, options).await? {
+                return Ok(JsonValue::Array(states));
+            }
             let states = self.ask(principal, "state:list", options.clone()).await?;
             return Ok(JsonValue::Array(Self::owned(states, principal)));
         }
@@ -424,8 +413,12 @@ impl VaultRouter {
             let owner = js::id(share.get("owner_id"));
             let root = js::string(&share["atome_id"]);
             let branch = self.branch_states(&owner, &root).await?;
+            // A share at « Écoute » lists the project and its proxy alone (R-349).
             let states = shares::states_within_root(&branch, &root);
-            for state in states {
+            for state in states
+                .into_iter()
+                .filter(|state| shares::reaches(&share, state))
+            {
                 let id = shares::state_atome_id(&state)
                     .map(js::string)
                     .unwrap_or_else(|| "null".into());

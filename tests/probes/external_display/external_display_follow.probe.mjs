@@ -45,7 +45,8 @@ try {
     await sleep(2500);
     H = await followerHome();
     const fBand = await bandLaid(follower), dBand = await bandLaid(page);
-    check('écran : aucune bande (champ, outils, assistant au coin)', H.ok && !fBand.laid && !(H.inspect?.docked && H.cells.atom?.drawn), { fBand, atom: H.cells?.atom, docked: H.inspect?.docked });
+    // The screen lays its own band too (user, 24 Nov. 2026: « il manque la bande de saisie en bas » on the monitor).
+    check('écran : sa bande est là (champ, outils)', H.ok && fBand.laid, { fBand, atom: H.cells?.atom, docked: H.inspect?.docked });
     check('téléphone : sa bande reste', dBand.laid, dBand);
     await shoot(follower, '1_ecran_accueil'); await shoot(page, '1_telephone_accueil');
 
@@ -55,10 +56,10 @@ try {
     const fRubric = await waitOn(follower, async () => { const r = (await import('/eVe/domains/matrix/matrix_module_runtime.js')).readWorkspaceHomeRuntime(); const i = r?.inspect?.(); return { ok: i?.shownRubric === 'contacts', shownRubric: i?.shownRubric }; }, null, 20_000);
     check('écran : même rubrique', fRubric.ok, fRubric);
     await sleep(1200); await shoot(follower, '2_ecran_contacts');
-    // The rubric's field (the Mystic's filter, the band's own field) is the device's: none on the screen.
+    // The rubric's field (the Mystic's filter) shows on the screen as on the device.
     const filterNode = target => target.evaluate(() => { const tree = window.eveBevyUiRuntime.state.trees.get('eve_bevy_ui_mystic')?.tree;
         const find = node => !!node && (String(node.id) === 'eve_bevy_ui_mystic_filter' || (node.children || []).some(find)); return find(tree?.root); });
-    check('écran : la rubrique sans champ de recherche', !(await filterNode(follower)));
+    check('écran : la rubrique a son champ de recherche', await filterNode(follower));
     // Back home as ⌂ does it (the rubric is laid in place on the home: no Mystic centre to touch).
     await page.evaluate(async () => (await import('/eVe/domains/matrix/matrix_module_runtime.js')).readWorkspaceHomeRuntime().toRoot());
     const fHome = await waitOn(follower, async () => { const r = (await import('/eVe/domains/matrix/matrix_module_runtime.js')).readWorkspaceHomeRuntime(); const i = r?.inspect?.(); return { ok: !i?.shownRubric, shownRubric: i?.shownRubric }; }, null, 20_000);

@@ -67,8 +67,10 @@ setSyncConnectionSigner((challenge) => pairingClient().signConnectionChallenge(c
 // The platform and the default name of this device, never trusted for security.
 export function describeThisDevice(env = globalThis.window || globalThis) {
     const agent = String(env.navigator?.userAgent || '');
-    const platform = typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function' ? (/iPad/.test(agent) ? 'ipados' : 'ios')
-        : /Android/.test(agent) ? 'android' : /iPhone/.test(agent) ? 'ios' : /iPad/.test(agent) ? 'ipados'
+    // iPadOS gives its web views (Safari and the app's) a Mac's agent: only touch tells them apart, a Mac having none.
+    const ipad = /iPad/.test(agent) || (/Macintosh/.test(agent) && Number(env.navigator?.maxTouchPoints) > 1);
+    const platform = typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function' ? (ipad ? 'ipados' : 'ios')
+        : /Android/.test(agent) ? 'android' : /iPhone/.test(agent) ? 'ios' : ipad ? 'ipados'
             : env.__TAURI_INTERNALS__ && /Mac OS X/.test(agent) ? 'macos' : 'web';
     const browser = /Edg\//.test(agent) ? 'Edge' : /Firefox\//.test(agent) ? 'Firefox' : /Chrome\//.test(agent) ? 'Chrome'
         : /Safari\//.test(agent) ? 'Safari' : '';

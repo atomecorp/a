@@ -10,7 +10,9 @@ import { TIMELINE_AI_RUNTIME_TOOL_IDS } from '../ai/timeline_tool_ids.js';
 const CONFIRMED_COMMANDS = MCP_CONFIRMED_CONTRACT_COMMANDS;
 // Commands that turn a camera or a microphone on: `media.capture` and the person's yes (architecture §6.1).
 const MEDIA_CAPTURE_COMMANDS = Object.freeze(['captures.start', 'media_import.camera', 'media_import.take', 'audio_fx.start']);
-const MEDIA_CAPTURE_RUNTIME_TOOL_PATTERNS = [/^ui\.capture\./, /^ui\.detail\.record\.toggle$/, /^ui\.timeline\.record\.start$/];
+const MEDIA_CAPTURE_RUNTIME_TOOL_PATTERNS = [/^ui\.capture\./, /^ui\.detail\.record\.toggle$/, /^ui\.timeline\.record\.start$/,
+    // The camera watched (camera_watch.js) opens the camera as a capture does.
+    /^camera\.watch$/];
 // A consent the actor would give itself (body data, motion recordings) waits for the person; withdrawing one never waits.
 const CONSENT_COMMANDS = Object.freeze(['body_data.set_consent', 'sensors.set_consent']);
 // The assistant's risk tiers (ai/agent_gateway_state.js RISK_TIERS) from which a call waits for the person.
@@ -175,7 +177,9 @@ function contractPolicy(contract, input = {}) {
     const policy = allow(contract.name, [contract.capability, ...(capture ? [MEDIA_CAPTURE_CAPABILITY] : [])], {
         // A connection and a reply (each one a new message on the network) are never replayed.
         ...(contract.name.startsWith('social.') ? { idempotent: !['social.connect', 'social.reply'].includes(contract.name) } : {}),
-        ...(contract.access === 'write' && /^(apple_music|music)\./.test(contract.name) ? { idempotent: true } : {}) });
+        ...(contract.access === 'write' && /^(apple_music|music)\./.test(contract.name) ? { idempotent: true } : {}),
+        // A command outward for some inputs only (a call accepted, a reach widened) is outward for those alone.
+        ...(CB_CONFIRMED_WHEN[contract.name] ? { outward: CB_CONFIRMED_WHEN[contract.name](input) === true } : {}) });
     if (!CONFIRMED_COMMANDS.includes(contract.name) && !capture && !consent) return policy;
     return { ...withConfirmation(policy), proposal_required: contract.name === 'social.publish',
         idempotent: policy.idempotent };
@@ -192,6 +196,11 @@ function runtimeToolPolicy(toolId, input = {}) {
         const policy = { ...target, subject: 'runtime.tools.call:timer.schedule',
             required_capabilities: [...new Set(['runtime.execute', ...target.required_capabilities])] };
         return policy.outward && !policy.confirmation_required ? withConfirmation(policy) : policy;
+    }
+    // A programmed task runs later with nobody asked again (eVe/voice/assistant/assistant_task.js): asked of the assistant it is
+    // the person's request, done at once; asked by another program, the person says yes to it first.
+    if (toolId === 'assistant.task.schedule') {
+        return confirm(`runtime.tools.call:${toolId}`, ['runtime.execute'], { proposal_required: false, idempotent: false });
     }
     if (toolId.startsWith('tv.')) return allow(toolId, ['tv.control']);
     const subject = `runtime.tools.call:${toolId || 'unknown'}`;
@@ -252,7 +261,14 @@ const METHOD_CAPABILITIES = Object.freeze({
 
 /** The policy of one request, before any effect. `context.aiTool`: the assistant tool an `ai.tools.call`
  *  names, resolved by the entry (mcp.js) from AtomeAI.getTool. */
+// What leaves toward other people, moves money or deletes for good is always one the person confirms, whatever door
+// names it (its own method, runtime.tools.call, a batch): an outward policy that would run at once is held (rule 22).
 export function resolveAccessPolicy(method, params = {}, context = {}) {
+    const policy = basePolicy(method, params, context);
+    return policy.allowed === true && policy.outward === true && policy.confirmation_required !== true ? withConfirmation(policy) : policy;
+}
+
+function basePolicy(method, params = {}, context = {}) {
     const name = String(method || '').trim();
     const read = required => ({ ...allow(name, required), scope: 'method' });
     if (CONDITION_READS.has(name)) return read(['conditions.read']);

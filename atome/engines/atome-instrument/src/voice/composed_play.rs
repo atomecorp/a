@@ -326,7 +326,7 @@ impl Voice {
         let step = reading_step(
             source.data(),
             self.sample_rate,
-            pitch,
+            segment.heard_pitch(pitch, self.note),
             segment.root,
             segment.tune_cents,
         );

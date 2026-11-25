@@ -1,4 +1,4 @@
-// Pitch correction (« autotune »): YIN detects the voice's pitch on each
+// Pitch correction (« autotune »): YIN (yin.rs) detects the voice's pitch on each
 // frame, the nearest note of the chosen key and scale becomes the target, and
 // the phase vocoder core moves the voice there at `speed_ms` (0 = the hard,
 // robotic snap), formants kept. Unvoiced and silent passages pass untouched.
@@ -6,8 +6,8 @@
 use crate::delay::DelayLine;
 use crate::pitch::{PitchShifter, semitones_to_ratio};
 use crate::stft::Stft;
+use crate::yin::Yin;
 use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit};
-use realfft::num_complex::Complex;
 
 pub const KEY: u32 = 0;
 pub const SCALE: u32 = 1;
@@ -45,11 +45,6 @@ const SCALES: [u16; 4] = [
     0b0101_1010_1101, // natural minor: 0 2 3 5 7 8 10
     0b0010_1001_0101, // major pentatonic: 0 2 4 7 9
 ];
-const YIN_THRESHOLD: f32 = 0.15;
-const HIGHEST_HZ: f32 = 1500.0;
-const LOWEST_HZ: f32 = 55.0;
-// −55 dBFS mean power: quieter frames are silence.
-const SILENT_POWER: f32 = 3.2e-6;
 // A target note is kept until the voice leaves it by this much more than half.
 const HYSTERESIS: f32 = 0.13;
 // Frames between a frame's analysis and its centre reaching the output.
@@ -61,12 +56,7 @@ pub struct Tuner {
     shifters: [PitchShifter; 2],
     dry: [DelayLine; 2],
     detector: Stft,
-    time: Vec<f32>,
-    spectrum_a: Vec<Complex<f32>>,
-    spectrum_b: Vec<Complex<f32>>,
-    correlation: Vec<f32>,
-    energy: Vec<f32>,
-    normalized: Vec<f32>,
+    yin: Yin,
     target_note: Option<f32>,
     correction: f32,
     gates: [f32; GATE_DELAY + 1],
@@ -83,12 +73,7 @@ impl Tuner {
             shifters: [PitchShifter::new(48000.0, 1), PitchShifter::new(48000.0, 1)],
             dry: [DelayLine::new(), DelayLine::new()],
             detector: Stft::new(48000.0),
-            time: Vec::new(),
-            spectrum_a: Vec::new(),
-            spectrum_b: Vec::new(),
-            correlation: Vec::new(),
-            energy: Vec::new(),
-            normalized: Vec::new(),
+            yin: Yin::new(48000.0),
             target_note: None,
             correction: 0.0,
             gates: [0.0; GATE_DELAY + 1],
@@ -98,68 +83,6 @@ impl Tuner {
         };
         tuner.prepare(48000.0, 0);
         tuner
-    }
-
-    // YIN on the detector's frame: the fundamental in Hz, None when unvoiced.
-    fn detect(&mut self) -> Option<f32> {
-        let frame = self.detector.frame();
-        let size = frame.len();
-        let window = size / 2;
-        self.energy[0] = 0.0;
-        for (index, sample) in frame.iter().enumerate() {
-            self.energy[index + 1] = self.energy[index] + sample * sample;
-        }
-        if self.energy[window] / (window as f32) < SILENT_POWER {
-            return None;
-        }
-        // Cross term Σ x[j]·x[j+τ] by FFT: the first half against the frame.
-        self.time[..window].copy_from_slice(&frame[..window]);
-        self.time[window..].fill(0.0);
-        let mut first = std::mem::take(&mut self.time);
-        self.detector.forward(&mut first, &mut self.spectrum_a);
-        first.copy_from_slice(self.detector.frame());
-        self.detector.forward(&mut first, &mut self.spectrum_b);
-        for (a, b) in self.spectrum_a.iter_mut().zip(&self.spectrum_b) {
-            *a = a.conj() * b;
-        }
-        self.detector
-            .inverse(&mut self.spectrum_a, &mut self.correlation);
-        self.time = first;
-        let scale = 1.0 / size as f32;
-        let lowest_lag = (self.sample_rate / HIGHEST_HZ) as usize;
-        let highest_lag = ((self.sample_rate / LOWEST_HZ) as usize).min(window - 2);
-        let head = self.energy[window];
-        let mut running = 0.0;
-        self.normalized[0] = 1.0;
-        for lag in 1..=highest_lag + 1 {
-            let tail = self.energy[lag + window] - self.energy[lag];
-            let difference = (head + tail - 2.0 * self.correlation[lag] * scale).max(0.0);
-            running += difference;
-            self.normalized[lag] = if running > 0.0 {
-                difference * lag as f32 / running
-            } else {
-                1.0
-            };
-        }
-        let d = &self.normalized;
-        let mut lag = lowest_lag.max(2);
-        while lag < highest_lag && d[lag] >= YIN_THRESHOLD {
-            lag += 1;
-        }
-        if lag >= highest_lag {
-            return None;
-        }
-        while lag + 1 < highest_lag && d[lag + 1] < d[lag] {
-            lag += 1;
-        }
-        let (before, here, after) = (d[lag - 1], d[lag], d[lag + 1]);
-        let curve = before + after - 2.0 * here;
-        let offset = if curve > 0.0 {
-            (0.5 * (before - after) / curve).clamp(-0.5, 0.5)
-        } else {
-            0.0
-        };
-        Some(self.sample_rate / (lag as f32 + offset))
     }
 
     // Nearest allowed note, keeping the current target within the hysteresis.
@@ -185,7 +108,7 @@ impl Tuner {
     }
 
     fn on_frame(&mut self) {
-        let detected = self.detect();
+        let detected = self.yin.detect(self.detector.frame());
         let voiced = if let Some(hz) = detected {
             let note = 69.0 + 12.0 * (hz / 440.0).log2();
             let target = self.target(note);
@@ -237,13 +160,7 @@ impl Processor for Tuner {
             line.allocate(self.shifters[0].latency() + 1);
         }
         self.detector = Stft::new(sample_rate);
-        let size = self.detector.size();
-        self.time = vec![0.0; size];
-        self.spectrum_a = self.detector.spectrum();
-        self.spectrum_b = self.detector.spectrum();
-        self.correlation = vec![0.0; size];
-        self.energy = vec![0.0; size + 1];
-        self.normalized = vec![0.0; size / 2 + 1];
+        self.yin = Yin::new(sample_rate);
         self.gate.prepare(sample_rate);
         self.formant = semitones_to_ratio(self.values[FORMANT as usize]);
         self.reset();

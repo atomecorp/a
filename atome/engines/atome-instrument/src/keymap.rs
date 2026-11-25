@@ -65,6 +65,7 @@ impl Keymap {
         seed: u64,
     ) -> Result<Self, String> {
         let markers = MarkerTable::new(markers);
+        Self::check_controllers(&zones)?;
         for (index, zone) in zones.iter().enumerate() {
             if zone.key_low > zone.key_high
                 || zone.velocity_low > zone.velocity_high
@@ -108,11 +109,9 @@ impl Keymap {
                 }
                 _ => {}
             }
-            if zone
-                .takes
-                .iter()
-                .any(|take| take.stretch != zone.takes[0].stretch)
-            {
+            if zone.takes.iter().any(|take| {
+                take.stretch != zone.takes[0].stretch || take.hold != zone.takes[0].hold
+            }) {
                 return Err(format!(
                     "zone {index}: its takes share one stretch (one stretcher per voice)"
                 ));
@@ -204,6 +203,20 @@ impl Keymap {
         }
         self.switches = switches;
         Ok(self)
+    }
+
+    // A zone's controller is a MIDI one (0..127) with a range that is not empty.
+    fn check_controllers(zones: &[Zone]) -> Result<(), String> {
+        zones
+            .iter()
+            .enumerate()
+            .try_for_each(|(index, zone)| match zone.controller {
+                Some(cc) if cc.number > 127 || cc.low > cc.high || cc.high > 127 => Err(format!(
+                    "zone {index}: controller {} range {}..{} is not a MIDI one",
+                    cc.number, cc.low, cc.high
+                )),
+                _ => Ok(()),
+            })
     }
 
     pub fn switches(&self) -> Option<Switches> {

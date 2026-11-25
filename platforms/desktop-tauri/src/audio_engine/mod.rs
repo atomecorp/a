@@ -3,4 +3,4 @@
 
 pub mod bridge;
 
-pub use atome_audio_engine::{commands, metering, playback, recorder, wake_capture};
+pub use atome_audio_engine::{commands, metering, playback, recorder, render_proxy, wake_capture};

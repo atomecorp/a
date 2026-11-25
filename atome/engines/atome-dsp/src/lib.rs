@@ -19,6 +19,7 @@ pub mod dynamics;
 pub mod envelope;
 pub mod eq;
 pub mod expander;
+mod formant;
 pub mod gain;
 pub mod gate;
 pub mod harmonizer;
@@ -36,6 +37,7 @@ pub mod param;
 pub mod pitch;
 pub mod resample;
 pub mod reverb;
+pub mod rhythm;
 pub mod saturator;
 pub mod scope;
 pub mod spectrum;
@@ -43,11 +45,14 @@ pub mod split;
 pub mod stft;
 pub mod svf;
 pub mod transient;
+pub mod transport;
 pub mod tuner;
 pub mod vocoder;
+pub mod yin;
 
 pub use chain::Chain;
 pub use param::{ParamSpec, Smoothed, Unit};
+pub use transport::Transport;
 
 // A parameter's value at every frame of the block (audio-rate modulation).
 #[derive(Clone, Copy)]
@@ -122,6 +127,12 @@ pub trait Processor: Send + Sync {
 
     // Clears every internal state (delay lines, envelopes) without reallocating.
     fn reset(&mut self);
+
+    // Where the music stands at the start of the next block (its beat and
+    // tempo); only a processor that counts in beats listens (R-367).
+    fn set_transport(&mut self, transport: &Transport) {
+        let _ = transport;
+    }
 
     // Signals written beyond `block` (a band split): port 0 is `block` itself,
     // ports 1.. land in `extra`, each as long as `block`.

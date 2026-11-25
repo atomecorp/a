@@ -116,7 +116,7 @@ export function validateConfirmation(method, params = {}, policy = {}, actor = {
     record.status = 'consumed';
     record.consumed_at = nowIso();
     if (record.proposal_id) confirmProposal(record.proposal_id);
-    pushMcpEvent('mcp.confirmation.consumed', { confirmation_id: record.confirmation_id, method: record.method, subject: record.subject });
+    pushMcpEvent('mcp.confirmation.consumed', { confirmation_id: record.confirmation_id, method: record.method, subject: record.subject }, record.actor.actor_id);
     pushSecurityJournal('confirmation_consumed', { confirmation_id: record.confirmation_id, proposal_id: record.proposal_id,
         method: record.method, subject: record.subject, actor_id: record.actor.actor_id });
     return { ok: true, consumed: true, confirmation_id: confirmationId };
@@ -130,7 +130,7 @@ export function decideMcpConfirmation(confirmationId, approved, transport) {
     if (record.status !== 'pending') return { ok: false, error: 'mcp_confirmation_not_pending', status: record.status };
     record.status = approved === true ? 'approved' : 'refused';
     record.decided_at = nowIso();
-    pushMcpEvent('mcp.confirmation.decided', { confirmation_id: record.confirmation_id, status: record.status });
+    pushMcpEvent('mcp.confirmation.decided', { confirmation_id: record.confirmation_id, status: record.status }, record.actor.actor_id);
     pushSecurityJournal('confirmation_decided', { confirmation_id: record.confirmation_id, method: record.method,
         status: record.status, actor_id: record.actor.actor_id, layer: String(transport.source.layer || '') });
     settleWaiters(record);
@@ -142,7 +142,7 @@ export function withdrawMcpConfirmation(confirmationId, actorId) {
     const record = current(confirmationId);
     if (!record || record.status !== 'pending' || record.actor.actor_id !== actorId) return false;
     record.status = 'withdrawn';
-    pushMcpEvent('mcp.confirmation.decided', { confirmation_id: record.confirmation_id, status: record.status });
+    pushMcpEvent('mcp.confirmation.decided', { confirmation_id: record.confirmation_id, status: record.status }, record.actor.actor_id);
     settleWaiters(record);
     return true;
 }

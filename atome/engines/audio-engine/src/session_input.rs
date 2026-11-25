@@ -23,6 +23,6 @@ pub fn set_routed(uid: Option<String>) -> Result<serde_json::Value, String> {
     *ROUTED
         .lock()
         .map_err(|error| format!("Lock error: {error}"))? = uid.clone();
-    super::live_input::reopen()?;
-    Ok(serde_json::json!({ "success": true, "routed": uid }))
+    let unavailable = super::live_input::reopen()?;
+    Ok(serde_json::json!({ "success": true, "routed": uid, "inputs_unavailable": unavailable }))
 }

@@ -421,3 +421,25 @@ fn a_media_gains_and_loses_its_chain_on_its_entity() {
     assert!(world.get::<AtomeMediaFx>(entity).is_none());
     assert!(apply_media_effects(&mut world, entity, &[effect("nope", &[])]).is_err());
 }
+
+// R-349: an MP4 proxy's image draws its effects at its own instant, never the machine's clock.
+#[test]
+fn the_media_clock_follows_the_offline_instant_then_the_real_time_again() {
+    use super::clock::{
+        AtomeMediaClockPatch, MediaFxOfflineClock, apply_media_clock, media_fx_seconds,
+    };
+    let mut world = World::new();
+    apply_media_clock(&mut world, AtomeMediaClockPatch { seconds: Some(2.5) }).expect("an instant");
+    let offline = *world.resource::<MediaFxOfflineClock>();
+    assert_eq!(media_fx_seconds(1_234.0, offline), 2.5);
+    apply_media_clock(&mut world, AtomeMediaClockPatch { seconds: None }).expect("the real clock");
+    let real = *world.resource::<MediaFxOfflineClock>();
+    assert_eq!(media_fx_seconds(3_605.0, real), 5.0);
+    let refused = apply_media_clock(
+        &mut world,
+        AtomeMediaClockPatch {
+            seconds: Some(f64::NAN),
+        },
+    );
+    assert!(refused.unwrap_err().starts_with("media_clock_invalid"));
+}

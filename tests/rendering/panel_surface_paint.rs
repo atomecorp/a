@@ -61,12 +61,12 @@ fn image(world: &World, entity: Entity) -> &Image {
 
 #[test]
 fn css_angles_and_rounded_coverage_use_the_existing_silhouette() {
-    let texture = gradient(90.0).texture(&silhouette(100.0, 40.0, 10.0), [1.0; 4]);
+    let texture = gradient(90.0).texture(&silhouette(100.0, 40.0, 10.0), [1.0; 4], 8192);
     assert!(pixel(&texture, 10, 20)[0] > pixel(&texture, 90, 20)[0]);
     assert!(pixel(&texture, 10, 20)[2] < pixel(&texture, 90, 20)[2]);
     assert_eq!(pixel(&texture, 0, 0)[3], 0);
     assert_eq!(pixel(&texture, 50, 20)[3], 255);
-    let vertical = gradient(0.0).texture(&silhouette(100.0, 40.0, 0.0), [1.0; 4]);
+    let vertical = gradient(0.0).texture(&silhouette(100.0, 40.0, 0.0), [1.0; 4], 8192);
     assert!(pixel(&vertical, 50, 38)[0] > pixel(&vertical, 50, 1)[0]);
 }
 
@@ -82,7 +82,7 @@ fn inset_blur_darkens_the_inside_edge_without_painting_outside() {
         }],
         ..Default::default()
     };
-    let texture = paint.texture(&silhouette(100.0, 40.0, 10.0), [1.0; 4]);
+    let texture = paint.texture(&silhouette(100.0, 40.0, 10.0), [1.0; 4], 8192);
     assert!(pixel(&texture, 50, 1)[0] < pixel(&texture, 50, 5)[0]);
     assert!(pixel(&texture, 50, 5)[0] < pixel(&texture, 50, 20)[0]);
     assert_eq!(pixel(&texture, 0, 0)[3], 0);
@@ -100,7 +100,7 @@ fn border_can_cover_a_transparent_fill_without_filling_the_middle() {
         }),
         ..Default::default()
     };
-    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4]);
+    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4], 8192);
     assert_eq!(pixel(&texture, 50, 0)[3], 255);
     assert_eq!(pixel(&texture, 50, 20)[3], 0);
     assert_eq!(pixel(&texture, 50, 39)[3], 64);
@@ -134,7 +134,7 @@ fn a_border_gradient_grades_the_outline_along_its_axis() {
         }),
         ..Default::default()
     };
-    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4]);
+    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4], 8192);
     assert!(pixel(&texture, 0, 20)[3] < 10);
     assert!(pixel(&texture, 99, 20)[3] > 245);
     assert!(pixel(&texture, 25, 0)[3] < pixel(&texture, 75, 0)[3]);
@@ -154,7 +154,7 @@ fn an_inset_shadow_gradient_fades_the_stroke_along_its_axis() {
         }],
         ..Default::default()
     };
-    let texture = paint.texture(&silhouette(40.0, 100.0, 0.0), [0.0; 4]);
+    let texture = paint.texture(&silhouette(40.0, 100.0, 0.0), [0.0; 4], 8192);
     assert!(pixel(&texture, 39, 5)[3] > 230);
     assert!(pixel(&texture, 39, 95)[3] < 25);
     assert_eq!(pixel(&texture, 0, 5)[3], 0);
@@ -173,7 +173,7 @@ fn a_texture_scale_rasterizes_more_texels_for_the_same_logical_lengths() {
         texture_scale: Some(2.0),
         ..Default::default()
     };
-    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4]);
+    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4], 8192);
     assert_eq!((texture.width, texture.height), (200, 80));
     assert_eq!(pixel(&texture, 100, 0)[3], 255);
     assert_eq!(pixel(&texture, 100, 1)[3], 0);

@@ -9,7 +9,28 @@ import { commitWorkspaceEvents, createWorkspaceSnapshot, getGuestAtome, listGues
 
 const owns = message => ['events', 'state-current', 'atome'].includes(message?.type)
     || (message?.type === 'snapshot' && message.action === 'create');
-export function ownsBrowserWorkspaceMessage(message) { return !isTauriRuntime() && owns(message); }
+const ownsBrowserWorkspaceMessage = message => !isTauriRuntime() && owns(message);
+// This device's store holds the account's own Atomes only. A project another account shares with this one (R-202,
+// R-349) lives in that account's vault: a listing scoped to a project this store does not hold is the server's, which
+// lists what the share reaches (atome-server vault_router/shared_project_list.rs).
+const holds = (session, id) => getGuestAtome(String(session.user.id), id).then(Boolean);
+export async function browserWorkspaceAnswers(message) {
+    if (!ownsBrowserWorkspaceMessage(message)) return false;
+    const session = getSessionState();
+    if (message.action !== 'list' || !message.project_id || session.mode !== 'authenticated' || !session.user?.id) return true;
+    return holds(session, message.project_id);
+}
+
+// The app's canonical reader (eVe/core/atome_commit.js#getStateCurrent): one Atome this store does not hold (a shared
+// project, a media its timeline plays, R-194) is read on the server, which serves it through the share. A reader of
+// this device's own copy (the guest adoption, auth_workspace.js#readAdoptionState) keeps `browserWorkspaceAnswers`.
+const isGet = message => ['state-current', 'atome'].includes(message?.type) && message.action === 'get';
+export async function browserWorkspaceServesRead(message) {
+    if (!await browserWorkspaceAnswers(message)) return false;
+    const session = getSessionState();
+    if (!isGet(message) || !message.atome_id || session.mode !== 'authenticated' || !session.user?.id) return true;
+    return holds(session, message.atome_id);
+}
 
 // A realtime frame names the Atome another device changed: only those states are read
 // again (`{ pull: ids }`), never the whole workspace; a replay burst is coalesced into one pass.

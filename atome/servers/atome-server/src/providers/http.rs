@@ -131,6 +131,18 @@ pub fn openai_failure(body: &JsonValue, default: &str, http_status: Option<u16>)
         .filter_map(JsonValue::as_str)
         .find(|code| KNOWN.contains(code))
         .unwrap_or("");
+    // A refusal with no known code travels as `default`; OpenAI's own words stay in this
+    // server's journal, so a 429 is told apart (requests per minute, sessions at once, quota).
+    if code.is_empty() {
+        let said = |field: &str| failure.get(field).and_then(JsonValue::as_str).unwrap_or("");
+        let message: String = said("message").chars().take(300).collect();
+        eprintln!(
+            "[ai-provider] {default}: HTTP {} code={} type={} message={message}",
+            http_status.map_or_else(|| "-".into(), |status| status.to_string()),
+            said("code"),
+            said("type"),
+        );
+    }
     Failure {
         message: if code.is_empty() {
             default.into()

@@ -47,6 +47,44 @@ fn local_copy_is_whole(path: &Path, props: &JsonValue) -> bool {
     }
 }
 
+// The owner's folder a synced file lies in: a recording's (`file_path` under `recordings/`) where `/api/recordings/`
+// serves it (local_recordings.rs), every other media in `Downloads`.
+// The person whose folder a synced media lies in: the one the local reader serves it from (media/files.rs#located,
+// by the atome's local owner). The account's own remote id (`media_user_id` or the vault it came from, as the remote
+// server names them) is this local user: its media lie in the local user's folder, never in a folder of the remote id.
+fn local_media_owner(
+    props: &JsonValue,
+    vault: Option<&str>,
+    local_user_id: &str,
+    remote_user_id: &str,
+) -> String {
+    let id = ["media_user_id", "mediaUserId"]
+        .iter()
+        .find_map(|key| props.get(*key).and_then(JsonValue::as_str))
+        .filter(|value| !value.is_empty())
+        .or(vault)
+        .unwrap_or(remote_user_id);
+    if id == remote_user_id {
+        local_user_id
+    } else {
+        id
+    }
+    .to_string()
+}
+
+fn storage_folder(props: &JsonValue) -> &'static str {
+    let path = ["file_path", "filePath"]
+        .iter()
+        .find_map(|key| props.get(*key).and_then(JsonValue::as_str))
+        .unwrap_or("")
+        .replace('\\', "/");
+    if path.starts_with("recordings/") || path.contains("/recordings/") {
+        "recordings"
+    } else {
+        "Downloads"
+    }
+}
+
 // The file's path from the root (`data/users/<id>/...`); `LocalAtomeState::media_file` places it.
 fn local_media_path(
     local_user_id: &str,
@@ -283,10 +321,12 @@ pub(super) async fn recover_inbound_media(
     };
     for (id, owner, raw) in records {
         let props: JsonValue = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-        let media_owner = props
-            .get("media_user_id")
-            .and_then(JsonValue::as_str)
-            .unwrap_or(&owner);
+        let media_owner = local_media_owner(
+            &props,
+            Some(&owner),
+            local_user_id,
+            &credential.remote_user_id,
+        );
         let name = props
             .get("file_name")
             .and_then(JsonValue::as_str)
@@ -301,8 +341,8 @@ pub(super) async fn recover_inbound_media(
                 &state
                     .storage_root()
                     .join("data/users")
-                    .join(media_owner)
-                    .join("Downloads")
+                    .join(&media_owner)
+                    .join(storage_folder(&props))
                     .join(name),
                 &props,
             )
@@ -350,22 +390,13 @@ pub(super) async fn download_inbound_media(
     if name.is_empty() || name.contains('/') || name.contains('\\') || matches!(name, "." | "..") {
         return Err("inbound_media_name_invalid".into());
     }
-    let owner = props
-        .get("media_user_id")
-        .or_else(|| props.get("mediaUserId"))
-        .and_then(JsonValue::as_str)
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| {
-            let vault = event
-                .get("vault_principal_id")
-                .and_then(JsonValue::as_str)
-                .unwrap_or(&credential.remote_user_id);
-            if vault == credential.remote_user_id {
-                local_user_id
-            } else {
-                vault
-            }
-        });
+    let owner = local_media_owner(
+        props,
+        event.get("vault_principal_id").and_then(JsonValue::as_str),
+        local_user_id,
+        &credential.remote_user_id,
+    );
+    let owner = owner.as_str();
     if !owner
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -427,10 +458,9 @@ pub(super) async fn download_inbound_media(
     }
     let directory = state
         .storage_root()
-        .join("data")
-        .join("users")
+        .join("data/users")
         .join(owner)
-        .join("Downloads");
+        .join(storage_folder(props));
     tokio::fs::create_dir_all(&directory)
         .await
         .map_err(|e| e.to_string())?;
@@ -459,64 +489,8 @@ pub(super) async fn download_inbound_media(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{local_copy_is_whole, local_media_path, rewrite_remote_media_properties};
-    use serde_json::json;
-    use std::path::Path;
-
-    #[test]
-    fn a_copy_shorter_than_its_atome_is_fetched_again() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../temp")
-            .join(format!("whole-copy-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&root).unwrap();
-        let path = root.join("video.mov");
-        std::fs::write(&path, [0_u8; 48]).unwrap();
-        assert!(!local_copy_is_whole(
-            &path,
-            &json!({ "size_bytes": 3_339_874 })
-        ));
-        assert!(local_copy_is_whole(&path, &json!({ "size_bytes": 48 })));
-        assert!(local_copy_is_whole(&path, &json!({})));
-        assert!(!local_copy_is_whole(&root.join("absent.mov"), &json!({})));
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn media_paths_are_scoped_to_the_local_user_and_rewritten_for_fastify() {
-        let properties = json!({
-            "kind": "image",
-            "file_path": "data/users/local-user/Downloads/photo été.png"
-        });
-        assert_eq!(
-            local_media_path("local-user", properties.as_object().unwrap()),
-            Some(Path::new("data/users/local-user/Downloads/photo été.png").to_path_buf())
-        );
-        assert_eq!(
-            local_media_path(
-                "local-user",
-                json!({ "file_path": "../../secret" }).as_object().unwrap()
-            ),
-            None
-        );
-
-        let mut rewritten = properties.as_object().unwrap().clone();
-        rewrite_remote_media_properties(
-            &mut rewritten,
-            "https://atome.one/",
-            "remote-user",
-            "photo été.png",
-            "Downloads/photo été.png",
-        );
-        assert_eq!(rewritten.get("media_user_id"), Some(&json!("remote-user")));
-        assert_eq!(
-            rewritten.get("media_url"),
-            Some(&json!(
-                "https://atome.one/api/uploads/photo%20%C3%A9t%C3%A9.png?media_user_id=remote-user"
-            ))
-        );
-    }
-}
+#[path = "../../../../../tests/native/sync_media_paths.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "../../../../../tests/native/inbound_media_sync.rs"]

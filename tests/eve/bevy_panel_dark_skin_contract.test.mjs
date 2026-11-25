@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { BEVY_PANEL_TOKENS as T, BEVY_WORKSPACE_PANEL_TOKENS as W } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
-import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
+import { SYSTEM_UI_DROP_SHADOW, SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
 import { accordionNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js';
 import { panelHierarchyNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_hierarchy.js';
 import { node, buttonNode, buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
@@ -162,8 +162,9 @@ test('panel surfaces share the approved glass, opaque white ink and semantic hie
     }
     assert.deepEqual(T.colors.text,[1,1,1,1]); assert.deepEqual(T.colors.muted,[1,1,1,1]);
     assert.deepEqual(T.hierarchy.colors.map(hex),['#f28c29','#2a80ed']);
-    // The one drop shadow, black at 39 %, 16 px, no offset (SYSTEM_UI_DROP_SHADOW, user 19 Nov. 2026).
-    assert.deepEqual(T.surfaces.control.shadow,{color:[0,0,0,.39],blur:16,spread:0,offset:[0,0]});
+    // The one drop shadow, black at 34 %, 24 px, no offset (SYSTEM_UI_DROP_SHADOW; R-279 choice 3b, user 23 Nov. 2026).
+    assert.equal(T.surfaces.control.shadow,SYSTEM_UI_DROP_SHADOW);
+    assert.deepEqual([T.surfaces.control.shadow.color[3],T.surfaces.control.shadow.reach,T.surfaces.control.shadow.offset],[.34,24,[0,0]]);
     assert.equal(T.surfaces.control.shadows,undefined);
     assert.equal(T.material.shadow,T.surfaces.shell.shadow);
     assert.equal(T.accordion.collapsedShadow,T.surfaces.control.shadow);

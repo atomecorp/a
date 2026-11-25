@@ -137,6 +137,15 @@ impl ModuleRuntime {
         self.peak = 0.0;
     }
 
+    // Where the music stands for this chunk (R-367): only a rhythm effect listens.
+    pub fn set_transport(&mut self, transport: &atome_dsp::Transport) {
+        for processor in &mut self.processors {
+            if let Processor::Dsp(runtime) = processor {
+                runtime.set_transport(transport);
+            }
+        }
+    }
+
     // A draining tail ends once every pair has stayed silent long enough.
     pub fn finish(&mut self, frames: usize) {
         if self.state != STATE_DRAINING {

@@ -1,8 +1,8 @@
-use tauri::{AppHandle, Runtime, command};
+use tauri::{command, AppHandle, Runtime};
 
+use crate::models::*;
 use crate::Result;
 use crate::SttExt;
-use crate::models::*;
 
 /// Prepare the local recognition model without opening the microphone.
 #[command]

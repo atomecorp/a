@@ -304,3 +304,57 @@ async fn sync_pending_delivery_is_principal_bound() {
     let isolated = super::local_atome_extended::handle_sync_message(request, BOB, &state).await;
     assert_eq!(isolated.data.unwrap()["pending_delivery_count"], 1);
 }
+
+// R-246 retest BUG-0031 (d): the `atome` list reads as the session's account, whatever owner it names (another
+// account, `*`, `all`): the named owner is never taken as the reader.
+#[tokio::test]
+async fn an_atome_list_naming_another_owner_reads_as_the_session() {
+    let workspace = tempfile::tempdir().expect("temporary workspace");
+    let state = create_state(
+        workspace.path().join("state"),
+        workspace.path().to_path_buf(),
+        "WAL",
+    )
+    .unwrap();
+    seed_users(&state);
+    assert!(create_project(&state, ALICE, "pa", "A").await);
+    assert!(
+        create(
+            &state,
+            ALICE,
+            "secret",
+            "pa",
+            json!({ "type": "text", "parent_id": "pa", "text": "secret A" })
+        )
+        .await
+    );
+    for owner in [ALICE, "*", "all"] {
+        for kind in [None, Some("text"), Some("project")] {
+            let mut message = json!({ "action": "list", "owner_id": owner, "limit": 1000 });
+            if let Some(kind) = kind {
+                message["atome_type"] = json!(kind);
+            }
+            let response = handle_atome_message(message, BOB, &state).await;
+            let seen: Vec<String> = response
+                .atomes
+                .unwrap_or_default()
+                .into_iter()
+                .map(|atome| atome.atome_id)
+                .collect();
+            assert!(
+                !seen.iter().any(|id| id == "secret" || id == "pa"),
+                "owner {owner} kind {kind:?}: {seen:?}"
+            );
+        }
+    }
+    let own = handle_atome_message(
+        json!({ "action": "list", "atome_type": "text", "limit": 1000 }),
+        ALICE,
+        &state,
+    )
+    .await;
+    assert!(
+        own.atomes.unwrap_or_default().len() == 1,
+        "Alice still lists her own"
+    );
+}

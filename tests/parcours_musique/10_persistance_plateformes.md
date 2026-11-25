@@ -54,6 +54,31 @@ Format : **ID** · priorité · plateformes — manipulation → attendu. *Sonde
   `audio_probe_duration_from_bytes { bytesBase64 }`. Test Rust `test_probe_duration_matches_decode` (même durée
   que le décodage complet, AIFF de 91 Mo, m4a, alarmes MP3).
 
+## D. Charge du processeur : gel automatique des pistes (R-370)
+
+Propriétaires : `atome/engines/mix-graph/src/freeze_*.rs`, `load_meter.rs`, `audio-engine/src/freeze.rs`,
+`platforms/web/audio-wasm/src/freeze.rs`, `eVe/domains/audio_freeze/`. Cahier `todo/gel_automatique_pistes_2026-11-25.md`.
+
+- **PE-30** · P0 · W T I — Projet à l'arrêt, pistes non touchées depuis 5 min → elles sont pré-rendues en mémoire
+  (jamais sur disque) et entendues par ce rendu, son identique (écart < 1e-4) ; réverbs, échos et ce qui les suit
+  (Volume, Pan, envois) restent en direct. *Sonde* `temp/audio_freeze_2026-11-25/wasm_engine.probe.mjs`, tests Rust
+  `freeze_plan_tests.rs`.
+- **PE-31** · P0 · W T I — Choisir une piste, ouvrir son éditeur, l'armer ou la modifier → elle repasse en direct à
+  l'instant, même en lecture, sans trou (fondu d'1 s). *Sonde* `temp/audio_freeze_2026-11-25/planner.probe.mjs`.
+- **PE-32** · P0 · W T I — Jamais gelées : piste armée, prise en cours, entrée micro ou MIDI live, notes tirées au
+  hasard, piste « Toujours en direct », tout le projet en vue Cellules. *Sonde* `planner.probe.mjs`.
+- **PE-33** · P0 · W T I — Modifier un effet gelé → le moteur dégèle la piste de lui-même. *Sonde* `wasm_engine.probe.mjs`.
+- **PE-34** · P1 · W T I — Aucun rendu ne démarre au-delà de 39 % de charge ; rien n'est rendu ni basculé pendant la
+  lecture. *Sonde* `planner.probe.mjs`.
+- **PE-35** · P1 · W T I — « Prépare le concert » (`audio_freeze.prepare`) gèle tout ce qui peut l'être ; « comment
+  s'est passée la répétition ? » (`audio_freeze.report`) dit la charge des cinq dernières lectures.
+- **PE-36** · P1 · W T I — « Figer » un clip MIDI : rendu hors ligne, plus vite que le temps réel, sur Web, Tauri et iOS.
+- **PE-37** · P0 · W T I — Charge au-delà de 60 % → le glyphe de Lecture (Timeline, Cellules, Mixage) passe à l'or, au-delà
+  de 80 % au rouge ; en lecture, c'est sa lumière ; il revient au normal 3 s après être repassé sous le seuil, sans
+  clignoter. *Sonde* `temp/audio_freeze_2026-11-25/lecture_load_ui.probe.mjs night|amber`.
+- **PE-38** · P1 · W T I — Réglages › Avancé › « Gel auto. » : allumé par défaut, une touche l'éteint (toutes les pistes
+  repassent en direct), une autre le rallume. *Sonde* `lecture_load_ui.probe.mjs`.
+
 ## À compléter
 
 - Tests de la synchronisation hors ligne → en ligne sur iOS (file d'envoi) quand ils seront définis.

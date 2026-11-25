@@ -10,6 +10,7 @@
 import { FastifyAdapter } from '../apis/unified/adole.js';
 import { ensureRemoteSurfacePrincipal, ensureSurfaceAnnounced, getLocalSurfaceId } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
+import { reportRuntimeError } from '../runtime_errors.js';
 
 const isAuthenticated = () => getSessionState()?.mode === 'authenticated';
 
@@ -33,7 +34,8 @@ const send = async (action, fields = {}) => {
     if (!principal.ok) return { ok: false, success: false, error: principal.error };
     await ensureSurfaceAnnounced();
     try {
-        return await FastifyAdapter.ws.send({ type: 'remote-control', action, ...fields });
+        // Starting a control reads the owner's grants in the server's vaults (several seconds on the hosted server).
+        return await FastifyAdapter.ws.send({ type: 'remote-control', action, ...fields }, { timeoutMs: 30000 });
     } catch (error) {
         return { ok: false, success: false, error: error?.message || String(error) };
     }
@@ -111,7 +113,7 @@ export const installRemoteControlLifecycle = () => {
         state.controlledBy.set(session.session_id, session);
         // Being controlled is the only reason to load the applicator, so it is pulled
         // in here rather than at boot on every surface.
-        void import('./remote_input_applicator.js').catch(() => {});
+        void import('./remote_input_applicator.js').catch(error => reportRuntimeError(error, 'remote_control:applicator_load'));
     });
 
     window.addEventListener('squirrel:remote-control-ended', (event) => {

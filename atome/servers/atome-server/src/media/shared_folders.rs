@@ -5,7 +5,8 @@
 // they may read themselves (`foreign_name`), so a member never reaches another party's file the folder does not hold.
 // A folder also holds the media an atome under it declares it plays (`uses_media`: a project's timeline, its clips and its
 // instruments' samples, R-194): its parties read them, read only, the file and its atome; a member may declare only media
-// they may read themselves (`foreign_use`).
+// they may read themselves (`foreign_use`). A member who only listens to a project (R-349, « Écoute ») reads of it the
+// files of its proxy alone (`file_states`).
 use crate::social::news::db::{all, text};
 use crate::vault_router::central::Central;
 use crate::vault_router::shares::{self, ACTIVE_LINKED};
@@ -68,30 +69,61 @@ fn named_files(props: &JsonValue) -> Vec<String> {
         .collect()
 }
 
-// The folders `user` is party to with `other` (the folder's owner or one of its members): `(owner, root)` pairs.
-async fn common_folders(
-    central: &Central,
-    user: &str,
-    other: &str,
-) -> Result<Vec<(String, String)>, String> {
-    let (user, other) = (user.to_string(), other.to_string());
+// A folder `user` is party to with another: its owner, its root, and whether `user` only listens to it (R-349: every
+// share of theirs on it at « Écoute », so the folder holds for them its proxy alone, never the files of its tracks).
+struct Folder {
+    owner: String,
+    root: String,
+    listens: bool,
+}
+
+// The folders `user` is party to with `other` (the folder's owner or one of its members).
+async fn common_folders(central: &Central, user: &str, other: &str) -> Result<Vec<Folder>, String> {
+    let (reader, other) = (user.to_string(), other.to_string());
     let rows = central
         .transaction(move |db| {
             // The roots each of them reaches: as its owner (a share they made) or as a member (a share they hold).
             let sql = format!(
-                "SELECT DISTINCT owner_id, atome_id FROM sync_share_requests s
+                "SELECT owner_id, atome_id, principal_id, permissions_json FROM sync_share_requests s
                  WHERE {ACTIVE_LINKED} AND (owner_id = ?1 OR principal_id = ?1)
                    AND EXISTS (SELECT 1 FROM sync_share_requests t WHERE t.atome_id = s.atome_id AND t.owner_id = s.owner_id
                      AND t.status IN ('active', 'accepted') AND t.share_type = 'linked'
                      AND (t.owner_id = ?2 OR t.principal_id = ?2))"
             );
-            all(db, &sql, &[&user, &other])
+            all(db, &sql, &[&reader, &other])
         })
         .await?;
-    Ok(rows
-        .iter()
-        .map(|row| (text(row.get("owner_id")), text(row.get("atome_id"))))
-        .filter(|(owner, root)| !owner.is_empty() && !root.is_empty())
+    let mut folders: Vec<Folder> = Vec::new();
+    for row in &rows {
+        let (owner, root) = (text(row.get("owner_id")), text(row.get("atome_id")));
+        if owner.is_empty() || root.is_empty() {
+            continue;
+        }
+        // A share `user` made (they own the folder) reads it whole; one they hold says how they read it.
+        let listens = owner != user && shares::listens_only(row);
+        match folders
+            .iter_mut()
+            .find(|folder| folder.owner == owner && folder.root == root)
+        {
+            Some(folder) => folder.listens &= listens,
+            None => folders.push(Folder {
+                owner,
+                root,
+                listens,
+            }),
+        }
+    }
+    Ok(folders)
+}
+
+// The states of a folder that hold files for `folder`'s reader: all of them, or its proxies alone for a listener.
+async fn file_states(router: &VaultRouter, folder: &Folder) -> Result<Vec<JsonValue>, String> {
+    let states = router
+        .states_within_shared_root(&folder.owner, &folder.root)
+        .await?;
+    Ok(states
+        .into_iter()
+        .filter(|state| !folder.listens || shares::is_proxy_of(state, &folder.root))
         .collect())
 }
 
@@ -108,8 +140,8 @@ pub async fn holds(
     if user.is_empty() || user == "anonymous" || file_owner.is_empty() {
         return Ok(false);
     }
-    for (owner, root) in common_folders(central, user, file_owner).await? {
-        for state in router.states_within_shared_root(&owner, &root).await? {
+    for folder in common_folders(central, user, file_owner).await? {
+        for state in file_states(router, &folder).await? {
             let id = shares::state_atome_id(&state)
                 .map(|id| js::id(Some(id)))
                 .unwrap_or_default();
@@ -136,11 +168,12 @@ pub async fn used_through(
     if user.is_empty() || user == "anonymous" || media_owner.is_empty() || atome_id.is_empty() {
         return Ok(None);
     }
-    for (owner, root) in common_folders(central, user, media_owner).await? {
-        let states = router.states_within_shared_root(&owner, &root).await?;
+    for folder in common_folders(central, user, media_owner).await? {
+        let states = file_states(router, &folder).await?;
         if states.iter().any(|state| uses_atome(state, atome_id)) {
             // The folder's share `user` is party to names the read (`sync_share_id`), as a share's own read does.
-            let (reader, folder, by) = (user.to_string(), root.clone(), owner.clone());
+            let (reader, folder, by) =
+                (user.to_string(), folder.root.clone(), folder.owner.clone());
             let share_id = central
                 .transaction(move |db| {
                     let sql = format!(

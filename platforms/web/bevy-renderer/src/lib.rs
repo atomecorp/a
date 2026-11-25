@@ -258,26 +258,6 @@ fn queue_web_ui_ops(ops: Vec<AtomeUiOp>) {
     request_web_redraw();
 }
 
-fn op_targets_id(op: &AtomeRenderOp, id: &str) -> bool {
-    match op {
-        AtomeRenderOp::Spawn(node) => node.id == id,
-        AtomeRenderOp::Despawn(target) => target == id,
-        AtomeRenderOp::Transform(patch) => patch.id == id,
-        AtomeRenderOp::Style(patch) => patch.id == id,
-        AtomeRenderOp::Reparent(patch) => patch.id == id,
-        AtomeRenderOp::Layer(patch) => patch.id == id,
-        AtomeRenderOp::Visibility(patch) => patch.id == id,
-        AtomeRenderOp::Text(patch) => patch.id == id,
-        AtomeRenderOp::Resource(patch) => patch.id == id,
-        AtomeRenderOp::ProjectSpace(patch) => patch.ids.iter().any(|target| target == id),
-        AtomeRenderOp::Surface(_)
-        | AtomeRenderOp::SurfaceBackground(_)
-        | AtomeRenderOp::SceneEffects(_)
-        | AtomeRenderOp::ProjectView(_)
-        | AtomeRenderOp::Lut(_) => false,
-    }
-}
-
 fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePatch) {
     if next.color.is_some() {
         existing.color = next.color;
@@ -328,7 +308,7 @@ fn try_merge_pending_style_patch(
     let Some(pending) = pending_ops
         .iter_mut()
         .rev()
-        .find(|pending| op_targets_id(pending, &patch.id))
+        .find(|pending| pending.targets_id(&patch.id))
     else {
         return false;
     };

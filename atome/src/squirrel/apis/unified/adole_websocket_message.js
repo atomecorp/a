@@ -220,7 +220,9 @@ const RESPONSE_PAYLOADS = {
         surface: message.surface,
         surfaces: message.surfaces,
         shared: message.shared,
-        restored_atome_ids: message.restored_atome_ids
+        restored_atome_ids: message.restored_atome_ids,
+        // The opaque token this device says nearby (R-248, nearby.js).
+        nearby_token: message.nearby_token
     }),
     'auth-response': (message) => ({
         paymentRequired: message.paymentRequired,

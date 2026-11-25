@@ -4,26 +4,14 @@
 // the file's record in the central database (`registerFileUpload`).
 use super::playback::{basename, sanitize_file_name};
 use crate::vault_router::VaultRouter;
-use crate::vault_router::central::Central;
 use crate::vault_router::js;
-use rusqlite::params;
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-const FILE_ATOME_TYPES: [&str; 10] = [
-    "file",
-    "image",
-    "video",
-    "sound",
-    "audio_recording",
-    "video_recording",
-    "text",
-    "shape",
-    "midi",
-    "raw",
-];
+// A file's record (its type, its owner, its atome written once): file_record.rs.
+pub use super::file_record::{Registration, owner, register, register_server_copy};
 
 pub struct Storage {
     /// `SQUIRREL_SHELL_USER_ROOT` (else `data/users`) from the project root.
@@ -37,16 +25,6 @@ pub struct Placed {
     pub file_name: String,
     pub file_path: PathBuf,
     pub relative_path: String,
-}
-
-/// What `registerFileUpload` records of a file.
-pub struct Registration<'a> {
-    pub atome_id: Option<String>,
-    pub atome_type: Option<&'a str>,
-    pub original_name: String,
-    pub mime_type: Option<String>,
-    pub size: u64,
-    pub file_path: Option<String>,
 }
 
 /// `sanitizeSegment`: each run outside `[a-zA-Z0-9_-]` becomes one `_`.
@@ -259,6 +237,10 @@ impl Storage {
                 continue;
             };
             let description = described.get(&name);
+            // A project's light proxy (R-349) is its project's rendering, never one of the person's media.
+            if description.is_some_and(|row| row.get("proxy_of").is_some()) {
+                continue;
+            }
             let modified = modified_iso(meta.modified().map_err(|e| e.to_string())?)?;
             files.push(json!({
                 "id": description.and_then(|row| js::first(row, &["atome_id"]).cloned()),
@@ -314,145 +296,6 @@ fn display_name(row: Option<&JsonValue>, fallback: &str) -> String {
         .find(|text| !js::trim(text).is_empty())
         .unwrap_or(fallback)
         .to_string()
-}
-
-// `inferFileAtomeType`: midi before the generic audio type.
-fn inferred_type(name: &str, mime: &str) -> &'static str {
-    let extension = super::playback::extension_of(name)
-        .map(str::to_lowercase)
-        .unwrap_or_default();
-    let has = |list: &[&str]| list.contains(&extension.as_str());
-    let mime = js::trim(mime).to_lowercase();
-    let midi_mime = [
-        "audio/midi",
-        "audio/x-midi",
-        "audio/sp-midi",
-        "application/x-midi",
-    ];
-    if has(&["mid", "midi", "smf"]) || midi_mime.contains(&mime.as_str()) {
-        "midi"
-    } else if has(&["svg"]) || mime == "image/svg+xml" {
-        "shape"
-    } else if has(&[
-        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "ico",
-    ]) || mime.starts_with("image/")
-    {
-        "image"
-    } else if has(&["mp4", "mov", "webm", "mkv", "avi", "mpeg", "mpg", "m4v"])
-        || mime.starts_with("video/")
-    {
-        "video"
-    } else if has(&[
-        "mp3", "wav", "ogg", "flac", "aac", "m4a", "aiff", "aif", "opus", "weba",
-    ]) || mime.starts_with("audio/")
-    {
-        "sound"
-    } else if has(&["txt", "md", "markdown", "csv", "tsv", "log"])
-        || [
-            "text/plain",
-            "text/markdown",
-            "text/csv",
-            "text/tab-separated-values",
-        ]
-        .contains(&mime.as_str())
-    {
-        "text"
-    } else {
-        "raw"
-    }
-}
-
-// `resolveFileAtomeType`: the type asked when it is a file type, else the inferred one.
-fn file_type(file_name: &str, registration: &Registration<'_>) -> String {
-    let asked = registration
-        .atome_type
-        .map(|asked| js::trim(asked).to_lowercase());
-    if let Some(asked) = asked.filter(|asked| FILE_ATOME_TYPES.contains(&asked.as_str())) {
-        return asked;
-    }
-    let named = js::trim(&registration.original_name);
-    let source = if named.is_empty() {
-        file_name
-    } else {
-        &registration.original_name
-    };
-    inferred_type(source, registration.mime_type.as_deref().unwrap_or("")).into()
-}
-
-/// `resolveOwnerPrincipal`: the account a file may belong to, else the caller's reason.
-pub async fn owner(central: &Central, user_id: &str) -> Result<(), String> {
-    let id = js::trim(user_id);
-    if id.is_empty() || id == "anonymous" {
-        return Err("upload_identity_required".into());
-    }
-    central
-        .get(
-            "SELECT atome_id FROM atomes WHERE atome_id = ? LIMIT 1",
-            vec![json!(id)],
-        )
-        .await?
-        .map(|_| ())
-        .ok_or_else(|| "remote_account_not_provisioned".into())
-}
-
-/// `registerFileUpload`: the owner checked, then the file's atome and particles
-/// written in one unit; its atome id.
-pub async fn register(
-    central: &Central,
-    file_name: &str,
-    user_id: &str,
-    registration: Registration<'_>,
-) -> Result<String, String> {
-    owner(central, user_id).await?;
-    let atome_id = registration
-        .atome_id
-        .clone()
-        .filter(|id| !id.is_empty())
-        .unwrap_or_else(|| format!("file_{}", uuid::Uuid::new_v4().simple()));
-    let atome_type = file_type(file_name, &registration);
-    let original = if registration.original_name.is_empty() {
-        file_name.to_string()
-    } else {
-        registration.original_name.clone()
-    };
-    let particles = [
-        ("file_name", Some(json!(file_name))),
-        ("original_name", Some(json!(original))),
-        (
-            "mime_type",
-            registration.mime_type.clone().map(JsonValue::from),
-        ),
-        (
-            "file_path",
-            registration.file_path.clone().map(JsonValue::from),
-        ),
-        ("size", Some(json!(registration.size))),
-        ("is_public", Some(json!(false))),
-    ];
-    let user = user_id.to_string();
-    let registered = atome_id.clone();
-    central
-        .committed(move |db| {
-            let now = atome_store::append::iso_now();
-            db.execute(
-                "INSERT OR REPLACE INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?4), ?4)",
-                params![atome_id, atome_type, user, now],
-            )
-            .map_err(|e| e.to_string())?;
-            for (key, value) in particles {
-                let Some(value) = value else { continue };
-                db.execute(
-                    "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, updated_at)
-                     VALUES (?, ?, ?, ?)",
-                    params![atome_id, key, value.to_string(), now],
-                )
-                .map_err(|e| e.to_string())?;
-            }
-            Ok(())
-        })
-        .await??;
-    Ok(registered)
 }
 
 // The chunks `0.part` to `count - 1` end to end; a missing one fails as Node's

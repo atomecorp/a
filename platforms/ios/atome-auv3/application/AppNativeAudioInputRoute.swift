@@ -17,6 +17,10 @@ enum AppNativeAudioInputRoute {
     static let changedEvent = "eve:native-audio-inputs-changed"
     /// The session consumer held while the ports are read.
     static let listingConsumerId = "input_listing"
+    /// The ports last read under a session that records, until the route changes (`followSessionInputRoute`). Reading
+    /// them under a session that only plays means switching it to record and back, which stops the output each time:
+    /// opening the console while a project played lost about a second of its sound (R-295 défaut 47). Audio queue only.
+    static var listedPorts: [[String: Any]]?
 }
 
 extension AppNativeAudioController {
@@ -42,11 +46,14 @@ extension AppNativeAudioController {
         let ports: [[String: Any]]
         if AVAudioSession.sharedInstance().category.recordsAudio {
             ports = sessionInputPorts()
+        } else if let listed = AppNativeAudioInputRoute.listedPorts {
+            ports = listed
         } else {
             try acquireAudioSessionConsumer(AppNativeAudioInputRoute.listingConsumerId, kind: .musicCapture)
             ports = sessionInputPorts()
             releaseAudioSessionConsumer(AppNativeAudioInputRoute.listingConsumerId)
         }
+        AppNativeAudioInputRoute.listedPorts = ports
         AppNativeAudioDiagnostics.log("session input_ports \(ports.map { "\($0["name"] ?? ""):\($0["channels"] ?? 0)" })")
         devices["inputs"] = engine + ports.filter { !known.contains(($0["id"] as? String) ?? "") }
         var answer = result
@@ -112,6 +119,8 @@ extension AppNativeAudioController {
     /// engine keeps its uid: its inputs stay closed (an explicit error), never on the built-in microphone. A category
     /// change (a take, the listing itself) is no device change: listing on it would list again without end.
     func followSessionInputRoute(_ reason: AVAudioSession.RouteChangeReason) {
+        // A port plugged, unplugged or routed changes the ports listed; the listing's own category switch does not.
+        if reason != .categoryChange { AppNativeAudioInputRoute.listedPorts = nil }
         guard reason == .newDeviceAvailable || reason == .oldDeviceUnavailable else { return }
         WebViewManager.evaluateJS(
             "window.dispatchEvent(new CustomEvent('\(AppNativeAudioInputRoute.changedEvent)'));",

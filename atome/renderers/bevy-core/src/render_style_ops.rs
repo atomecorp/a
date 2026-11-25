@@ -114,7 +114,11 @@ pub(crate) fn refresh_shape_surface(
         {
             Some(queue_masked_texture(
                 world,
-                &paint.texture(&silhouette, fill),
+                &paint.texture(
+                    &silhouette,
+                    fill,
+                    crate::shape_texture::texture_side_limit(world),
+                ),
                 &mask,
                 id,
             )?)

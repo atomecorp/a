@@ -28,10 +28,11 @@ web-sys = { workspace = true, features = [
     "MediaStream",
     "MediaStreamConstraints",
     "Navigator",
+    "Performance",
     "Window",
 ] }
 kira = { workspace = true, features = ["wav", "pcm", "mp3", "ogg", "vorbis", "flac", "aac", "isomp4"] }
-atome-mix-graph = { path = "../../../atome/engines/mix-graph", features = ["decode"] }
+atome-mix-graph = { path = "../../../atome/engines/mix-graph", features = ["decode", "proxy", "freeze"] }
 atome-voice-turns = { path = "../../../atome/engines/voice-turns" }
 atome-audio-kernels = { path = "../../../atome/engines/audio-kernels" }
 # The one calendar engine, for the page's agenda (src/calendar.rs).

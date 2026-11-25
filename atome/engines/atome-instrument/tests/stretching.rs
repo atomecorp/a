@@ -93,3 +93,25 @@ fn a_stretched_note_sounds_on_its_frame_not_a_window_later() {
         "sounding within 5 ms of its frame (the window is 42.7 ms)"
     );
 }
+
+#[test]
+fn a_held_take_keeps_its_duration_an_octave_up() {
+    // R-353 L7: a cell played chromatically lasts as long at any pitch (×1, `hold`).
+    let data = SampleData::mono(sine(440.0, 1.0), RATE);
+    let take = Segment {
+        hold: true,
+        ..Segment::whole(0, data.frames(), 69)
+    };
+    let mut sampler = sampler(vec![Zone::new(0, 127, vec![take])], bank(vec![data]));
+    let (left, _) = render(&mut sampler, 72_000, &[NoteEvent::note_on(0, 81, 1.0)]);
+    let measured = frequency(&left[4_800..38_400]);
+    assert!(
+        (measured - 880.0).abs() < 1.0,
+        "an octave up: {measured} Hz"
+    );
+    assert!(
+        loud(&left[40_000..44_000]),
+        "still sounding at 0.9 s: the octave keeps the 1 s (unheld, it would end at 0.5 s)"
+    );
+    assert!(!loud(&left[56_000..60_000]), "over shortly after 1 s");
+}

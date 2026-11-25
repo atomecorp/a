@@ -63,6 +63,39 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
     { name: 'assistant.callback.run', required: ['reason'], properties: { reason: line(500), requested_at: line(40) },
         description: 'Run by a scheduled call-back\'s alarm: opens the assistant, which tells the user why it calls. Never call it '
             + 'yourself; use assistant.callback.schedule.' },
+    // Programmed tasks (eVe/voice/assistant/assistant_task.js, user 25 Nov. 2026): events of eVe's calendar run by her at their time.
+    { name: 'assistant.task.schedule', persistent: true, required: ['instruction'],
+        description: 'Programme a task for you to do later by yourself, at its time, without asking anything then: « demain à 8 h, '
+            + 'fais une recherche sur … et donne-moi le résultat », « chaque lundi à 9 h, range mes fichiers », « à 18 h, s\'il pleut, '
+            + 'envoie … », « tous les jours à 7 h, résume mes mails ». instruction = the whole task in the user\'s words, its conditions '
+            + 'included (you check them at its time); give delay_minutes, or time (HH:MM, the next to come) with an optional date '
+            + '(YYYY-MM-DD), both local; repeat daily, weekly, monthly or yearly when it comes back; title = a short name for the '
+            + 'Agenda. It is an event of the « eVe » calendar: calendar.search lists them and calendar.delete cancels one. A task '
+            + 'whose time passed while eVe was closed runs at its next opening. Its report reaches the user as a notification. '
+            + 'Not for a call-back (assistant.callback.schedule) nor for a single tool within 24 h (timer.schedule). Then say the '
+            + 'result\'s when.',
+        properties: {
+            instruction: line(4000), title: { type: 'string', maxLength: 120 }, delay_minutes: { type: 'number', minimum: 1 },
+            time: { type: 'string', pattern: '^\\d{1,2}:\\d{2}$' }, date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+            repeat: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'] }
+        } },
+    { name: 'assistant.task.run', required: ['event_id'], properties: { event_id: line(200), late: { type: 'boolean' } },
+        description: 'Run by a programmed task\'s alarm: you do the task its event holds. Never call it yourself; use '
+            + 'assistant.task.schedule.' },
+    // The camera watched (eVe/domains/capture/camera_watch.js): a condition seen on the camera, then you act.
+    { name: 'camera.watch', required: ['condition'],
+        description: 'Watch the camera until something the user described is seen: « filme s\'il y a quelqu\'un devant la porte », '
+            + '« préviens-moi quand le chat arrive ». It looks every every_seconds (5 by default) for for_minutes (21 by default, '
+            + 'a day at most) and answers seen true or false; it films nothing: seen, do what was asked yourself (captures.start '
+            + 'with duration_seconds, a message…). condition = what must be seen, in plain words; camera back (default) or front; '
+            + 'keep_open true when you film right after, so the camera stays ready. camera.watch_stop ends a watch.',
+        properties: {
+            condition: line(500), every_seconds: { type: 'number', minimum: 2, maximum: 3600 },
+            for_minutes: { type: 'number', minimum: 1, maximum: 1440 }, camera: { type: 'string', enum: ['back', 'front'] },
+            keep_open: { type: 'boolean' }
+        } },
+    { name: 'camera.watch_stop', required: [], properties: {},
+        description: 'End every camera watch running (« arrête de surveiller »): each answers seen false.' },
     // Timed actions (eVe/intuition/runtime/timed_tool_runs.js): a tool run after a delay or at a time; the clocks are
     // calendar.time.read.
     { name: 'timer.schedule', required: ['tool'],

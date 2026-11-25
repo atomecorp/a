@@ -1,4 +1,5 @@
-import { TIMELINE_TOOL_SCHEMAS, TIMELINE_WRITE_VERBS, timelineWriteVerbSchema } from '#shared/timeline_tool_contract.js';
+import { TIMELINE_TOOL_SCHEMAS, TIMELINE_WRITE_VERBS, timelineWriteVerbDescription, timelineWriteVerbSchema } from '#shared/timeline_tool_contract.js';
+import { TIMELINE_LIVE_TOOLS } from '#shared/timeline_live_tools.js';
 import { TIMELINE_AI_RUNTIME_TOOL_IDS } from './timeline_tool_ids.js';
 
 // The gateway calls handler({ params, context }). Every tool runs its Runtime V2 twin
@@ -14,6 +15,8 @@ const TIMELINE_TOOLS = [
     ['transport.stop', 'Stop the active Molecule transport.', 'timeline.write', 'low'],
     ['cells.trigger', 'Cells (non-linear transport): press or release cells [{scene_id, track_id}] ("scene" = the whole Scene); each follows its own quantization, play mode, passes and Follow Action.', 'timeline.write', 'low'],
     ['cells.stop', 'Stop every playing cell of a Molecule.', 'timeline.write', 'low'],
+    ['cells.command', 'Drive cells [{scene_id, track_id}] beside their launch: op play (if silent), restart (from its start), stop, pause (the next pause resumes), speed (value 0.25-4) or pitch (value -24..24 semitones, audio clips); each on its own quantization.', 'timeline.write', 'low'],
+    ['transport.command', 'Drive a project\'s playback (group_id): op play, stop, toggle, pause (resumed by the next pause) or jump to {kind: start|bar|marker|scene|value, bar, marker_id, scene_id}, landing while it plays on the next step of quantize (project = its Aimant, bar, beat, off).', 'timeline.write', 'low'],
     ['transport.list.toggle', 'Toggle sequential playback of the ordered open Molecules on the canonical Kira transport.', 'timeline.write', 'low'],
     ['transport.list.stop', 'Stop sequential Molecule List playback.', 'timeline.write', 'low'],
     ['record.prepare', 'Prepare the current project for microphone recording using the existing Record tool owner. Return group_id and track_id for record.start; creates a Molecule only when needed.', 'timeline.write', 'moderate'],
@@ -24,11 +27,17 @@ const TIMELINE_TOOLS = [
     ['realign', 'Lay a project\'s timeline again in its List order (the current project when project_id is omitted).', 'timeline.write', 'moderate'],
     ['midi.export', 'Hand a MIDI clip\'s own .mid file (clip_id) to the system\'s export.', 'timeline.write', 'moderate'],
     ['mix.preset.list', 'List the person\'s console strip presets (id, name, lane), of one lane when given.', 'timeline.read', 'low'],
-    ['mix.preset.save', 'Save a console strip\'s chain, input and output (strip_id) as a preset under name.', 'timeline.write', 'moderate'],
-    ['mix.preset.load', 'Lay a strip preset (preset_id) on a console strip (strip_id), in place of its effects.', 'timeline.write', 'moderate'],
-    ['track.import', 'Lay the person\'s media atomes (media_atome_ids: audio, video, image) end to end on a track (track_id) from start_seconds, as its Importer plate.', 'timeline.write', 'moderate'],
+    ['mix.preset.save', 'Save a console strip (strip_id) as a preset under name, replacing a preset of that name: its parts (effects, routing, io), all when omitted.', 'timeline.write', 'moderate'],
+    ['mix.preset.load', 'Lay a strip preset (preset_id) on a console strip (strip_id): the parts asked (effects, routing, io), all it holds when omitted; volume, pan and opacity stay.', 'timeline.write', 'moderate'],
+    ['mix.preset.reset', 'Reset a console strip (strip_id) to a new track\'s strip: its default chain, input and output.', 'timeline.write', 'moderate'],
+    ['track.import', 'Lay the person\'s media (media_atome_ids: audio, video, image, MIDI; a media atome id or media_import.list\'s media_id) end to end on a track (track_id) from start_seconds, as its Importer plate.', 'timeline.write', 'moderate'],
+    ['media.list', 'List the current project\'s media (sounds, videos, pictures, MIDI files; of types when given): media_id, type, name, length and the clips playing each.', 'timeline.read', 'low'],
+    ['media.add', 'Join the person\'s media (media_atome_ids: a media atome id or media_import.list\'s media_id) to the current project, laid on no track (Médias › Ajouter).', 'timeline.write', 'moderate'],
+    ['media.replace', 'Make every clip playing the project\'s media media_ids (media.list, one type) play the person\'s media by_media_atome_id instead, same place and length; the replaced media leave the project.', 'timeline.write', 'moderate'],
+    ['media.delete', 'Delete the project\'s media media_ids (media.list) and every clip playing them; the history keeps them.', 'timeline.write', 'moderate'],
     ['audio.export', 'Hand an audio clip\'s window (clip_id), as heard, to the system\'s export as a 24-bit WAV.', 'timeline.write', 'moderate'],
-    ['midi.freeze', 'Figer: render a MIDI clip (clip_id) by its eVe instrument as an audio clip on the next free track, its MIDI track muted.', 'timeline.write', 'moderate']
+    ['midi.freeze', 'Figer: render a MIDI clip (clip_id) by its eVe instrument as an audio clip on the next free track, its MIDI track muted.', 'timeline.write', 'moderate'],
+    ...TIMELINE_LIVE_TOOLS
 ];
 
 const RECORD_DESCRIPTIONS = {
@@ -38,6 +47,18 @@ const RECORD_DESCRIPTIONS = {
 };
 
 // A capture's receipt reaches the assistant without the Molecule state it carries.
+// A tool whose work outlasts the gateway's default 8 s answers when it is done, never a TOOL_TIMEOUT while the work goes on
+// and lands (R-295 défaut 45): a timed take waits for its own end (record.start's longest duration_ms), and track.import lays
+// its media one after another after reading the person's media list (≈ 0.5 s a media on an iPad).
+const RECORD_FINISH_MS = 30000;
+const TOOL_TIMEOUTS_MS = Object.freeze({
+    'track.import': 120000,
+    'media.add': 120000,
+    'media.replace': 120000,
+    'record.start': TIMELINE_TOOL_SCHEMAS['record.start'].properties.duration_ms.maximum + RECORD_FINISH_MS
+});
+const timeoutOf = (verb) => (TOOL_TIMEOUTS_MS[verb] ? { timeout_ms: TOOL_TIMEOUTS_MS[verb] } : {});
+
 const withoutCaptureState = (outcome) => {
     const receipt = outcome?.result?.result;
     if (!receipt || typeof receipt !== 'object') return outcome;
@@ -54,7 +75,7 @@ export const registerTimelineDefaultTools = ({ Agent, invokeRuntimeDefaultTool }
         const name = `eve.timeline.${verb}`;
         if (!TIMELINE_AI_RUNTIME_TOOL_IDS[name]) throw new Error(`timeline_ai_tool_without_runtime_twin:${name}`);
         Agent.registerTool({
-            name, description, capabilities: [capability], risk_tier: risk,
+            name, description, capabilities: [capability], risk_tier: risk, ...timeoutOf(verb),
             parameters: TIMELINE_TOOL_SCHEMAS[verb],
             handler: runTwin(name)
         });
@@ -77,12 +98,13 @@ export const registerTimelineDefaultTools = ({ Agent, invokeRuntimeDefaultTool }
         capabilities: ['timeline.write', 'media.capture'],
         risk_tier: 'moderate',
         parameters: TIMELINE_TOOL_SCHEMAS[`record.${verb}`],
+        ...timeoutOf(`record.${verb}`),
         handler: runTwin(`eve.timeline.record.${verb}`, withoutCaptureState)
     }));
 
     TIMELINE_WRITE_VERBS.forEach((verb) => Agent.registerTool({
         name: `eve.timeline.${verb}`,
-        description: `Apply Molecule timeline ${verb}.`,
+        description: timelineWriteVerbDescription(verb),
         capabilities: ['timeline.write'],
         risk_tier: 'moderate',
         parameters: timelineWriteVerbSchema(verb),

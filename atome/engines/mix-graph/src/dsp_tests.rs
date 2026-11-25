@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 // A one-layer linear WaveNet captured at 44.1 kHz: a pure gain of `scale`,
 // resampled by the amp module inside a 48 kHz graph.
-fn gain_capture(scale: f32) -> StoredAsset {
+pub(crate) fn gain_capture(scale: f32) -> StoredAsset {
     StoredAsset::AmpCapture(Arc::new(format!(
         r#"{{"version":"0.5.4","architecture":"WaveNet","config":{{"layers":[{{"input_size":1,"condition_size":1,"channels":1,"head_size":1,"kernel_size":1,"dilations":[1],"activation":{{"type":"LeakyReLU","negative_slope":1.0}},"gated":false,"head_bias":false}}],"head":null,"head_scale":{scale}}},"weights":[1,1,0,0,0,0,1,{scale}],"sample_rate":44100}}"#
     )))

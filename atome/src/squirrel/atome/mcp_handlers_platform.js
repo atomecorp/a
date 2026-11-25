@@ -5,7 +5,8 @@ import {
     cloneValue,
     hasOwn,
     mcpEvents,
-    mcpOperations
+    mcpOperations,
+    visibleToActor
 } from './mcp_core.js';
 import { listUnifiedMcpTools } from './mcp_discovery.js';
 import { isBricksUri, readBricks } from './mcp_bricks.js';
@@ -109,7 +110,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     },
     'mcp.proposals.list'(params = {}) {
         const status = params?.status ? String(params.status) : null;
-        const proposals = listProposals(status);
+        const proposals = listProposals(status).filter(entry => visibleToActor(params.__mcp.actor, entry.actor?.actor_id));
         return {
             protocol: ATOME_MCP_PROTOCOL,
             proposals
@@ -118,7 +119,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     'mcp.proposals.read'(params = {}) {
         const proposalId = String(params?.proposal_id || params?.proposalId || params?.id || '').trim();
         const entry = readProposal(proposalId);
-        if (!entry) {
+        if (!entry || !visibleToActor(params.__mcp.actor, entry.actor?.actor_id)) {
             throw new Error(`Unknown MCP proposal: ${proposalId}`);
         }
         return {
@@ -128,7 +129,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     },
     'mcp.confirmations.list'(params = {}) {
         const status = params?.status ? String(params.status) : null;
-        const confirmations = listConfirmations(status);
+        const confirmations = listConfirmations(status).filter(entry => visibleToActor(params.__mcp.actor, entry.actor?.actor_id));
         return {
             protocol: ATOME_MCP_PROTOCOL,
             confirmations
@@ -137,7 +138,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     'mcp.confirmations.read'(params = {}) {
         const confirmationId = String(params?.confirmation_id || params?.confirmationId || params?.id || '').trim();
         const entry = readConfirmation(confirmationId);
-        if (!entry) {
+        if (!entry || !visibleToActor(params.__mcp.actor, entry.actor?.actor_id)) {
             throw new Error(`Unknown MCP confirmation: ${confirmationId}`);
         }
         return {
@@ -206,7 +207,8 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
             ? Math.max(1, Math.round(Number(params.limit)))
             : 50;
         const operations = Array.from(mcpOperations.values())
-            .filter((entry) => (!status || entry.status === status) && (!method || entry.method === method))
+            .filter((entry) => visibleToActor(params.__mcp.actor, entry.actor_id)
+                && (!status || entry.status === status) && (!method || entry.method === method))
             .slice(-limit)
             .map((entry) => ({
                 operation_id: entry.operation_id,
@@ -230,7 +232,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     'mcp.operations.read'(params = {}) {
         const operationId = String(params?.operation_id || params?.operationId || params?.id || '').trim();
         const entry = mcpOperations.get(operationId);
-        if (!entry) {
+        if (!entry || !visibleToActor(params.__mcp.actor, entry.actor_id)) {
             throw new Error(`Unknown MCP operation: ${operationId}`);
         }
         return {
@@ -253,15 +255,19 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
     },
     'mcp.operations.cancel'(params = {}) {
         const operationId = params?.operation_id || params?.operationId || params?.id;
-        return cancelOperationRecord(operationId);
+        return cancelOperationRecord(operationId, params.__mcp.actor);
     },
     'mcp.events.list'(params = {}) {
         const type = params?.type ? String(params.type) : null;
         const limit = Number.isFinite(Number(params?.limit))
             ? Math.max(1, Math.round(Number(params.limit)))
             : 50;
+        // The security journal's events are read with its own capability (`mcp.security.journal.list`).
+        const actor = params.__mcp.actor;
+        const journal = actor.capabilities.includes('mcp.security.read');
         const events = mcpEvents
-            .filter((entry) => !type || entry.type === type)
+            .filter((entry) => (!entry.actor_id || visibleToActor(actor, entry.actor_id))
+                && (journal || entry.type !== 'mcp.security.journal') && (!type || entry.type === type))
             .slice(-limit)
             .map((entry) => cloneValue(entry));
         return {

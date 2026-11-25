@@ -79,12 +79,15 @@ export function normalizeStringList(value, fallback = []) {
 let mcpToolsGeneration = 0;
 export const readMcpToolsGeneration = () => mcpToolsGeneration;
 
-export function pushMcpEvent(type, payload = {}) {
+// An event names the actor whose request it tells of (`actor_id`), null for what concerns every caller
+// (a catalog changed): a program reads only its own (`visibleToActor`).
+export function pushMcpEvent(type, payload = {}, actorId = payload?.actor_id) {
     if (type === 'mcp.tools.list_changed') mcpToolsGeneration += 1;
     const event = {
         seq: ++mcpEventSeq,
         at: nowIso(),
         type: String(type || 'mcp.event'),
+        actor_id: actorId ? String(actorId) : null,
         payload: cloneValue(payload) || {}
     };
     mcpEvents.push(event);
@@ -113,12 +116,16 @@ export function summarizeResult(value) {
     return cloneValue(value);
 }
 
-export function createOperationRecord(method, params = {}, requestId = null) {
+/** What one actor's request did is that actor's: the person (a local caller) sees every record, a program its own. */
+export const visibleToActor = (actor, ownerId) => actor?.role === 'local_owner' || (Boolean(ownerId) && ownerId === actor?.actor_id);
+
+export function createOperationRecord(method, params = {}, requestId = null, actorId = null) {
     const operation_id = `mcp_op_${++mcpOperationSeq}`;
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const record = {
         operation_id,
         request_id: requestId,
+        actor_id: actorId ? String(actorId) : null,
         method: String(method || ''),
         status: 'running',
         progress_ratio: 0,
@@ -138,7 +145,7 @@ export function createOperationRecord(method, params = {}, requestId = null) {
         operation_id,
         method: record.method,
         request_id: requestId
-    });
+    }, record.actor_id);
     return record;
 }
 
@@ -167,7 +174,7 @@ export function reportOperationProgress(operation_id, {
         ratio: record.progress_ratio,
         phase: record.progress_phase,
         detail: cloneValue(detail)
-    });
+    }, record.actor_id);
     return record;
 }
 
@@ -184,7 +191,7 @@ export function completeOperationRecord(operation_id, result) {
         operation_id: record.operation_id,
         method: record.method,
         result: record.result
-    });
+    }, record.actor_id);
     return record;
 }
 
@@ -200,13 +207,14 @@ export function failOperationRecord(operation_id, error) {
         operation_id: record.operation_id,
         method: record.method,
         error: record.error
-    });
+    }, record.actor_id);
     return record;
 }
 
-export function cancelOperationRecord(operation_id) {
+// `actor`: the caller asking; a program cancels only what it asked (the protocol's own cancel names its request).
+export function cancelOperationRecord(operation_id, actor = null) {
     const record = mcpOperations.get(String(operation_id || ''));
-    if (!record) {
+    if (!record || (actor && !visibleToActor(actor, record.actor_id))) {
         return { ok: false, error: 'mcp_operation_not_found', operation_id: String(operation_id || '') || null };
     }
     if (record.status !== 'running') {
@@ -227,7 +235,7 @@ export function cancelOperationRecord(operation_id) {
     pushMcpEvent('mcp.operation.cancel_requested', {
         operation_id: record.operation_id,
         method: record.method
-    });
+    }, record.actor_id);
     return {
         ok: true,
         operation_id: record.operation_id,
@@ -245,6 +253,6 @@ export function finalizeCancelledOperation(operation_id) {
     pushMcpEvent('mcp.operation.cancelled', {
         operation_id: record.operation_id,
         method: record.method
-    });
+    }, record.actor_id);
     return record;
 }

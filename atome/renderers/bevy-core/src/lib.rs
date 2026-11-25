@@ -11,6 +11,7 @@ mod clip_fade;
 pub mod clip_polygon;
 pub mod components;
 pub mod frame_demand;
+mod frame_uniforms;
 pub mod linear_lens;
 pub mod linear_lens_band;
 mod login_light;
@@ -50,6 +51,8 @@ pub mod video_diagnostics;
 pub mod video_external_texture;
 #[cfg(target_arch = "wasm32")]
 pub mod video_external_web;
+#[cfg(target_arch = "wasm32")]
+mod video_external_web_hooks;
 pub mod waveform_playback_overlay;
 pub mod workspace_backdrop;
 pub mod workspace_blur;
@@ -84,6 +87,8 @@ mod shape_sdf_tests;
 mod shape_shadow_overlay_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod texture_fit_tests;
 #[cfg(test)]
 mod texture_sprite_color_tests;
 #[cfg(test)]

@@ -17,15 +17,21 @@ pub mod automation;
 mod automation_tests;
 #[cfg(feature = "decode")]
 pub mod clip_decode;
-#[cfg(feature = "decode")]
-mod clip_opus;
 #[cfg(all(test, feature = "decode"))]
 mod clip_decode_tests;
+#[cfg(feature = "decode")]
+mod clip_opus;
 pub mod direct_render;
 pub mod dsp;
 pub mod dsp_module;
 #[cfg(test)]
 mod dsp_tests;
+pub mod freeze;
+mod freeze_graph;
+#[cfg(feature = "freeze")]
+pub mod freeze_plan;
+#[cfg(feature = "freeze")]
+pub mod freeze_store;
 pub mod graph;
 mod graph_compile;
 pub mod graph_order;
@@ -45,11 +51,19 @@ pub mod instrument_synth;
 mod instrument_synth_tests;
 #[cfg(test)]
 mod instrument_tests;
+pub mod load_meter;
 mod mix_apply;
 pub mod modulation;
 #[cfg(test)]
 mod modulation_tests;
 pub mod module;
+#[cfg(feature = "proxy")]
+pub mod offline_proxy;
+#[cfg(all(test, feature = "proxy", feature = "decode"))]
+mod offline_proxy_tests;
+pub mod offline_render;
+#[cfg(test)]
+mod offline_render_tests;
 #[cfg(test)]
 mod offline_rig;
 #[cfg(test)]
@@ -60,6 +74,8 @@ pub mod record_tap;
 mod record_tap_tests;
 pub mod resample;
 pub mod return_ring;
+#[cfg(test)]
+mod rhythm_tests;
 pub mod round_trip;
 pub mod route_delivery;
 #[cfg(test)]
@@ -106,6 +122,8 @@ struct ModuleEntry {
     // The width of its strip: a module moved to a strip of another width is built anew.
     channels: usize,
     latency: usize,
+    // It rings on long after its input stops (a reverb, an echo): never inside a frozen stem (R-370).
+    long_tail: bool,
     fresh: Option<ModuleBox>,
     active: Option<(usize, usize)>,
     sent: Option<(usize, usize)>,
@@ -133,6 +151,8 @@ pub struct MixGraph {
     modules: HashMap<String, ModuleEntry>,
     captures: HashMap<String, Arc<CaptureSlot>>,
     meters: HashMap<String, Arc<StripMeter>>,
+    // Each strip's stem and load share (R-370, freeze_graph.rs).
+    freezes: freeze_graph::Freezes,
     // By interface and the channels taken from it (R-286).
     live_inputs: HashMap<(String, Vec<u16>), Arc<LiveInput>>,
     record_taps: HashMap<String, Arc<record_tap::RecordTap>>,
@@ -192,6 +212,7 @@ impl MixGraph {
             modules: HashMap::new(),
             captures: HashMap::new(),
             meters: HashMap::new(),
+            freezes: freeze_graph::Freezes::default(),
             live_inputs: HashMap::new(),
             record_taps: HashMap::new(),
             live_capacity,
@@ -229,6 +250,11 @@ impl MixGraph {
     // `asset_id` from any `dsp` module of the program.
     pub fn load_asset(&mut self, asset_id: &str, asset: StoredAsset) {
         self.assets.insert(asset_id.to_string(), asset);
+    }
+
+    // The assets loaded, as an offline render of this engine's project reads them (R-349).
+    pub fn assets(&self) -> &AssetStore {
+        &self.assets
     }
 
     pub fn unload_asset(&mut self, asset_id: &str) -> Result<(), String> {

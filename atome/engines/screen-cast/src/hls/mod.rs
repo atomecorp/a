@@ -17,6 +17,8 @@ use std::collections::VecDeque;
 pub const TARGET_SEGMENT_US: i64 = 1_000_000;
 /// How many finished segments the playlist and the server keep.
 pub const KEPT_SEGMENTS: usize = 6;
+/// Where a television starts the live stream, in seconds before its end: one segment.
+const START_OFFSET_S: f64 = TARGET_SEGMENT_US as f64 / 1_000_000.0;
 
 /// What the stream's init segment declares.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,9 +253,13 @@ impl LiveStream {
             .segments
             .front()
             .map_or(self.next_sequence, |segment| segment.sequence);
+        // A television starts a live stream three segments behind its end unless told otherwise: told to start one
+        // segment behind (`START_OFFSET_S`), it shows the view about two seconds sooner (user, 25 Nov. 2026: « une latence
+        // incroyable »).
         let mut text = format!(
             "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:{target}\n#EXT-X-MEDIA-SEQUENCE:{first}\n\
-             #EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"init.mp4\"\n"
+             #EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=-{START_OFFSET_S:.1},PRECISE=YES\n\
+             #EXT-X-MAP:URI=\"init.mp4\"\n"
         );
         for segment in &self.segments {
             let seconds = segment.duration_ticks as f64 / timescale as f64;

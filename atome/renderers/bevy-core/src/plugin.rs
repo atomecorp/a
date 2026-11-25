@@ -87,7 +87,9 @@ fn spawn_atome_bevy_scene(
     mut commands: Commands,
     config: Res<AtomeBevyRendererConfig>,
     mut images: ResMut<Assets<Image>>,
+    device: Option<Res<bevy::render::renderer::RenderDevice>>,
 ) {
+    let texel_limit = crate::shape_texture::device_texture_side(device.as_deref());
     let backdrop = spawn_workspace_backdrop(&mut commands, &mut images, &config);
     commands.insert_resource(backdrop);
     commands.spawn((
@@ -108,8 +110,8 @@ fn spawn_atome_bevy_scene(
     ));
     for node in &config.initial_scene.nodes {
         let node_id = node.id.clone();
-        let texture_handle =
-            texture_handle_for_node(&mut images, node).unwrap_or_else(|error| panic!("{error}"));
+        let texture_handle = texture_handle_for_node(&mut images, node, texel_limit)
+            .unwrap_or_else(|error| panic!("{error}"));
         let node_for_world = node.clone();
         let surface_width = config.width;
         let surface_height = config.height;

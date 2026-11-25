@@ -1,12 +1,14 @@
 // What banks (SFZ) ask of a zone: a one-shot plays to its end whatever the key
 // does; keyswitches choose which zones sound and play nothing themselves; a
-// zone's filter colours its voices, its cutoff following the key.
+// zone's filter colours its voices, its cutoff following the key; a controller's
+// value chooses the zones waiting for it.
 
 mod support;
 use atome_dsp::Processor;
 use atome_dsp::biquad::Shape;
 use atome_instrument::{
-    Keymap, NoteEvent, SampleData, Sampler, Segment, Switches, Zone, ZoneFilter,
+    EventKind, Keymap, NoteEvent, SampleData, Sampler, Segment, Switches, Zone, ZoneController,
+    ZoneFilter,
 };
 use support::*;
 
@@ -167,4 +169,109 @@ fn a_zone_filter_cuts_above_its_cutoff_and_follows_the_key() {
         (tracked - 0.5 * std::f32::consts::FRAC_1_SQRT_2).abs() < 0.04,
         "the cutoff followed the key: {tracked}"
     );
+}
+
+// A take that does not follow the key (an EXS zone's « Pitch » off): the same pitch on every key.
+// The crossings are counted over 0.4 s: a resolution of 2.5 Hz.
+fn heard_on(note: u8, key_track: bool) -> f32 {
+    let data = SampleData::mono(sine(440.0, 1.0), RATE);
+    let take = Segment {
+        key_track,
+        ..Segment::whole(0, data.frames(), 69)
+    };
+    let mut sampler = sampler(vec![Zone::new(0, 127, vec![take])], bank(vec![data]));
+    let (left, _) = render(&mut sampler, 24_000, &[NoteEvent::note_on(0, note, 1.0)]);
+    frequency(&left[2_400..21_600])
+}
+
+#[test]
+fn a_take_off_the_key_plays_at_its_own_pitch_on_every_key() {
+    for note in [45, 69, 93] {
+        let heard = heard_on(note, false);
+        assert!((heard - 440.0).abs() < 3.0, "key {note}: {heard} Hz");
+    }
+    let followed = heard_on(81, true);
+    assert!(
+        (followed - 880.0).abs() < 3.0,
+        "a take on the key follows it: {followed} Hz"
+    );
+}
+
+// Zones chosen by a controller (an EXS group by the sustain pedal, SFZ locc/hicc): the controller's value at
+// each note chooses which sounds; before any is sent it is MIDI's resting value (CC 64 at 0, CC 7 at 100).
+fn chosen_by(number: u8, ranges: [[u8; 2]; 2]) -> Sampler {
+    let data = vec![
+        SampleData::mono(sine(440.0, 1.0), RATE),
+        SampleData::mono(sine(880.0, 1.0), RATE),
+    ];
+    let zones = ranges
+        .iter()
+        .enumerate()
+        .map(|(sample, range)| {
+            let mut zone = Zone::new(
+                0,
+                127,
+                vec![Segment::whole(sample, data[sample].frames(), 69)],
+            );
+            zone.controller = Some(ZoneController {
+                number,
+                low: range[0],
+                high: range[1],
+            });
+            zone
+        })
+        .collect();
+    sampler(zones, bank(data))
+}
+
+fn controller(number: u8, value: f32) -> NoteEvent {
+    NoteEvent {
+        offset: 0,
+        kind: EventKind::Controller { number, value },
+    }
+}
+
+#[test]
+fn a_controller_chooses_the_zone_each_note_plays() {
+    let mut pedal = chosen_by(64, [[0, 63], [64, 127]]);
+    let (up, _) = render(&mut pedal, 24_000, &[NoteEvent::note_on(0, 69, 1.0)]);
+    assert!(
+        (frequency(&up[2_400..21_600]) - 440.0).abs() < 3.0,
+        "pedal up at rest"
+    );
+    let (down, _) = render(
+        &mut pedal,
+        24_000,
+        &[
+            NoteEvent::note_off(0, 69),
+            controller(64, 1.0),
+            NoteEvent::note_on(12_000, 69, 1.0),
+        ],
+    );
+    assert!(
+        (frequency(&down[14_400..23_000]) - 880.0).abs() < 4.0,
+        "pedal down: the other zone"
+    );
+    // CC 7 rests at 100: the zone of 100..127 sounds before any is sent.
+    let mut volume = chosen_by(7, [[0, 99], [100, 127]]);
+    let (rest, _) = render(&mut volume, 24_000, &[NoteEvent::note_on(0, 69, 1.0)]);
+    assert!(
+        (frequency(&rest[2_400..21_600]) - 880.0).abs() < 3.0,
+        "volume at rest"
+    );
+}
+
+#[test]
+fn a_controller_range_that_is_empty_is_refused() {
+    let data = SampleData::mono(level(0.5, 0.1), RATE);
+    let mut zone = Zone::new(0, 127, vec![Segment::whole(0, data.frames(), 60)]);
+    zone.controller = Some(ZoneController {
+        number: 1,
+        low: 90,
+        high: 10,
+    });
+    let error = Keymap::new(vec![zone], &bank(vec![data]), 89)
+        .err()
+        .expect("refused");
+    assert!(error.contains("controller"), "{error}");
 }

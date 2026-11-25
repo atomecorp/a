@@ -25,7 +25,7 @@ fn receipt_id(share_id: &str) -> String {
 // A share only to read is a list sent; one granting more is worked on together.
 fn read_only(row: &JsonValue) -> bool {
     let held = rights::normalized(&parsed(row.get("permissions_json"), json!({})));
-    held[1..].iter().all(|on| !on)
+    rights::reads_only(held)
 }
 
 // The unique part a copy's id was made with (after its last ':' or '_').

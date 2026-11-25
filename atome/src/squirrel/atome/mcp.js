@@ -68,7 +68,7 @@ const journalIfSensitive = (access, type, payload) => {
 
 async function run(method, params, request, transport, actor, access, confirmationId) {
     const confirmed = Boolean(confirmationId);
-    const operation = createOperationRecord(method, params, request.id != null ? request.id : null);
+    const operation = createOperationRecord(method, params, request.id != null ? request.id : null, actor.actor_id);
     const trace = { actor_id: actor.actor_id, operation_id: operation.operation_id, method, subject: access.subject || method };
     journalIfSensitive(access, 'operation_started', trace);
     const handlerParams = { ...params };

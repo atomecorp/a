@@ -49,7 +49,7 @@ export function pushSecurityJournal(type, payload = {}) {
         type: entry.type,
         seq: entry.seq,
         payload: entry.payload
-    });
+    }, entry.payload.actor_id);
     return entry;
 }
 
@@ -80,7 +80,7 @@ export function createProposalRecord(method, params = {}, policy = {}, actor = {
         proposal_id,
         method: record.method,
         subject: record.subject
-    });
+    }, record.actor.actor_id);
     pushSecurityJournal('proposal_created', {
         method: record.method,
         subject: record.subject,

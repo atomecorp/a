@@ -962,10 +962,10 @@ test('the Utilities palette gathers Mode, Validation, the projects Matrix and th
         assert.equal(mode.type, 'palette');
         assert.deepEqual(mode.children.map(child => child.key), ['perform', 'mode_edit', 'mode_consume']);
         // View (21 Nov. 2026): the project's display modes, in place of the expertise level; the Timeline, the Cells and the
-        // Mix among them (user, 23 Nov. 2026).
+        // Mix among them (user, 23 Nov. 2026), the Scène (the Cells showing one Scene) before the Mix (R-353, 25 Nov. 2026).
         const view = utilities.children.find(child => child.key === 'view');
         assert.equal(view.type, 'palette');
-        assert.deepEqual(view.children.map(child => child.key), ['view_list', 'view_table', 'view_natural', 'view_timeline', 'view_cells', 'view_mix']);
+        assert.deepEqual(view.children.map(child => child.key), ['view_list', 'view_table', 'view_natural', 'view_timeline', 'view_cells', 'view_scene', 'view_mix']);
     }, { getDefaultContent: () => content });
 });
 

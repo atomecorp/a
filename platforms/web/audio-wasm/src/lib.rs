@@ -7,12 +7,16 @@
 // (voice) and the calendar engine (calendar).
 
 mod calendar;
+mod freeze;
 mod interchange;
 mod kernels;
 mod lpproj;
+mod midi_sync;
 mod mix;
+mod proxy;
 mod record;
 mod scheduled_backend;
+mod tune;
 mod voice;
 
 use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest, VoiceSound};
@@ -70,6 +74,7 @@ fn ensure_audio_manager(
     engine: &mut WasmAudioEngine,
 ) -> Result<&mut AudioManager<ScheduledContextBackend>, JsValue> {
     if engine.manager.is_none() {
+        freeze::install_clock()?;
         engine.manager = Some(create_audio_manager(&engine.mix)?);
     }
     engine

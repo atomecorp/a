@@ -8,6 +8,9 @@
 
 import Foundation
 import CoreMIDI
+
+/// The ports listed to the page: `inputs` and `outputs`, each `["id": …, "name": …]`.
+typealias MIDIPortList = [String: [[String: String]]]
 import os.log
 
 /// CoreMIDI capability adapter (native-bridge exception of module 05) for the app
@@ -39,9 +42,9 @@ public class MIDIController: NSObject {
     private let midiQueue = DispatchQueue(label: "com.atomecorp.atome.midi.queue")
 
     private var connectedSources: [MIDIEndpointRef: MIDIUniqueID] = [:]
-    private var publishedInputs: [[String: String]]?
+    private var publishedPorts: MIDIPortList?
     // Non-nil while the CoreMIDI client is being created: the callers waiting for that start.
-    private var pendingStarts: [(Result<[[String: String]], Error>) -> Void]?
+    private var pendingStarts: [(Result<MIDIPortList, Error>) -> Void]?
     // Bumped by every stop, so a client created for a start that was stopped meanwhile is disposed, not kept.
     private var startGeneration = 0
 
@@ -78,8 +81,8 @@ public class MIDIController: NSObject {
             waiting.forEach { $0(.failure(error)) }
             return
         }
-        let inputs = connectSources()
-        waiting.forEach { $0(.success(inputs)) }
+        let ports = connectSources()
+        waiting.forEach { $0(.success(ports)) }
     }
 
     private func createPorts(client: MIDIClientRef, status clientStatus: OSStatus) -> Bool {
@@ -141,15 +144,16 @@ public class MIDIController: NSObject {
         }
     }
 
-    /// Forwards the MIDI 1.0 channel-voice messages (UMP type 0x2) of one packet:
-    /// `[type:4][group:4][status:8][data1:8][data2:8]`. The page consumers (bindings,
-    /// capture) only read channel messages, so clock and other system traffic stays native.
+    /// Forwards the MIDI 1.0 messages of one packet, channel voice (UMP type 0x2) and system
+    /// (type 0x1: the clock, Start, Continue, Stop, the song position, R-379 « Synchro MIDI »):
+    /// `[type:4][group:4][status:8][data1:8][data2:8]`. The page routes system messages to its
+    /// sync alone (midi_binding_service.js), never to the bindings.
     private func forwardChannelVoiceMessages(words: UnsafePointer<UInt32>, count: Int, port: String, timestamp: Double) {
         var index = 0
         while index < count {
             let word = words[index]
             let messageType = word >> 28
-            if messageType == 0x2 {
+            if messageType == 0x2 || messageType == 0x1 {
                 WebViewManager.sendMIDIToJS(
                     data1: UInt8(truncatingIfNeeded: word >> 16),
                     data2: UInt8(truncatingIfNeeded: word >> 8) & 0x7F,
@@ -177,13 +181,15 @@ public class MIDIController: NSObject {
     private func refreshSources() {
         midiQueue.async { [weak self] in
             guard let self, self.inputPort != 0 else { return }
-            _ = self.connectSources()
+            self.connectSources()
         }
     }
 
     /// On `midiQueue`, with the input port open: connects new sources, disconnects vanished
-    /// ones, publishes the list to the page when it changed and returns it.
-    private func connectSources() -> [[String: String]] {
+    /// ones, publishes the inputs and the outputs (each CoreMIDI destination, R-379) to the
+    /// page when they changed and returns them.
+    @discardableResult
+    private func connectSources() -> MIDIPortList {
         var current: [MIDIEndpointRef: MIDIUniqueID] = [:]
         var inputs: [[String: String]] = includesHostInput ? [Self.hostInputPort] : []
         var literals: [MIDIUniqueID: String] = [:]
@@ -215,12 +221,15 @@ public class MIDIController: NSObject {
         portLiteralLock.lock()
         portLiterals = literals
         portLiteralLock.unlock()
-        if publishedInputs != inputs {
-            publishedInputs = inputs
-            logger.info("MIDI inputs: \(inputs.count)")
-            WebViewManager.publishMIDIInputsToJS(inputs)
+        // In a host, Atome's MIDI leaves by the plugin's own output: no destination of its own.
+        let outputs = WebViewManager.runningInExtension ? [] : outputSender.destinations()
+        let ports: MIDIPortList = ["inputs": inputs, "outputs": outputs]
+        if publishedPorts != ports {
+            publishedPorts = ports
+            logger.info("MIDI inputs: \(inputs.count), outputs: \(outputs.count)")
+            WebViewManager.publishMIDIPortsToJS(ports)
         }
-        return inputs
+        return ports
     }
 
     private static func portLiteral(_ port: [String: String]) -> String {
@@ -267,7 +276,7 @@ public class MIDIController: NSObject {
             midiClient = 0
         }
         connectedSources.removeAll()
-        publishedInputs = nil
+        publishedPorts = nil
         portLiteralLock.lock()
         portLiterals.removeAll()
         portLiteralLock.unlock()
@@ -283,8 +292,8 @@ public class MIDIController: NSObject {
     /// caller's (main) thread — on the iPad it froze the first project opening ~0.8 s.
     /// No thread ever waits for another here (a wait on the notification thread was
     /// a priority inversion): each step hands the next one over asynchronously.
-    public func startMIDIMonitoring(completion: ((Result<[[String: String]], Error>) -> Void)? = nil) {
-        let finish: (Result<[[String: String]], Error>) -> Void = { completion?($0) }
+    public func startMIDIMonitoring(completion: ((Result<MIDIPortList, Error>) -> Void)? = nil) {
+        let finish: (Result<MIDIPortList, Error>) -> Void = { completion?($0) }
         midiQueue.async { [weak self] in
             guard let self else { return }
             if self.inputPort != 0 {
@@ -346,8 +355,9 @@ public class MIDIController: NSObject {
         outputSender.sendControlChange(controller: controller, value: value, channel: channel, port: outputPort)
     }
 
-    public func sendRaw(bytes: [UInt8]) {
-        outputSender.sendRaw(bytes: bytes, port: outputPort)
+    /// `destinationId`: one destination (`coremidi-out-<uniqueID>`), else every one; `delayMs`: it leaves that much later.
+    public func sendRaw(bytes: [UInt8], destinationId: String? = nil, delayMs: Double = 0) {
+        outputSender.sendRaw(bytes: bytes, port: outputPort, destinationId: destinationId, delayMs: delayMs)
     }
 }
 

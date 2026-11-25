@@ -57,14 +57,14 @@ pub(crate) async fn resolve(host: &str) -> Result<Vec<String>, String> {
 }
 
 /// `createAddressRateLimit({ windowMs, max })`: at most `max` requests per address within the window.
-pub(super) struct RateLimit {
+pub(crate) struct RateLimit {
     window_ms: i64,
     max: usize,
     requests: Mutex<HashMap<String, Vec<i64>>>,
 }
 
 impl RateLimit {
-    pub(super) fn new(window_ms: i64, max: usize) -> Self {
+    pub(crate) fn new(window_ms: i64, max: usize) -> Self {
         Self {
             window_ms,
             max,
@@ -73,7 +73,7 @@ impl RateLimit {
     }
 
     /// Whether `address` is past its window's limit; a request let through is counted.
-    pub(super) fn limited(&self, address: &str, now: i64) -> bool {
+    pub(crate) fn limited(&self, address: &str, now: i64) -> bool {
         let key = if address.is_empty() {
             "unknown"
         } else {

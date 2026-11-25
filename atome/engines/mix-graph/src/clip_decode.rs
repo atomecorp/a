@@ -6,7 +6,7 @@
 // here a file with more channels plays its first two (left, right), and a
 // malformed packet is skipped as decoders do, the rest of the clip playing.
 
-use crate::clip_opus::{OPUS_SAMPLE_RATE, decode_opus, opus_duration};
+use crate::clip_opus::{Lead, OPUS_SAMPLE_RATE, decode_opus, opus_duration};
 use kira::Frame;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
 use std::io::Cursor;
@@ -119,13 +119,13 @@ pub fn probe_duration(bytes: &[u8], extension: Option<&str>) -> Result<f64, Stri
     let track_id = track.id;
     let (opus, sample_rate) = match track.codec_params.as_ref() {
         Some(CodecParameters::Audio(params)) => (
-            params.codec == CODEC_ID_OPUS,
+            (params.codec == CODEC_ID_OPUS).then(|| Lead::of(track, params)),
             params.sample_rate.filter(|rate| *rate > 0),
         ),
-        _ => (false, None),
+        _ => (None, None),
     };
-    if opus {
-        return opus_duration(format.as_mut(), track_id);
+    if let Some(lead) = opus {
+        return opus_duration(format.as_mut(), track_id, lead);
     }
     if let (Some(frames), Some(rate)) = (track.num_frames, sample_rate) {
         return Ok(frames as f64 / f64::from(rate));
@@ -162,8 +162,9 @@ pub fn decode_clip(bytes: Vec<u8>, extension: Option<&str>) -> Result<StaticSoun
         }
         _ => return Err("No decodable audio track found".to_string()),
     };
+    let lead = Lead::of(track, &params);
     let (sample_rate, frames) = if params.codec == CODEC_ID_OPUS {
-        let frames = decode_opus(format.as_mut(), track_id, &params)?;
+        let frames = decode_opus(format.as_mut(), track_id, &params, lead)?;
         (OPUS_SAMPLE_RATE, frames)
     } else {
         decode_packets(format.as_mut(), track_id, &params)?

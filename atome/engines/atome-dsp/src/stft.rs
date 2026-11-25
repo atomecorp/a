@@ -38,7 +38,12 @@ pub struct Stft {
 impl Stft {
     // Allocates every buffer: call it from `new` or `prepare`, never `process`.
     pub fn new(sample_rate: f32) -> Self {
-        let size = frame_size_for(sample_rate);
+        Self::with_size(frame_size_for(sample_rate))
+    }
+
+    // Frames of `size` samples (a power of two): an offline render that must follow a fast-moving pitch reads
+    // shorter frames than a live effect (atome-audio-kernels tune.rs).
+    pub fn with_size(size: usize) -> Self {
         let mut planner = RealFftPlanner::<f32>::new();
         let forward = planner.plan_fft_forward(size);
         let inverse = planner.plan_fft_inverse(size);

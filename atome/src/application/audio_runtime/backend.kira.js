@@ -1,10 +1,10 @@
 import {
   buildNativeClipBytesPayload,
   buildNativeProbeDurationPayload,
+  buildKiraScheduledVoices,
   buildTauriKiraAudioPayload,
   KIRA_AUDIO_COMMANDS,
   normalizeKiraPlayInstancePayload,
-  normalizeKiraVoiceEnvelope,
   normalizeKiraStopInstancePayload
 } from './kira_audio_commands.js';
 import {
@@ -14,6 +14,8 @@ import {
 } from './runtime_audio_backend.js';
 import { createKiraClipMeta, isAuv3NativeRuntime, postAuv3LocalClipLoad } from './kira_backend_support.js';
 import { createKiraLiveMethods } from './kira_live_methods.js';
+import { createKiraProxyMethods } from './kira_render_proxy.js';
+import { createKiraFreezeMethods } from './kira_freeze.js';
 import { loadAudioKernels } from './audio_kernels.js';
 
 // Kira backend for Squirrel.av.audio
@@ -281,15 +283,7 @@ import { loadAudioKernels } from './audio_kernels.js';
     // Many voices in one call (one native round trip), each started on its own
     // rendered frame with its loop and envelope; resolves with their start frames.
     schedule_instances(list) {
-      var voices = list.map(function (arg) {
-        var payload = normalizeKiraPlayInstancePayload(arg);
-        var frame = Number(arg && arg.startRenderFrame);
-        if (!payload.assetId || !payload.voiceId || !Number.isFinite(frame)) {
-          throw new Error('[backend.kira] schedule_instances requires asset, voice and frame');
-        }
-        return Object.assign(buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload),
-          { startRenderFrame: Math.max(0, Math.round(frame)), envelope: normalizeKiraVoiceEnvelope(arg.envelope) });
-      });
+      var voices = buildKiraScheduledVoices(list);
       if (mode === 'tauri') return invoke('audio_schedule_instances', { voices: voices }).then(function (r) { return r.start_render_frames; });
       if (mode !== 'wasm') return Promise.reject(new Error('[backend.kira] sample-accurate scheduling requires a Kira engine'));
       return ensureRuntimeMode({ audioManager: true }).then(function () {
@@ -365,23 +359,23 @@ import { loadAudioKernels } from './audio_kernels.js';
     mix_apply(program) {
       return ensureRuntimeMode({ audioManager: true }).then(function () {
         if (mode === 'wasm') return wasm.audio_mix_apply(program);
-        return invoke('audio_mix_apply', { program: program }).then(function (r) { return r && r.strips; });
+        // `{ strips, inputs_unavailable }`: the inputs the engine could not open are named, the rest applied.
+        return invoke('audio_mix_apply', { program: program });
       });
     },
 
+    // Read by the meters on their own clock: before the engine is started (no mode yet) no mix runs, so it has no level.
     mix_levels() {
-      if (mode === 'wasm') return wasm && wasmAudioManagerReady ? Promise.resolve(Array.from(wasm.audio_mix_levels())) : Promise.resolve([]);
-      return invoke('audio_mix_levels', {}).then(function (r) { return (r && r.levels) || []; });
+      if (mode === 'tauri') return invoke('audio_mix_levels', {}).then(function (r) { return (r && r.levels) || []; });
+      return Promise.resolve(mode === 'wasm' && wasm && wasmAudioManagerReady ? Array.from(wasm.audio_mix_levels()) : []);
     },
 
     // The live measurements of the mix's dsp modules: [{ module_id, values }].
     mix_readings() {
-      if (mode === 'wasm') {
-        return wasm && wasmAudioManagerReady
-          ? Promise.resolve(Array.from(wasm.audio_mix_readings(), function (r) { return { module_id: r.module_id, values: Array.from(r.values) }; }))
-          : Promise.resolve([]);
-      }
-      return invoke('audio_mix_readings', {}).then(function (r) { return (r && r.readings) || []; });
+      if (mode === 'tauri') return invoke('audio_mix_readings', {}).then(function (r) { return (r && r.readings) || []; });
+      return Promise.resolve(mode === 'wasm' && wasm && wasmAudioManagerReady
+        ? Array.from(wasm.audio_mix_readings(), function (r) { return { module_id: r.module_id, values: Array.from(r.values) }; })
+        : []);
     },
 
     mix_cut_tail(moduleId) {
@@ -516,6 +510,8 @@ import { loadAudioKernels } from './audio_kernels.js';
     ...clipMeta.methods,
     ...createKiraLiveMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null),
       readEngine: () => (mode === 'wasm' && wasmAudioManagerReady ? wasm : null), native: () => mode === 'tauri' }),
+    ...createKiraProxyMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null) }),
+    ...createKiraFreezeMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null) }),
 
     dispatch_batch(batch) {
       for (let i = 0; i < batch.length; i++) {

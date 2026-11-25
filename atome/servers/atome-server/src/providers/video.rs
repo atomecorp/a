@@ -11,7 +11,7 @@ use super::http::{self, Done};
 use super::video_runway::{PRICING_VERSION, Runway, UNIT, credits_cost, usd};
 use crate::media::storage::{self, Registration, Storage};
 use crate::settings::Settings;
-use crate::vault_router::central::Central;
+use crate::vault_router::VaultRouter;
 use crate::vault_router::js;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::path::PathBuf;
@@ -218,7 +218,7 @@ pub struct Video {
     keys: PlatformKeys,
     jobs: Jobs<Job>,
     storage: Arc<Storage>,
-    central: Central,
+    router: Arc<VaultRouter>,
 }
 
 impl Video {
@@ -226,7 +226,7 @@ impl Video {
         settings: &Settings,
         project_root: &std::path::Path,
         storage: Arc<Storage>,
-        central: Central,
+        router: Arc<VaultRouter>,
     ) -> Self {
         let get = |name: &str, default: &str| {
             settings
@@ -252,7 +252,7 @@ impl Video {
             keys: PlatformKeys::load(settings, &[("runway", "RUNWAY_SHARED_KEY_FILE")]),
             jobs: Jobs::default(),
             storage,
-            central,
+            router,
         }
     }
 
@@ -369,7 +369,7 @@ impl Video {
             Adapter::Runway(runway) => {
                 let (payload, warnings, path, effective) = runway.payload(&request)?;
                 let cost = credits_cost(estimate["credits"].as_f64().unwrap_or(f64::NAN))?;
-                let hold = ledger::reserve(&self.central, principal, cost).await?;
+                let hold = ledger::reserve(self.router.central(), principal, cost).await?;
                 let accepted = runway
                     .call(
                         reqwest::Method::POST,
@@ -388,11 +388,11 @@ impl Video {
                 let data = match accepted {
                     Ok(data) => data,
                     Err(failure) => {
-                        ledger::release(&self.central, &hold).await?;
+                        ledger::release(self.router.central(), &hold).await?;
                         return Err(failure);
                     }
                 };
-                ledger::keep(&self.central, &hold).await?;
+                ledger::keep(self.router.central(), &hold).await?;
                 (
                     data["id"].clone(),
                     payload["model"].clone(),
@@ -451,13 +451,20 @@ impl Video {
             return Ok(());
         };
         if job.status != "succeeded" {
-            return ledger::release(&self.central, hold).await;
+            return ledger::release(self.router.central(), hold).await;
         }
         let credits = credits
             .or_else(|| job.estimate["credits"].as_f64())
             .unwrap_or(f64::NAN);
         let cost = credits_cost(credits)?;
-        ledger::settle(&self.central, hold, "video.generate", job.provider, cost).await
+        ledger::settle(
+            self.router.central(),
+            hold,
+            "video.generate",
+            job.provider,
+            cost,
+        )
+        .await
     }
 
     async fn job(&self, principal: &str, id: Option<&JsonValue>) -> Done<JsonValue> {
@@ -670,20 +677,15 @@ impl Video {
             size: bytes.len() as u64,
             file_path: Some(placed.relative_path.clone()),
         };
-        let atome_id = match storage::register(
-            &self.central,
-            &placed.file_name,
-            principal,
-            registration,
-        )
-        .await
-        {
-            Ok(atome_id) => atome_id,
-            Err(_) => {
-                let _ = tokio::fs::remove_file(&placed.file_path).await;
-                return Err(CODES.error("DOWNLOAD_FAILED"));
-            }
-        };
+        let atome_id =
+            match storage::register(&self.router, &placed.file_name, principal, registration).await
+            {
+                Ok(atome_id) => atome_id,
+                Err(_) => {
+                    let _ = tokio::fs::remove_file(&placed.file_path).await;
+                    return Err(CODES.error("DOWNLOAD_FAILED"));
+                }
+            };
         let stored = json!({ "file_name": placed.file_name, "owner_id": principal, "file_path": placed.relative_path,
             "atome_id": atome_id, "size_bytes": bytes.len(), "mime": mime, "job": Self::public(&job) });
         job.stored.insert(slot, stored.clone());

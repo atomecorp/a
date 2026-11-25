@@ -142,7 +142,16 @@ pub async fn prepare(
         .route("/ws/api", get(ws_api_handler))
         .route("/ws/sync", get(ws_sync_handler))
         .merge(host().routes())
-        .nest_service("/file", file_service)
+        // A stored media is read by its session only (local_file_access.rs).
+        .nest(
+            "/file",
+            Router::new()
+                .fallback_service(file_service)
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    file_access_middleware,
+                )),
+        )
         .nest_service("/text", text_service)
         .fallback(static_answer)
         .layer(middleware::from_fn_with_state(cors, cors::layer))

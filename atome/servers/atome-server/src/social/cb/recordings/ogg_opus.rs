@@ -5,15 +5,12 @@
 // (`OpusHead`, then `OpusTags` with the vendor alone: no other metadata), each on its own page; the audio pages follow,
 // each closed after about one second, the last one marked as the stream's end. The file is built in memory: a take lasts
 // the floor's time at most (45 s by default, cb.floor_max_ms), and its bytes are what the live translation is handed.
-use ogg::writing::{PacketWriteEndInfo, PacketWriter};
+use atome_audio_kernels::ogg_opus::OggOpusWriter;
 
 /// Opus runs at 48 kHz whatever the rate it was fed (RFC 7587 §4.1).
 pub const RATE: u64 = 48_000;
 /// The decoder's priming at the start of a stream joined mid-way (RFC 7845 §4.2 recommends 80 ms).
 pub const PRE_SKIP: u16 = 3_840;
-const VENDOR: &[u8] = b"atome-server";
-// An audio page is closed every 50 packets (one second of 20 ms frames).
-const PACKETS_PER_PAGE: usize = 50;
 // A gap longer than this is not filled (the take's clock jumps instead).
 const GAP_FILL_MAX: u64 = 5 * RATE;
 // An RTP packet's fixed header.
@@ -84,7 +81,8 @@ pub struct Written {
 
 /// One take being written.
 pub struct TakeWriter {
-    writer: PacketWriter<'static, Vec<u8>>,
+    // The one Ogg Opus writer (audio-kernels), opened with the first packet (its channel count).
+    writer: Option<OggOpusWriter>,
     serial: u32,
     payload_type: Option<u8>,
     // The first packet's timestamp, and the last one's, unwrapped to 64 bits.
@@ -93,9 +91,6 @@ pub struct TakeWriter {
     last_sequence: Option<u16>,
     // Samples written since the take's start (the pre-skip apart).
     samples: u64,
-    // The packet held back so the last one can close the stream, with its granule position.
-    pending: Option<(Vec<u8>, u64)>,
-    in_page: usize,
     packets: usize,
     last_toc: u8,
 }
@@ -110,15 +105,13 @@ impl TakeWriter {
     /// A take whose RTP payload type is `payload_type` (the consumer's Opus codec; any when none).
     pub fn new(payload_type: Option<u8>) -> Self {
         Self {
-            writer: PacketWriter::new(Vec::new()),
+            writer: None,
             serial: rand_serial(),
             payload_type,
             origin: None,
             last_timestamp: 0,
             last_sequence: None,
             samples: 0,
-            pending: None,
-            in_page: 0,
             packets: 0,
             last_toc: 0xF8,
         }
@@ -205,14 +198,11 @@ impl TakeWriter {
 
     /// The take closed: its file, none when no voice was written.
     pub fn finish(mut self) -> Option<Written> {
-        let (packet, granule) = self.pending.take()?;
-        self.writer
-            .write_packet(packet, self.serial, PacketWriteEndInfo::EndStream, granule)
-            .ok()?;
+        let writer = self.writer.take()?;
         Some(Written {
             duration_ms: self.duration_ms(),
             packets: self.packets,
-            bytes: self.writer.into_inner(),
+            bytes: writer.finish(None).ok()?,
         })
     }
 
@@ -231,39 +221,27 @@ impl TakeWriter {
         at
     }
 
-    fn write_headers(&mut self, toc: u8) -> std::io::Result<()> {
+    fn write_headers(&mut self, toc: u8) -> atome_audio_kernels::Result<()> {
         let channels: u8 = if toc & 0x04 != 0 { 2 } else { 1 };
-        let mut head = b"OpusHead".to_vec();
-        head.push(1);
-        head.push(channels);
-        head.extend(PRE_SKIP.to_le_bytes());
-        head.extend((RATE as u32).to_le_bytes());
-        head.extend(0i16.to_le_bytes());
-        head.push(0);
-        self.writer
-            .write_packet(head, self.serial, PacketWriteEndInfo::EndPage, 0)?;
-        let mut tags = b"OpusTags".to_vec();
-        tags.extend((VENDOR.len() as u32).to_le_bytes());
-        tags.extend_from_slice(VENDOR);
-        tags.extend(0u32.to_le_bytes());
-        self.writer
-            .write_packet(tags, self.serial, PacketWriteEndInfo::EndPage, 0)
+        self.writer = Some(OggOpusWriter::new(
+            self.serial,
+            channels,
+            RATE as u32,
+            PRE_SKIP,
+        )?);
+        Ok(())
     }
 
-    // The packet before is written now (this one may be the last); a page closes every second.
-    fn queue(&mut self, packet: Vec<u8>) -> std::io::Result<()> {
-        let granule = u64::from(PRE_SKIP) + self.samples;
-        if let Some((previous, at)) = self.pending.replace((packet, granule)) {
-            self.in_page += 1;
-            let end = if self.in_page >= PACKETS_PER_PAGE {
-                self.in_page = 0;
-                PacketWriteEndInfo::EndPage
-            } else {
-                PacketWriteEndInfo::NormalPacket
-            };
-            self.writer.write_packet(previous, self.serial, end, at)?;
+    // The packet, its last sample at the take's position (the shared writer holds it back so the last one closes the stream).
+    fn queue(&mut self, packet: Vec<u8>) -> atome_audio_kernels::Result<()> {
+        let samples = self.samples;
+        match self.writer.as_mut() {
+            Some(writer) => writer.push(packet, samples),
+            None => Err(atome_audio_kernels::KernelError::new(
+                atome_audio_kernels::INVALID_ARGUMENT,
+                "an Opus packet before the take's header",
+            )),
         }
-        Ok(())
     }
 }
 

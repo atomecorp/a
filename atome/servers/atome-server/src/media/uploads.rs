@@ -292,12 +292,16 @@ impl Uploads {
         user: &str,
         registration: Registration<'_>,
     ) -> Result<Response, String> {
-        let central = self.sessions.central();
         if let Err(error) =
-            storage::register(central, &destination.file_name, user, registration).await
+            storage::register(&self.router, &destination.file_name, user, registration).await
         {
             let _ = tokio::fs::remove_file(&destination.file_path).await;
-            return Ok(failed(StatusCode::INTERNAL_SERVER_ERROR, &error));
+            let status = if error == super::file_record::NOT_OWNED {
+                StatusCode::FORBIDDEN
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            return Ok(failed(status, &error));
         }
         Ok(done(destination, user))
     }

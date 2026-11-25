@@ -272,17 +272,9 @@ try {
         check('SC-20 a name longer than its cell ends with « … »', got.ok && got.value.text.endsWith('…') && got.value.text.length < 'Pont instrumental'.length, got.value?.text);
         await shot('05b_cells_renamed');
     }
-    // SC-23 / SC-24 the Scene filter of the Cells (Vue › Scène, Édition lit; R-258 replaced the Scene view): the names in its
-    // row of Scenes, and a rename there.
-    const sceneFilter = async () => {
-        const vue = await node('atome_contextual_tool_timeline_view', 3000);
-        if (!vue) return false;
-        await clickCanvasTarget(page, vue); await wait(800);
-        const toggle = await node('atome_contextual_tool_timeline_view_timeline_scene_filter', 3000);
-        if (toggle) { await clickCanvasTarget(page, toggle); await wait(1500); }
-        return !!toggle;
-    };
-    const sceneOpened = await sceneFilter();
+    // SC-23 / SC-24 the Scene view (the band's Vue › Scène, a view again since R-353; Édition lit): the names in its row of
+    // Scenes, and a rename there.
+    const sceneOpened = await viewTool('scene');
     const strip = await rects({ prefix: 'project_view_timeline_cell_' });
     const names = Object.entries(strip).filter(([id]) => id.endsWith('_scene_name')).map(([, r]) => r.text);
     check('SC-23 the Scene filter shows the renamed Scenes', sceneOpened && names.includes('Couplet'), { sceneOpened, names });
@@ -297,8 +289,8 @@ try {
             { pid, id: others[1].id, node: sceneCellId(others[1].id) });
         check('SC-24 typed then Enter, the Scene is renamed from the Scene filter', got.ok, (await scenesOf(pid)).find((e) => e.id === others[1].id));
     }
-    // Back to Play, as the steps after expect (the filter off first).
-    if (sceneOpened) await sceneFilter();
+    // Back to Play, as the steps after expect (the Cells first).
+    if (sceneOpened) await viewTool('cells');
     await editTool();
     await viewTool('timeline');
     await wait(1200);

@@ -11,6 +11,7 @@ import {
   get_current_project_id,
   get_current_project,
   set_current_project,
+  forget_current_project,
   load_saved_current_project
 } from './adole_api/projects.js';
 import { create_atome, list_atomes, delete_atome, alter_atome, realtime_patch, get_atome } from './adole_api/atomes.js';
@@ -57,8 +58,12 @@ import { listRemoteSurfaces, runRemoteCommand } from '../../teleport/remote_comm
 // Installs the teleport lifecycle: every authenticated surface answers the offers
 // addressed to it, not only one that already pressed a teleport tool.
 import '../../teleport/teleport_manager.js';
+// Likewise the remote control lifecycle: a device that never drove another must still apply the control it is given.
+import '../../teleport/remote_control_manager.js';
 import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
-import { FastifyAdapter } from './adole.js';
+import { sendNetworkMessage } from './adole_api/network.js';
+import { isTauriRuntime } from './adole_api/runtime.js';
+import { FastifyAdapter, TauriAdapter } from './adole.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
 // Only the application's own document owns the session: a frame it embeds (the
@@ -128,6 +133,7 @@ export const AdoleAPI = {
     getCurrent: get_current_project,
     getCurrentId: get_current_project_id,
     setCurrent: set_current_project,
+    forgetCurrent: forget_current_project,
     loadSaved: load_saved_current_project
   },
   activities: {
@@ -390,6 +396,11 @@ export const AdoleAPI = {
     ban: (community, userId) => fastifyCall({ type: 'community', action: 'ban', community, userId }, 'community_auth_unavailable'),
     unban: (community, userId) => fastifyCall({ type: 'community', action: 'unban', community, userId }, 'community_auth_unavailable'),
     removePost: (community, newsId) => fastifyCall({ type: 'community', action: 'remove-post', community, newsId }, 'community_auth_unavailable')
+  },
+  // A control's message to the network (R-347 L12, ./adole_api/network.js): the app's local server, else the central one.
+  network: {
+    send: (request) => sendNetworkMessage(request, { onLocalServer: isTauriRuntime(), local: (frame) => TauriAdapter.ws.send(frame),
+      central: (frame) => fastifyCall(frame, 'network_auth_unavailable') })
   },
   machine: {
     getCurrent: auth.getCurrentMachine,

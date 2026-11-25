@@ -2,10 +2,10 @@
 <g transform="translate(0, 0) scale(0.328205) translate(0, 0)">
 
     <g  transform="matrix(1.13971,0,0,1.13971,23.2937,-15.4579)">
-        <path d="M80.093,115.773L231.615,115.773L307.243,232.645" style="fill:none;;stroke-width:25.59px;"/>
+        <path d="M80.093,115.773L231.615,115.773L307.243,232.645" style="fill:none;stroke:white;stroke-width:25.59px;"/>
     </g>
     <g  transform="matrix(-1.13971,0,0,1.13971,367.898,-15.2565)">
-        <path d="M80.093,115.773L231.615,115.773L307.243,232.645" style="fill:none;stroke-width:25.59px;"/>
+        <path d="M80.093,115.773L231.615,115.773L307.243,232.645" style="fill:none;stroke:white;stroke-width:25.59px;"/>
     </g>
 
 </g>

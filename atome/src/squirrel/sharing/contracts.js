@@ -12,6 +12,8 @@ export const SHARE_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 
     'SHARE_KEY_UNAVAILABLE', 'SHARE_KEY_LOCKED', 'SHARE_KEY_INVALID']);
 
 const id = { type: 'string', minLength: 1, maxLength: 400 };
+// A project shared live, its « Accès » (R-349): its proxy alone (« Écoute »), opened to read (« Lecture »), worked on together (« Écriture »).
+export const SHARE_ACCESS_LEVELS = Object.freeze(['listen', 'read', 'write']);
 const kind = { type: 'string', enum: LIST_KINDS };
 const name = { type: 'string', minLength: 1, maxLength: LIST_NAME_MAX, pattern: '\\S' };
 const person = { type: 'object', additionalProperties: false, required: ['name'], properties: { contact_id: id, account_id: id, name } };
@@ -26,9 +28,9 @@ const definitions = {
     refuse: [{ share_id: id, draft_id: id }, [], 'Refuse a list received or its new version (share_id), or a draft (draft_id).', true],
     detach: [{ share_id: id }, ['share_id'], 'Keep a copy of a linked list received and stop following its sender\'s versions.', true],
     revoke: [{ share_id: id }, ['share_id'], 'Stop a share the user made (or one received).', true],
-    folders: [{}, [], 'The projects other people share with the user as folders, live: each with its share_id, its owner (owner_id), its name and whether the user may write in it.', false],
-    rights: [{ share_id: id, atome_id: id, write: { type: 'boolean' } }, ['write'],
-        'A share made live (a project shared as a folder, a list worked on together) read only (write false) or read and written again (write true): share_id for one person, atome_id for everyone it is shared with.', true],
+    folders: [{}, [], 'The projects other people share with the user as folders, live: each with its share_id, its owner (owner_id), its name and the user\'s access to it (access: listen, its light proxy alone, the project itself never opened; read, opened to read; write, worked on together).', false],
+    rights: [{ share_id: id, atome_id: id, access: { type: 'string', enum: SHARE_ACCESS_LEVELS } }, ['access'],
+        'The access to a share made live: listen (a project shared as a folder: its light proxy alone can be played, the project itself never opens and none of its tracks is read), read (opened read only) or write (read and written, worked on together); share_id for one person, atome_id for everyone it is shared with. A list worked on together takes read or write.', true],
     sent: [{ atome_id: id, list_kind: kind }, [], 'The lists the user sent: to whom (principal_id), linked or a copy, and their state (pending until accepted); atome_id or list_kind (the user\'s own medications, supplements or shopping list) keeps one list\'s.', false],
     list_create: [{ list_kind: kind, name, for_person: person }, ['list_kind', 'name'],
         'A new list (« + »): for the user, or for a third party (for_person with their name): a list for someone else stays with the user, never on the user\'s Dashboard nor Agenda.', true],
@@ -40,7 +42,8 @@ const definitions = {
     announce: [{ atome_id: id }, ['atome_id'], 'Tell the people a linked list was sent to that it changed: each receives the new version to validate.', true]
 };
 const shareSchema = { type: 'object', properties: { share_id: { type: 'string' }, atome_id: { type: 'string' }, owner_id: { type: 'string' },
-    principal_id: { type: 'string' }, status: { type: 'string' }, share_type: { type: 'string' }, list_kind: { type: 'string' }, list_name: { type: 'string' } } };
+    principal_id: { type: 'string' }, status: { type: 'string' }, share_type: { type: 'string' }, list_kind: { type: 'string' }, list_name: { type: 'string' },
+    access: { type: 'string', enum: [...SHARE_ACCESS_LEVELS, 'none'] } } };
 export const SHARE_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
     name: `share.${action}`, action, description, persistent, capability: persistent ? 'share.write' : 'share.read',
     input_schema: { type: 'object', additionalProperties: false, properties, required },
@@ -58,4 +61,4 @@ export const validateShareInput = (action, input) => {
     return null;
 };
 export const shareError = error => (SHARE_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'COMMIT_FAILED');
-export const SHARE_ASSISTANT_INSTRUCTIONS = 'Lists between people: « envoie ma liste de médicaments à Marie » calls share.send with list_kind medications and her account id; « envoie la playlist Soirée à Paul » calls share.send with the list\'s atome_id; « qu\'est-ce qu\'on m\'a envoyé » calls share.pending; « valide la liste de Julien » calls share.accept, « refuse-la » share.refuse, « garde une copie » share.detach; « fais une liste pour maman » calls share.list_create with for_person; « partage ma liste de courses avec Marie » calls share.send with list_kind shopping and live true, share.sent with list_kind shopping tells with whom, share.revoke stops it; « partage le projet Concert avec Léa » calls share.send with the project\'s atome_id and live true, « mets-le en lecture seule » share.rights with write false. A list received is never applied before the user validates it. A prescription read for the user becomes share.draft, never a treatment applied.';
+export const SHARE_ASSISTANT_INSTRUCTIONS = 'Lists between people: « envoie ma liste de médicaments à Marie » calls share.send with list_kind medications and her account id; « envoie la playlist Soirée à Paul » calls share.send with the list\'s atome_id; « qu\'est-ce qu\'on m\'a envoyé » calls share.pending; « valide la liste de Julien » calls share.accept, « refuse-la » share.refuse, « garde une copie » share.detach; « fais une liste pour maman » calls share.list_create with for_person; « partage ma liste de courses avec Marie » calls share.send with list_kind shopping and live true, share.sent with list_kind shopping tells with whom, share.revoke stops it; « partage le projet Concert avec Léa » calls share.send with the project\'s atome_id and live true, « mets-le en écoute seule » share.rights with access listen, « mets-le en lecture seule » share.rights with access read, « qu\'on travaille ensemble dessus » share.rights with access write. A list received is never applied before the user validates it. A prescription read for the user becomes share.draft, never a treatment applied.';

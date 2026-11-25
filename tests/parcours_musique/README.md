@@ -7,6 +7,12 @@ semaines y a sa ligne, pour qu'il ne revienne pas.
 
 Ce dossier est vivant : on le complète au fil des chantiers (voir « Compléter ce parcours » plus bas).
 
+C'est aussi **la liste complète des fonctions du multipiste**, la source de toute documentation d'utilisation :
+chaque ligne dit le geste et ce qu'on voit ou entend. Relevé complet du 2026-11-25 (demandes R-199 à R-369, chacune
+vérifiée dans le code) : les lignes changées depuis portent une note *Mise à jour 2026-11-25*, ce qui n'est pas codé
+est en bas de chaque fichier (« À compléter »).
+C'est le domaine « Multipiste » de l'inventaire de tout eVe, [inventaire/README.md](../../inventaire/README.md).
+
 ## Les fichiers
 
 | Fichier | Contenu |
@@ -23,6 +29,8 @@ Ce dossier est vivant : on le complète au fil des chantiers (voir « Compléter
 | [09_hote_auv3.md](09_hote_auv3.md) | Atome dans AUM sur l'iPad : synchro hôte, prises, bus, MIDI hôte, latence |
 | [10_persistance_plateformes.md](10_persistance_plateformes.md) | Réouverture, historique, serveur seule vérité, Web / Tauri / iOS / AUv3 |
 | [11_paroles_prompteur.md](11_paroles_prompteur.md) | Paroles et prompteur : créer, Rec au doigt, importer LRC, SRT, VTT, anciens Lyrix (.lrx, .prx) |
+| [12_controles.md](12_controles.md) | Objets « Contrôles » (sliders, rotatifs, pads, clavier…) : poser, jouer, actions sur clips, Scènes, pistes et transport |
+| [commandes_vocales.md](commandes_vocales.md) | Toutes les commandes vocales et MCP du multipiste, par domaine, et les écarts à la règle 22 |
 
 ## Légende
 

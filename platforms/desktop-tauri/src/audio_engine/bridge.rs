@@ -125,6 +125,71 @@ pub fn audio_mix_apply(program: Value) -> Result<Value, String> {
     commands::mix_apply(program)
 }
 
+// A shared project's proxy (R-349): its render plan played offline, its Ogg Opus file — or, with the page's coded
+// picture (`video`), its MP4 — back in base64.
+#[tauri::command]
+pub async fn audio_render_proxy(
+    plan: Value,
+    bitrate: Option<u32>,
+    video: Option<Value>,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        super::render_proxy::command(
+            &serde_json::json!({ "plan": plan, "bitrate": bitrate, "video": video }),
+        )
+    })
+    .await
+    .map_err(|error| format!("audio_render_proxy_task_failed: {error}"))?
+}
+
+// A plan rendered offline, uncoded (R-370 L11: a MIDI clip « Figer »), off the command thread.
+#[tauri::command]
+pub async fn audio_render_pcm(plan: Value) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        super::render_proxy::render_pcm(&serde_json::json!({ "plan": plan }))
+    })
+    .await
+    .map_err(|error| format!("audio_render_pcm_task_failed: {error}"))?
+}
+
+// Track freeze (R-370): `freeze_render` only queues the stem (the engine renders it on its own thread); the others
+// read or swap at once.
+#[tauri::command(rename_all = "snake_case")]
+pub fn audio_freeze_render(plan: Value, strip_id: String) -> Result<Value, String> {
+    commands::dispatch_freeze(
+        "freeze_render",
+        &serde_json::json!({ "plan": plan, "strip_id": strip_id }),
+    )
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn audio_freeze_apply(strip_id: String, key: String) -> Result<Value, String> {
+    commands::dispatch_freeze(
+        "freeze_apply",
+        &serde_json::json!({ "strip_id": strip_id, "key": key }),
+    )
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn audio_freeze_thaw(strip_id: String) -> Result<Value, String> {
+    commands::dispatch_freeze("freeze_thaw", &serde_json::json!({ "strip_id": strip_id }))
+}
+
+#[tauri::command]
+pub fn audio_freeze_status() -> Result<Value, String> {
+    commands::dispatch_freeze("freeze_status", &Value::Null)
+}
+
+#[tauri::command]
+pub fn audio_freeze_reset_peak() -> Result<Value, String> {
+    commands::dispatch_freeze("freeze_reset_peak", &Value::Null)
+}
+
+#[tauri::command]
+pub fn audio_freeze_retain(keys: Vec<String>) -> Result<Value, String> {
+    commands::dispatch_freeze("freeze_retain", &serde_json::json!({ "keys": keys }))
+}
+
 #[tauri::command]
 pub fn audio_mix_levels() -> Result<Value, String> {
     commands::mix_levels()

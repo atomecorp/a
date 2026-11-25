@@ -13,7 +13,7 @@ use bevy::{
         ExtractSchedule, MainWorld, RenderApp,
         render_asset::RenderAssets,
         render_resource::{
-            BindGroup, BufferInitDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
+            BindGroup, CommandEncoderDescriptor, Extent3d,
             IndexFormat, LoadOp, Operations, RenderPassColorAttachment,
             RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
             TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
@@ -31,7 +31,7 @@ use super::{
         upload_mesh,
     },
 };
-use crate::types::AtomeRendererDiagnostics;
+use crate::{frame_uniforms::FrameUniforms, types::AtomeRendererDiagnostics};
 
 pub fn add_render_systems(app: &mut App) {
     let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -63,6 +63,7 @@ struct Scene3dGpu {
     pipeline: Option<Scene3dPipeline>,
     scenes: HashMap<String, GpuScene>,
     depths: HashMap<AssetId<Image>, DepthTarget>,
+    uniforms: FrameUniforms<AssetId<Image>>,
     pending: Vec<Scene3dJob>,
     error: Option<String>,
 }
@@ -194,17 +195,19 @@ fn draw_scene3d_jobs(
             .scenes
             .entry(job.source.clone())
             .or_insert_with(|| upload_scene(&device, &queue, pipeline, &job));
-        let uniforms = device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("scene3d_uniforms"),
-            contents: &uniform_bytes(&job, pipeline.stride),
-            usage: BufferUsages::UNIFORM,
-        });
+        let uniforms = &gpu.uniforms.write(
+            &device,
+            &queue,
+            job.image,
+            "scene3d_uniforms",
+            &[&uniform_bytes(&job, pipeline.stride)],
+        )[0];
         let frame_group = device.create_bind_group(
             "scene3d_frame",
             &pipeline.frame_layout,
             &[
-                uniform_binding(0, &uniforms, FRAME_BYTES),
-                uniform_binding(1, &uniforms, DRAW_BYTES),
+                uniform_binding(0, uniforms, FRAME_BYTES),
+                uniform_binding(1, uniforms, DRAW_BYTES),
             ],
         );
         let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {

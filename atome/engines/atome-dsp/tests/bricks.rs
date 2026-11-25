@@ -152,6 +152,38 @@ fn envelope_follows_gate_on_and_off() {
     assert!(env.is_idle());
 }
 
+// DAHDSR: silent through the delay, at the peak through the hold, then the decay.
+#[test]
+fn envelope_waits_its_delay_and_holds_its_peak() {
+    let mut env = Envelope::new();
+    env.prepare(RATE, BLOCK);
+    env.set_param(envelope::ATTACK_MS, 1.0);
+    env.set_param(envelope::DECAY_MS, 10.0);
+    env.set_param(envelope::SUSTAIN, 0.5);
+    // 100 ms of delay (4 800 frames), 200 ms of hold.
+    env.set_timing(100.0, 200.0);
+    env.set_param(envelope::GATE, 1.0);
+    let (out, _) = run(&mut env, &[1.0; 24000]);
+    assert!(
+        out[..4790].iter().all(|level| *level == 0.0),
+        "silent while it waits"
+    );
+    // Peak 1 ms after the delay, held until 301 ms (14 448 frames).
+    assert_eq!(out[6000], 1.0);
+    assert_eq!(out[14000], 1.0);
+    assert!(
+        (out[20000] - 0.5).abs() < 1.0e-3,
+        "decayed to the sustain after the hold"
+    );
+    // A new note (reset, as a voice starts) let go during its delay ends in silence.
+    env.reset();
+    env.set_param(envelope::GATE, 1.0);
+    env.set_param(envelope::GATE, 0.0);
+    let (off, _) = run(&mut env, &[1.0; 480]);
+    assert!(off.iter().all(|level| *level == 0.0));
+    assert!(env.is_idle());
+}
+
 #[test]
 fn bypassed_echo_rings_out_over_the_dry_signal() {
     let mut chain = Chain::new();

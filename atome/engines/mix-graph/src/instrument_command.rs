@@ -75,7 +75,7 @@ pub enum NoteKind {
     Tempo { bpm: f32 },
 }
 
-fn event_kind(kind: NoteKind) -> Result<EventKind, String> {
+pub(crate) fn event_kind(kind: NoteKind) -> Result<EventKind, String> {
     let note = |note: u8| {
         if note <= 127 {
             Ok(note)
